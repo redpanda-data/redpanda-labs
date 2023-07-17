@@ -1,0 +1,3 @@
+[submodule "redpanda-edge-agent"]
+	path = redpanda-edge-agent
+	url = https://github.com/redpanda-data/redpanda-edge-agent

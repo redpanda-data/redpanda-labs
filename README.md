@@ -4,4 +4,10 @@
 
 Labs projects intend to showcase what is possible to achieve with Redpanda as the centerpiece of your streaming data architecture. Some of these projects may make it into the product, and many will not, but what they will do is provide examples, guidance, best practices, and most importantly give you ideas for how you can use Redpanda in your own projects.
 
-Contributions are welcome. Just fork the repo and send a pull request against the upstream `main` branch.
+Contributions are welcome. Just fork the repo (or submodule) and send a pull request against the upstream `main` branch.
+
+## Lab Projects
+
+| Project       | Description   |
+| ------------- | ------------- |
+| [`redpanda-edge-agent`](./redpanda-edge-agent/) | Lightweight Internet of Things (IoT) agent that forwards events from the edge |
