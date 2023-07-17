@@ -10,4 +10,4 @@ Contributions are welcome. Just fork the repo (or submodule) and send a pull req
 
 | Project       | Description   |
 | ------------- | ------------- |
-| [`redpanda-edge-agent`](./redpanda-edge-agent/) | Lightweight Internet of Things (IoT) agent that forwards events from the edge |
+| [`redpanda-edge-agent`](https://github.com/redpanda-data/redpanda-edge-agent) | Lightweight Internet of Things (IoT) agent that forwards events from the edge |
