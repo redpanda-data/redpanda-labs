@@ -11,3 +11,10 @@ Contributions are welcome. Just fork the repo (or submodule) and send a pull req
 | Project       | Description   |
 | ------------- | ------------- |
 | [`redpanda-edge-agent`](https://github.com/redpanda-data/redpanda-edge-agent) | Lightweight Internet of Things (IoT) agent that forwards events from the edge. |
+
+## Update submodules
+
+```
+git submodule update --remote --recursive
+
+```
