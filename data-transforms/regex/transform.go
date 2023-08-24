@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/rockwotj/redpanda/src/go/sdk"
+	redpanda "github.com/redpanda-data/redpanda/src/go/transform-sdk"
 )
 
 var (
