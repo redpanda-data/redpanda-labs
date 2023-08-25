@@ -1,0 +1,7 @@
+name: to_avro
+input-topic: "nasdaq_history_csv"
+output-topic: "nasdaq_history_avro"
+language: tinygo
+env: {
+    SCHEMA_ID: 1
+}

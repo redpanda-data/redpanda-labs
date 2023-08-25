@@ -1,0 +1,13 @@
+{
+    "type": "record",
+    "name": "nasdaq",
+    "namespace": "com.nasdaq",
+    "fields" : [
+        {"name": "Date", "type": "string"},
+        {"name": "Last", "type": "string"},
+        {"name": "Volume", "type": "long"},
+        {"name": "Open", "type": "string"},
+        {"name": "High", "type": "string"},
+        {"name": "Low", "type": "string"}
+    ]
+}
