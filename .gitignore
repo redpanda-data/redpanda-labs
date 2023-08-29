@@ -3,3 +3,6 @@
 
 # rpk binary
 rpk*
+
+# Go
+go.work*
