@@ -1,2 +1,5 @@
 # Compiled wasm artifacts
 *.wasm
+
+# rpk binary
+rpk*
