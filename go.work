@@ -1,4 +1,0 @@
-go 1.20
-
-use ./data-transforms/regex
-use ./data-transforms/to_avro
