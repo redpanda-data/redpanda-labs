@@ -1,0 +1,82 @@
+version: '3.7'
+services:
+  redpanda:
+    image: docker.redpanda.com/vectorized/redpanda:v23.1.2
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - 8081:8081
+      - 8082:8082
+      - 9092:9092
+      - 9644:9644
+      - 29092:29092
+
+  console:
+    image: docker.redpanda.com/vectorized/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:29092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: true
+          clusters:
+            - name: local-connect-cluster
+              url: http://connect:8083
+    ports:
+      - 8080:8080
+    depends_on:
+      - redpanda
+
+  # Owl Shop is an application that simulates an ecommerce shop that uses Kafka.
+  # It is part of this docker compose so that you have some sample data that you can
+  # browse with Console.
+  owl-shop:
+    image: quay.io/cloudhut/owl-shop:latest
+    environment:
+      - SHOP_KAFKA_BROKERS=redpanda:29092
+      - SHOP_KAFKA_TOPICREPLICATIONFACTOR=1
+      - SHOP_TRAFFIC_INTERVAL_RATE=1
+      - SHOP_TRAFFIC_INTERVAL_DURATION=0.1s
+    depends_on:
+      - redpanda
+
+  connect:
+    image: docker.cloudsmith.io/redpanda/connectors/connectors:624ff9e
+    hostname: connect
+    container_name: connect
+    depends_on:
+      - redpanda
+    ports:
+      - "8083:8083"
+    environment:
+      KAFKA_CONNECT_CONFIGURATION: |
+        offset.storage.topic=docker-connect-offsets
+        value.converter=org.apache.kafka.connect.json.JsonConverter
+        config.storage.topic=docker-connect-configs
+        key.converter=org.apache.kafka.connect.json.JsonConverter
+        group.id=compose-connect-group
+        status.storage.topic=docker-connect-status
+        config.storage.replication.factor=1
+        offset.storage.replication.factor=1
+        status.storage.replication.factor=1
+      KAFKA_CONNECT_METRICS_ENABLED: "false"
+      KAFKA_CONNECT_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_GC_LOG_ENABLED: "false"
+      KAFKA_HEAP_OPTS: -Xms128M

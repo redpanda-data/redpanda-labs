@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "dependencies": {
+    "chalk": "^5.0.1",
+    "csv-parser": "^3.0.0",
+    "date-fns": "^2.28.0",
+    "kafkajs": "^1.15.0",
+    "node-fetch": "^2.6.7"
+  }
+}

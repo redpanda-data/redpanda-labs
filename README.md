@@ -12,6 +12,8 @@ Contributions are welcome. Just fork the repo (or submodule) and send a pull req
 | ------------- | ------------- |
 | [`redpanda-edge-agent`](https://github.com/redpanda-data/redpanda-edge-agent) | Lightweight Internet of Things (IoT) agent that forwards events from the edge. |
 | [`data-transforms`](https://github.com/redpanda-data/redpanda-labs/data-transforms) | Example topic data transforms powered by WebAssembly (Wasm). |
+| [`clients`](https://github.com/redpanda-data/redpanda-labs/clients) | A collection of Redpanda clients available in different programming languages. |
+| [`schema-registry-avro`](https://github.com/redpanda-data/redpanda-labs/schema-registry-avro) | An example of Avro message serialization/deserialization with Redpanda Schema Registry. |
 
 ## Update submodules
 
