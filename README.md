@@ -1,3 +1,5 @@
+[![Slack](https://img.shields.io/badge/Slack-Redpanda%20Community-blue)](https://redpanda.com/slack)
+
 ## Redpanda Labs
 
 <img align="right" width="25%" src="images/redpanda_lab2.png">Redpanda Labs is the home for examples, experiments and research projects created by the Customer Success and Marketing teams at Redpanda. 
