@@ -4,5 +4,5 @@ A collection of `docker-compose` setups that demonstrate CDC from different data
 
 Databases include:
 - [MySQL](./mysql-json)
-- [Postgres](./postgres)
+- [Postgres](./postgres-json)
 
