@@ -12,18 +12,17 @@ from kafka.errors import TopicAlreadyExistsError
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-kafka_security_protocol = "SASL_SSL"
-kafka_sasl_mechanism = "SCRAM-SHA-256"
-
 redpanda_cloud_brokers = os.getenv("REDPANDA_BROKERS")
-redpanda_service_account = os.getenv("REDPANDA_SERVICE_ACCOUNT")
-redpanda_service_account_password = os.getenv("REDPANDA_SERVICE_ACCOUNT_PASSWORD")
+kafka_security_protocol = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+kafka_sasl_mechanism = os.getenv("KAFKA_SASL_MECHANISM", None)
+redpanda_service_account = os.getenv("REDPANDA_SERVICE_ACCOUNT", None)
+redpanda_service_account_password = os.getenv("REDPANDA_SERVICE_ACCOUNT_PASSWORD", None)
 logging.info(f"Connecting to: {redpanda_cloud_brokers}")
 
 #
 # Create topic
 #
-topic_name = "test-topic"
+topic_name = os.getenv("REDPANDA_TOPIC_NAME", "test-topic")
 logging.info(f"Creating topic: {topic_name}")
 
 admin = KafkaAdminClient(
@@ -41,6 +40,8 @@ try:
         NewTopic(name=topic_name, num_partitions=1, replication_factor=1)])
 except TopicAlreadyExistsError as e:
     logging.error(e)
+finally:
+    admin.close()
 
 #
 # Write to topic
@@ -52,15 +53,12 @@ producer = KafkaProducer(
     sasl_mechanism=kafka_sasl_mechanism,
     sasl_plain_username=redpanda_service_account,
     sasl_plain_password=redpanda_service_account_password,
-    acks="all",
-    linger_ms=1,
-    batch_size=16384,
     # ssl_cafile="ca.crt",
     # ssl_certfile="client.crt",
     # ssl_keyfile="client.key"
 )
 
-try: 
+try:
     here = pathlib.Path(__file__).parent.resolve()
     for file in glob.glob(f"{here}/*.csv"):
         logging.info(f"Processing file: {file}")

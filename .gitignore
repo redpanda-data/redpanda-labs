@@ -6,3 +6,12 @@ rpk*
 
 # Go
 go.work*
+
+# Client examples
+*.csv
+
+# Python
+env/
+venv/
+.env
+.venv

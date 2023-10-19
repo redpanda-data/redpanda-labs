@@ -6,18 +6,17 @@ from kafka import (KafkaConsumer, TopicPartition)
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-kafka_security_protocol = "SASL_SSL"
-kafka_sasl_mechanism = "SCRAM-SHA-256"
-
 redpanda_cloud_brokers = os.getenv("REDPANDA_BROKERS")
-redpanda_service_account = os.getenv("REDPANDA_SERVICE_ACCOUNT")
-redpanda_service_account_password = os.getenv("REDPANDA_SERVICE_ACCOUNT_PASSWORD")
+kafka_security_protocol = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+kafka_sasl_mechanism = os.getenv("KAFKA_SASL_MECHANISM", None)
+redpanda_service_account = os.getenv("REDPANDA_SERVICE_ACCOUNT", None)
+redpanda_service_account_password = os.getenv("REDPANDA_SERVICE_ACCOUNT_PASSWORD", None)
 logging.info(f"Connecting to: {redpanda_cloud_brokers}")
 
 #
 # Read from topic
 #
-consumer = KafkaConsumer(    
+consumer = KafkaConsumer(
     bootstrap_servers=redpanda_cloud_brokers,    
     security_protocol=kafka_security_protocol,
     sasl_mechanism=kafka_sasl_mechanism,
@@ -27,13 +26,12 @@ consumer = KafkaConsumer(
     auto_offset_reset="earliest",
     enable_auto_commit="false",
     auto_commit_interval_ms=0,
-    max_partition_fetch_bytes=1048576, 
     # ssl_cafile="ca.crt",
     # ssl_certfile="client.crt",
     # ssl_keyfile="client.key"
 )
 
-topic_name = "test-topic"
+topic_name = os.getenv("REDPANDA_TOPIC_NAME", "test-topic")
 assignments = []
 partitions = consumer.partitions_for_topic(topic_name)
 for p in partitions:
