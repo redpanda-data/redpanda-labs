@@ -13,23 +13,27 @@ pip install -r requirements.txt
 
 ```shell
 vim .env
-REDPANDA_BROKERS=<comma-separated list of brokers>
-REDPANDA_TOPIC_NAME=test-topic
+REDPANDA_BROKERS=localhost:9092
+REDPANDA_SCHEMA_REGISTRY=http://localhost:8081
+# REDPANDA_TOPIC_NAME=<optional alternate topic name>
 
 # Optional variables for connecting to a Redpanda Cloud environment:
 # KAFKA_SECURITY_PROTOCOL=SASL_SSL
 # KAFKA_SASL_MECHANISM=SCRAM-SHA-256
-# REDPANDA_SERVICE_ACCOUNT=<service account name>
-# REDPANDA_SERVICE_ACCOUNT_PASSWORD=<service account password>
+# REDPANDA_USERNAME=<service account username>
+# REDPANDA_PASSWORD=<service account password>
 ```
 
-## Provide `.csv` files to use as sample data
-
-For example, Nasdaq's historical data downloads provide years of historical stock prices and volumes in `.csv` format: https://www.nasdaq.com/market-activity/quotes/historical.
-
-## Run the producer and consumer
+## Run the CSV producer and consumer
 
 ```shell
 python producer.py
 python consumer.py
+```
+
+## Run the Avro producer and consumer
+
+```shell
+python schema_registry/produce_avro.py
+python schema_registry/consume_avro.py
 ```

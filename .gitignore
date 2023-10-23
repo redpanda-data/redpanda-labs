@@ -1,3 +1,6 @@
+# IDE
+settings.json
+
 # Compiled wasm artifacts
 *.wasm
 
@@ -7,10 +10,8 @@ rpk*
 # Go
 go.work*
 
-# Client examples
-*.csv
-
 # Python
+__pycache__/
 env/
 venv/
 .env
