@@ -1,8 +1,10 @@
 import os
 import logging
 from dotenv import load_dotenv
-from kafka import KafkaConsumer, TopicPartition
-from registry import SchemaRegistry
+from confluent_kafka import Consumer
+from confluent_kafka.serialization import SerializationContext, MessageField
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroDeserializer
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -15,41 +17,65 @@ redpanda_username = os.getenv("REDPANDA_USERNAME", None)
 redpanda_password = os.getenv("REDPANDA_PASSWORD", None)
 logging.info("Connecting to: %s", redpanda_brokers)
 
+conf = {
+    "bootstrap.servers": redpanda_brokers,
+    "group.id": "redpanda-labs",
+    "auto.offset.reset": "earliest",
+}
+if kafka_security_protocol and "SASL" in kafka_security_protocol:
+    conf.update(
+        {
+            "security.protocol": kafka_security_protocol,
+            "sasl_mechanism": kafka_sasl_mechanism,
+            "sasl_plain_username": redpanda_username,
+            "sasl_plain_password": redpanda_password,
+            # "ssl_cafile": "ca.crt",
+            # "ssl_certfile": "client.crt",
+            # "ssl_keyfile": "client.key"
+        }
+    )
+
 #
 # Read from topic
 #
-consumer = KafkaConsumer(
-    bootstrap_servers=redpanda_brokers,
-    security_protocol=kafka_security_protocol,
-    sasl_mechanism=kafka_sasl_mechanism,
-    sasl_plain_username=redpanda_username,
-    sasl_plain_password=redpanda_password,
-    group_id=None,
-    auto_offset_reset="earliest",
-    enable_auto_commit="false",
-    auto_commit_interval_ms=0,
-    # ssl_cafile="ca.crt",
-    # ssl_certfile="client.crt",
-    # ssl_keyfile="client.key"
-)
+here = os.path.realpath(os.path.dirname(__file__))
+with open(f"{here}/../../data/nasdaq_historical.avsc", encoding="utf-8") as f:
+    schema_str = f.read()
+    logging.info("Schema: %s", schema_str)
+
+registry = SchemaRegistryClient({"url": redpanda_schema_registry})
+avro_deserializer = AvroDeserializer(registry, schema_str)
+
+
+def reset_offset(consumer, partitions):
+    """Reset consumer offsets to zero."""
+    for p in partitions:
+        p.offset = 0
+    consumer.assign(partitions)
+    logging.info("Consumer assignments: %s", partitions)
+
 
 topic_name = os.getenv("REDPANDA_TOPIC_NAME", "nasdaq-historical-avro")
-assignments = []
-partitions = consumer.partitions_for_topic(topic_name)
-for p in partitions:
-    assignments.append(TopicPartition(topic_name, p))
-consumer.assign(assignments)
-consumer.seek_to_beginning()
+c = Consumer(conf)
+c.subscribe([topic_name], on_assign=reset_offset)
 
+while True:
+    try:
+        msg = c.poll(timeout=1.0)
+        if msg is None:
+            continue
+        if msg.error():
+            logging.error(msg.error())
+        else:
+            val = avro_deserializer(
+                msg.value(), SerializationContext(msg.topic(), MessageField.VALUE)
+            )
+            out = f"topic: {msg.topic()}, "
+            out += f"partition: {msg.partition()}, "
+            out += f"offset: {msg.offset()}, "
+            out += f"value: {val}"
+            logging.info(out)
+    except KeyboardInterrupt:
+        break
 
-registry = SchemaRegistry(redpanda_schema_registry)
-batch = consumer.poll(timeout_ms=10000)
-for records in batch.values():
-    for r in records:
-        out = f"topic: {r.topic}, "
-        out += f"partition: {r.partition}, "
-        out += f"offset: {r.offset}, "
-        out += f"value: {registry.decode(r.value)}"
-        logging.info(out)
-
-consumer.close()
+c.close()
