@@ -1,10 +1,11 @@
 import os
 import logging
+import stock_pb2
+
 from dotenv import load_dotenv
 from confluent_kafka import Consumer
 from confluent_kafka.serialization import SerializationContext, MessageField
-from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka.schema_registry.protobuf import ProtobufDeserializer
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -38,8 +39,10 @@ if kafka_security_protocol and "SASL" in kafka_security_protocol:
 #
 # Read from topic
 #
-registry = SchemaRegistryClient({"url": redpanda_schema_registry})
-avro_deserializer = AvroDeserializer(registry)
+# pylint: disable=E1101
+protobuf_deserializer = ProtobufDeserializer(
+    stock_pb2.Stock, {"use.deprecated.format": False}
+)
 
 
 def reset_offset(consumer, partitions):
@@ -50,7 +53,7 @@ def reset_offset(consumer, partitions):
     logging.info("Consumer assignments: %s", partitions)
 
 
-topic_name = os.getenv("REDPANDA_TOPIC_NAME", "stock-avro")
+topic_name = os.getenv("REDPANDA_TOPIC_NAME", "stock-proto")
 c = Consumer(conf)
 c.subscribe([topic_name], on_assign=reset_offset)
 
@@ -62,7 +65,7 @@ while True:
         if msg.error():
             logging.error(msg.error())
         else:
-            val = avro_deserializer(
+            val = protobuf_deserializer(
                 msg.value(), SerializationContext(msg.topic(), MessageField.VALUE)
             )
             out = f"topic: {msg.topic()}, "

@@ -1,7 +1,7 @@
 {
   "type": "record",
-  "name": "simple",
-  "namespace": "nasdaq.historical",
+  "name": "stock",
+  "namespace": "stock",
   "fields": [
     { "name": "date", "type": "string" },
     { "name": "last", "type": "string" },
