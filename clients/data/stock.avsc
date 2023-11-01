@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "stock",
+  "namespace": "stock",
+  "fields": [
+    { "name": "date", "type": "string" },
+    { "name": "last", "type": "string" },
+    { "name": "volume", "type": "string" },
+    { "name": "open", "type": "string" },
+    { "name": "high", "type": "string" },
+    { "name": "low", "type": "string" }
+  ]
+}

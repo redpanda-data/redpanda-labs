@@ -2,6 +2,7 @@ import os
 import csv
 import glob
 import logging
+import stock_pb2
 
 from dotenv import load_dotenv
 from confluent_kafka import Producer
@@ -11,8 +12,7 @@ from confluent_kafka.serialization import (
     MessageField,
 )
 from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroSerializer
-
+from confluent_kafka.schema_registry.protobuf import ProtobufSerializer
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -39,37 +39,30 @@ if kafka_security_protocol and "SASL" in kafka_security_protocol:
         }
     )
 
-#
-# Read schema
-#
-here = os.path.realpath(os.path.dirname(__file__))
-with open(f"{here}/../../data/stock.avsc", encoding="utf-8") as f:
-    schema_str = f.read()
-    logging.info("Schema: %s", schema_str)
 
-
-def stock_to_dict(stock, _):
+# pylint: disable=E1101
+def csv_to_stock(r):
     """Parse CSV formatted stock."""
-    parts = stock.split(",")
-    if len(parts) == 6:
-        return {
-            "date": parts[0],
-            "last": parts[1],
-            "volume": parts[2],
-            "open": parts[3],
-            "high": parts[4],
-            "low": parts[5],
-        }
-    return {}
+    parts = r.split(",")
+    return stock_pb2.Stock(
+        date=parts[0],
+        last=parts[1],
+        volume=parts[2],
+        open=parts[3],
+        high=parts[4],
+        low=parts[5],
+    )
 
 
 registry = SchemaRegistryClient({"url": redpanda_schema_registry})
-avro_serializer = AvroSerializer(registry, schema_str, stock_to_dict)
+protobuf_serializer = ProtobufSerializer(
+    stock_pb2.Stock, registry, {"use.deprecated.format": False}
+)
 
 #
 # Create topic
 #
-topic_name = os.getenv("REDPANDA_TOPIC_NAME", "stock-avro")
+topic_name = os.getenv("REDPANDA_TOPIC_NAME", "stock-proto")
 logging.info("Creating topic: %s", topic_name)
 
 admin = AdminClient(conf)
@@ -98,17 +91,18 @@ def delivery_report(err, msg):
 logging.info("Writing to topic: %s", topic_name)
 producer = Producer(conf)
 
+here = os.path.realpath(os.path.dirname(__file__))
 for file in glob.glob(f"{here}/../../data/*.csv"):
     logging.info("Processing file: %s", file)
     with open(file, encoding="utf-8") as f:
         reader = csv.reader(f)
         next(reader, None)  # skip the header
         for row in reader:
-            val = ",".join(row)
+            stock = csv_to_stock(",".join(row))
             producer.produce(
                 topic=topic_name,
-                value=avro_serializer(
-                    val, SerializationContext(topic_name, MessageField.VALUE)
+                value=protobuf_serializer(
+                    stock, SerializationContext(topic_name, MessageField.VALUE)
                 ),
                 on_delivery=delivery_report,
             )

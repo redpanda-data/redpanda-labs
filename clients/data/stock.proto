@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package stock;
+
+message Stock {
+    string date   = 1;
+    string last   = 2;
+    string volume = 3;
+    string open   = 4;
+    string high   = 5;
+    string low    = 6;
+}
