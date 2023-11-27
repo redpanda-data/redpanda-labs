@@ -12,5 +12,5 @@ Environment variables:
 To deploy this to a cluster you'll need to run the following in this directory:
 ```
 rpk transform build
-rpk transform deploy --env-var=PATTERN=myregex --input-topic=src --output-topic=sink
+rpk transform deploy --var=PATTERN=myregex --input-topic=src --output-topic=sink
 ```
