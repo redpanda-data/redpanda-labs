@@ -8,8 +8,8 @@ import (
 	"strconv"
 
 	avro "github.com/linkedin/goavro/v2"
-	redpanda "github.com/redpanda-data/redpanda/src/go/transform-sdk"
-	sr "github.com/redpanda-data/redpanda/src/go/transform-sdk/sr"
+	redpanda "github.com/redpanda-data/redpanda/src/transform-sdk/go"
+	sr "github.com/redpanda-data/redpanda/src/transform-sdk/go/sr"
 )
 
 var codec avro.Codec
