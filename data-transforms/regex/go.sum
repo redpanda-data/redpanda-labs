@@ -1,2 +1,2 @@
-github.com/redpanda-data/redpanda/src/go/transform-sdk v0.0.0-20230817144152-d6608c5058fb h1:hDglNXmsj2NvcLr2kdnL/ER/lGOZYPxoHHO6B1e1+Qk=
-github.com/redpanda-data/redpanda/src/go/transform-sdk v0.0.0-20230817144152-d6608c5058fb/go.mod h1:BQiPywle7oxZRv+W++XektR1izbtSAMJ0PNSPtLfJvE=
+github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231127194947-cdf667ff3ae5 h1:RrkGbLUy1dJWTqAP5prHcYpW0Lp8L7dsMWW4zKTTVTs=
+github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231127194947-cdf667ff3ae5/go.mod h1:pLVlv4tasly/dKBIXo6UAXoeHtlqHL2+1c8BR90qD1g=
