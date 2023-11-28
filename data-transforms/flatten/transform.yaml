@@ -1,0 +1,4 @@
+name: flatten
+input-topic: ""
+output-topic: ""
+language: tinygo
