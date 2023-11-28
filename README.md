@@ -13,12 +13,11 @@ Contributions are welcome. Just fork the repo (or submodule) and send a pull req
 | Project       | Description   |
 | ------------- | ------------- |
 | [`redpanda-edge-agent`](https://github.com/redpanda-data/redpanda-edge-agent) | Lightweight Internet of Things (IoT) agent that forwards events from the edge. |
-| [`data-transforms`](https://github.com/redpanda-data/redpanda-labs/data-transforms) | Example topic data transforms powered by WebAssembly (Wasm). |
+| [`data-transforms`](https://github.com/redpanda-data/redpanda-labs/tree/main/data-transforms) | Example topic data transforms powered by WebAssembly (Wasm). |
 | [`clients`](https://github.com/redpanda-data/redpanda-labs/clients) | A collection of Redpanda clients available in different programming languages. |
 
 ## Update submodules
 
 ```
 git submodule update --remote --recursive
-
 ```
