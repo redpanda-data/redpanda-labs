@@ -65,7 +65,7 @@ To deploy the data transform to a cluster you'll need to run the following in th
 
 ```shell
 ./rpk transform build
-./rpk transform deploy --env-var=SCHEMA_ID=1 \
+./rpk transform deploy --var=SCHEMA_ID=1 \
                        --input-topic=nasdaq_history_csv \
                        --output-topic=nasdaq_history_avro
 ```
