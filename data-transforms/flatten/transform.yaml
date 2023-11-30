@@ -1,4 +1,4 @@
 name: flatten
 input-topic: ""
 output-topic: ""
-language: tinygo
+language: tinygo-with-goroutines
