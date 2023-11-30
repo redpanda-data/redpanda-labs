@@ -17,7 +17,7 @@ func main() {
 	if !present {
 		delim = DELIM_DEFAULT
 	}
-	fmt.Println("Using delimitter: ", delim)
+	fmt.Println("using delimitter: ", delim)
 
 	buffer := bytes.NewBuffer(make([]byte, 1024))
 	fn := func(e redpanda.WriteEvent) ([]redpanda.Record, error) {
@@ -25,7 +25,6 @@ func main() {
 	}
 
 	redpanda.OnRecordWritten(fn)
-	fmt.Println("Registered flatten function")
 }
 
 // doTransform is where you read the record that was written, and then you can
