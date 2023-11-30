@@ -45,7 +45,7 @@ To get started you first need to have at least go 1.20 installed.
 Once you're ready to test out your transform live you need to:
 
 1. Make sure you have Redpanda running.
-2. Run `rpk transform build -- -scheduler=asyncify`.
+2. Run `rpk transform build`.
 3. Create your topics via `rpk topic create`.
 4. Run `rpk transform deploy`.
 
