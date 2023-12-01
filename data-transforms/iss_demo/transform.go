@@ -8,8 +8,8 @@ import (
 	"strconv"
 
 	avro "github.com/linkedin/goavro/v2"
-	redpanda "github.com/redpanda-data/redpanda/src/transform-sdk/go"
-	sr "github.com/redpanda-data/redpanda/src/transform-sdk/go/sr"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform/sr"
 )
 
 var codec avro.Codec
@@ -41,7 +41,7 @@ func main() {
 	schemaId = int32(id)
 
 	// Register your transform function.
-	redpanda.OnRecordWritten(toAvro)
+	transform.OnRecordWritten(toAvro)
 }
 
 type iss_now struct {
@@ -55,7 +55,7 @@ type iss_position struct {
 	Longitude float64 `json:"longitude,string"`
 }
 
-func toAvro(e redpanda.WriteEvent) ([]redpanda.Record, error) {
+func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
 	// Parse our inbound JSON into a map[string]any
 	position, err := parse(e.Record().Value)
 	if err != nil {
@@ -76,13 +76,13 @@ func toAvro(e redpanda.WriteEvent) ([]redpanda.Record, error) {
 	}
 
 	// Create a Record with the existing key and our new binary value
-	record := redpanda.Record{
+	record := transform.Record{
 		Key:   e.Record().Key,
 		Value: binaryOut,
 	}
 
 	// Return a single entry slice with this record in it
-	return []redpanda.Record{record}, nil
+	return []transform.Record{record}, nil
 }
 
 func parse(bytes []byte) (map[string]any, error) {

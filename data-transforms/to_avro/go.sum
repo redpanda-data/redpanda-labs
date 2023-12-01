@@ -7,8 +7,8 @@ github.com/linkedin/goavro/v2 v2.12.0 h1:rIQQSj8jdAUlKQh6DttK8wCRv4t4QO09g1C4aBW
 github.com/linkedin/goavro/v2 v2.12.0/go.mod h1:KXx+erlq+RPlGSPmLF7xGo6SAbh8sCQ53x064+ioxhk=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231127194947-cdf667ff3ae5 h1:RrkGbLUy1dJWTqAP5prHcYpW0Lp8L7dsMWW4zKTTVTs=
-github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231127194947-cdf667ff3ae5/go.mod h1:pLVlv4tasly/dKBIXo6UAXoeHtlqHL2+1c8BR90qD1g=
+github.com/redpanda-data/redpanda/src/transform-sdk/go/transform v0.0.0-20231201202259-bdaf460a8ab9 h1:shRTsqcgpFqnQxZw2oi13Gb49+YSfAE4iJlZYGL/PYA=
+github.com/redpanda-data/redpanda/src/transform-sdk/go/transform v0.0.0-20231201202259-bdaf460a8ab9/go.mod h1:QGgiwwf/BIsD1b7EiyQ/Apzw+RLSpasRDdpOCiefQFQ=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
