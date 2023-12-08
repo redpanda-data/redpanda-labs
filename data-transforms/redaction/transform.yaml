@@ -1,0 +1,4 @@
+name: redactor
+input-topic: ""
+output-topic: ""
+language: tinygo
