@@ -146,7 +146,7 @@ func main() {
 func doTransform(e transform.WriteEvent) ([]transform.Record, error) {
 	var result []transform.Record
 	redacted := redact(e.Record().Value)
-	var record = transform.Record{Value: redacted}
+	var record = transform.Record{Headers: e.Record().Headers, Key: e.Record().Key, Value: redacted}
 	result = append(result, record)
 	return result, nil
 }
