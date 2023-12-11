@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/redpanda-data/redpanda/src/go/transform-sdk"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 	"log"
 	"reflect"
 	"strconv"
@@ -138,15 +138,15 @@ func redact(bytes []byte) []byte {
 func main() {
 	// Register your transform function.
 	// This is a good place to perform other setup too.
-	redpanda.OnRecordWritten(doTransform)
+	transform.OnRecordWritten(doTransform)
 }
 
 // doTransform is where you read the record that was written, and then you can
 // return new records that will be written to the output topic
-func doTransform(e redpanda.WriteEvent) ([]redpanda.Record, error) {
-	var result []redpanda.Record
+func doTransform(e transform.WriteEvent) ([]transform.Record, error) {
+	var result []transform.Record
 	redacted := redact(e.Record().Value)
-	var record = redpanda.Record{Value: redacted}
+	var record = transform.Record{Value: redacted}
 	result = append(result, record)
 	return result, nil
 }
