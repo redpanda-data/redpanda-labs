@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"math"
 	"os"
+	"redactor/redactors"
 	"strings"
 	"testing"
 )
@@ -29,6 +29,7 @@ func getBytes(filename string) []byte {
 }
 
 func TestSimple(t *testing.T) {
+	initialise(getBytes("config.yaml"))
 	// firstName is a redacted field, so is replaced by REDACTED
 	redacted := redact([]byte("{\"firstName\": \"Secret\"}"))
 	expected := marshall(unmarshall([]byte("{\"firstName\": \"REDACTED\"}")))
@@ -39,6 +40,7 @@ func TestSimple(t *testing.T) {
 }
 
 func TestNotRedacted(t *testing.T) {
+	initialise(getBytes("config.yaml"))
 	// name is not a redacted field, only firstName or lastName
 	redacted := redact([]byte("{\"name\": \"Secret\"}"))
 	expected := marshall(unmarshall([]byte("{\"name\": \"Secret\"}")))
@@ -49,6 +51,7 @@ func TestNotRedacted(t *testing.T) {
 }
 
 func TestOwlOrder(t *testing.T) {
+	initialise(getBytes("config.yaml"))
 	redacted := redact(getBytes("test/sample.json"))
 	expected := marshall(unmarshall(getBytes("test/expected.json")))
 
@@ -58,30 +61,35 @@ func TestOwlOrder(t *testing.T) {
 }
 
 func TestEmailRedaction(t *testing.T) {
+	initialise(getBytes("config.yaml"))
+	original := marshall(unmarshall([]byte("{\"email\":\"first.last@email.com\"}")))
+	redacted := redact(original)
+	expected := "{\"email\":\"redacted@email.com\"}"
 
-	original := "first.last@gmail.com"
-	redacted, err := redactEmailUsername(original)
-	maybeDie(err)
-	expected := "redacted@gmail.com"
-
-	if strings.Compare(redacted.(string), expected) != 0 {
+	if strings.Compare(string(redacted), expected) != 0 {
 		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
 	}
 }
 
-const float64EqualityThreshold = 1e-9
+func TestLocationRedaction(t *testing.T) {
+	initialise(getBytes("config.yaml"))
+	original := marshall(unmarshall([]byte("{\"latitude\":-74.870911}")))
+	redacted := redact(original)
+	expected := "{\"latitude\":-74.9}"
 
-func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) <= float64EqualityThreshold
+	if strings.Compare(string(redacted), expected) != 0 {
+		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
+	}
 }
 
-func TestLocationRedaction(t *testing.T) {
-	original := -74.870911
-	redacted, err := redactLocation(original)
-	maybeDie(err)
-	expected := -74.9
-
-	if !almostEqual(redacted.(float64), expected) {
-		t.Errorf("\nexpected:\n%f\ngot:\n%f", expected, redacted)
+func TestDecodeConfig(t *testing.T) {
+	data := "H4sIAB59eGUAA41Qu27DMAzc/RWE9g4Big6e2jTuFGTo4wMYiXYESKJB0f9f2YmBxHHQbtQddXc8IYdWWXJdATxBwkg1GJlQUyAAy6n1XT3NAO2QrHpO01If0JK5MJdnpKSF/Gx2b+/fzc7cyzYRffjJJCP6P48ttSz0RT0KlrDrlmd1cjOb5/XCva7k2LPF0eaPCCplRqWPwKgvz7O6I+sjhlzDpqrOgmV/qtG0XrIexutuujQBV+GOkiNZgCceMh2GeLxjsgqRLsD+xGmpS2PR5nHvJY96HdzVv+tOTODUPeJ/AdFABag4AgAA"
+	bytes := decodeConfig(data)
+	config, err := redactors.GetConfig(bytes)
+	if err != nil {
+		t.Error()
+	}
+	if len(config.Redactions) != 9 {
+		t.Error()
 	}
 }

@@ -1,68 +1,86 @@
-# PII Redaction Transform (Redpanda Golang WASM Transform)
+# Redaction Transform (Redpanda Golang WASM Transform)
 
 This transform is designed to redact PII data in JSON messages by matching on field names and using a field-dependent
 redaction function.
 
 ## Usage
 
-Customise the transform.go file in order to implement your desired redaction functionality. The example includes the
-following redaction functions:
+Customise the config.yaml file in order to define what redaction functions you want and what fields they should apply to:
 
-### Replace entire value with "REDACTED"
+```yaml
+redactors:
+  - name: "redact"
+    config:
+      function: "replace"
+      replacement: "REDACTED"
+  - name: "redactEmailUsername"
+    config:
+      function: "replaceBeforeSeparator"
+      replacement: "redacted"
+      separator: "@"
+  - name: "redactLocation"
+    config:
+      function: "truncateFloat64"
+      decimals: 1
+
+redactions:
+  "firstName": "redact"
+  "lastName": "redact"
+  "gender": "redact"
+  "houseNumber": "redact"
+  "street": "redact"
+  "phone": "redact"
+  "email": "redactEmailUsername"
+  "latitude": "redactLocation"
+  "longitude": "redactLocation"
+```
+
+Notice that we define redaction functions once. Every field that should be redacted using that function references it by name.
+
+## Redaction Functions
+
+There are three built-in redaction functions, but these can be extended by adding additional Go code to support your requirement.
+
+(Add the function in `redactors.go` and ensure it is included within the builder function)
+
+### Replace entire value ("replace")
 
 ```go
-func fullyRedactString(s any) (any, error) {
-	return "REDACTED", nil
+func replace(input string, replacement string) (string, error) {
+    return replacement, nil
 }
 ```
-### Replace username portion of an email address
+### Replace a portion before a separator
 
 ```go
-func redactEmailUsername(s any) (any, error) {
-    original, ok := s.(string)
-    if ok {
-        split := strings.Split(original, "@")
-    return "redacted@" + split[1], nil
-    } else {
-		return "", errors.New("can't redact an email address, input wasn't a string")
+func replaceBeforeSeparator(input string, replacement string, separator string) (string, error) {
+    if !strings.Contains(input, separator) {
+        return "", errors.New(fmt.Sprintf("input string \"%s\" doesn't contain separator \"%s\"", input, separator))
     }
-}
-```
-
-### Replace latitude / longitude with less accurate value
-
-```go
-func redactLocation(l any) (any, error) {
-    original, ok := l.(float64)
-    if ok {
-        return strconv.ParseFloat(fmt.Sprintf("%.1f", original), 64)
-    } else {
-        return "", errors.New("can't redact the location, input wasn't a float64")
+    split := strings.Split(input, separator)
+    if len(split) != 2 {
+        return "", errors.New(fmt.Sprintf("input string \"%s\" contains multiple separators \"%s\"", input, separator))
     }
+    return replacement + separator + split[1], nil
 }
 ```
 
-## Customise the redaction selection
-
-This table specifies what redaction function is applied to what field, based on the matching field name:
+### Truncate a float with a less accurate value
 
 ```go
-var redactedFields = map[string]func(any) (any, error){
-	"firstName":   fullyRedactString,
-	"lastName":    fullyRedactString,
-	"email":       redactEmailUsername,
-	"gender":      fullyRedactString,
-	"street":      fullyRedactString,
-	"houseNumber": fullyRedactString,
-	"phone":       fullyRedactString,
-	"latitude":    redactLocation,
-	"longitude":   redactLocation,
+func truncateFloat64(input float64, decimals int) (float64, error) {
+    format := "%." + strconv.Itoa(decimals) + "f"
+    s := fmt.Sprintf(format, input)
+    return strconv.ParseFloat(s, 64)
 }
 ```
 
 # Build and Deploy
 
+The config.yaml file is gzipped and encoded as base64, then injected into the transform using the `--env-var` parameter - 
+therefore it is easier to use the supplied deploy script `deploy.sh` in order to deploy the transform.
+
 ```shell
 rpk transform build
-rpk transform deploy
+./deploy.sh
 ```

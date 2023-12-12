@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
+	"io"
 	"log"
+	"os"
+	"redactor/redactors"
 	"reflect"
-	"strconv"
-	"strings"
 )
 
 func maybeDie(err error) {
@@ -23,18 +25,6 @@ func unmarshall(bytes []byte) map[string]any {
 		log.Fatal(err)
 	}
 	return objmap
-}
-
-var redactedFields = map[string]func(any) (any, error){
-	"firstName":   fullyRedactString,
-	"lastName":    fullyRedactString,
-	"email":       redactEmailUsername,
-	"gender":      fullyRedactString,
-	"street":      fullyRedactString,
-	"houseNumber": fullyRedactString,
-	"phone":       fullyRedactString,
-	"latitude":    redactLocation,
-	"longitude":   redactLocation,
 }
 
 var basicTypes = map[string]bool{
@@ -59,27 +49,20 @@ var basicTypes = map[string]bool{
 	"uintptr":    true,
 }
 
-func fullyRedactString(s any) (any, error) {
-	return "REDACTED", nil
-}
+var redactorFunctions map[string]func(any) (any, error)
+var redactions map[string]func(any) (any, error)
 
-func redactEmailUsername(s any) (any, error) {
-	original, ok := s.(string)
-	if ok {
-		split := strings.Split(original, "@")
-		return "redacted@" + split[1], nil
-	} else {
-		return "", errors.New("can't redact an email address, input wasn't a string")
-	}
-}
+func initialise(bytes []byte) {
+	config, err := redactors.GetConfig(bytes)
+	redactions = make(map[string]func(any) (any, error))
 
-func redactLocation(l any) (any, error) {
-	original, ok := l.(float64)
-	if ok {
-		return strconv.ParseFloat(fmt.Sprintf("%.1f", original), 64)
-	} else {
-		return "", errors.New("can't redact the location, input wasn't a float64")
+	redactorFunctions, err = redactors.GetRedactors(*config)
+	maybeDie(err)
+
+	for k, v := range config.Redactions {
+		redactions[k] = redactorFunctions[v]
 	}
+
 }
 
 func isABasicType(a any) bool {
@@ -100,7 +83,7 @@ func isAnArray(a any) bool {
 
 func redactMap(data *map[string]any) {
 	for s, a := range *data {
-		f, isRedacted := redactedFields[s]
+		f, isRedacted := redactions[s]
 		if isRedacted && isABasicType(a) {
 			var err error
 			(*data)[s], err = f(a)
@@ -123,9 +106,9 @@ func redactMap(data *map[string]any) {
 }
 
 func marshall(data map[string]any) []byte {
-	bytes, err := json.Marshal(data)
+	b, err := json.Marshal(data)
 	maybeDie(err)
-	return bytes
+	return b
 }
 
 func redact(bytes []byte) []byte {
@@ -135,9 +118,27 @@ func redact(bytes []byte) []byte {
 	return bytes
 }
 
+func decodeConfig(s string) []byte {
+	data, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		log.Fatal("error:", err)
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		log.Fatal("error:", err)
+	}
+	uncompressed, err := io.ReadAll(reader)
+	if err != nil {
+		log.Fatal("error:", err)
+	}
+	return uncompressed
+}
+
 func main() {
 	// Register your transform function.
 	// This is a good place to perform other setup too.
+	config := decodeConfig(os.Getenv("CONFIG"))
+	initialise(config)
 	transform.OnRecordWritten(doTransform)
 }
 
