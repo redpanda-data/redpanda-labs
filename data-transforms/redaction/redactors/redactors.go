@@ -1,6 +1,9 @@
 package redactors
 
 import (
+	"crypto/md5"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v3"
@@ -46,6 +49,14 @@ func buildFunction(config map[string]any) (func(any) (any, error), error) {
 		return func(input any) (any, error) {
 			return truncateFloat64(input.(float64), decimals)
 		}, nil
+	case "md5":
+		return func(input any) (any, error) {
+			return hashWithMD5(input.(string))
+		}, nil
+	case "sha1":
+		return func(input any) (any, error) {
+			return hashWithSHA1(input.(string))
+		}, nil
 	default:
 		return nil, errors.New("unable to create redaction function from config")
 	}
@@ -82,4 +93,14 @@ func truncateFloat64(input float64, decimals int) (float64, error) {
 	format := "%." + strconv.Itoa(decimals) + "f"
 	s := fmt.Sprintf(format, input)
 	return strconv.ParseFloat(s, 64)
+}
+
+func hashWithMD5(input string) (string, error) {
+	hash := md5.Sum([]byte(input))
+	return hex.EncodeToString(hash[:]), nil
+}
+
+func hashWithSHA1(input string) (string, error) {
+	hash := sha1.Sum([]byte(input))
+	return hex.EncodeToString(hash[:]), nil
 }
