@@ -1,103 +1,184 @@
 package redactors
 
 import (
-	"math"
 	"strings"
 	"testing"
 )
 
-func TestConfig(t *testing.T) {
-	conf := "redactors:\n  - name: \"redact\"\n    config:\n      function: \"replace\"\n      replacement: \"REDACTED\"\n  - name: \"redactEmailUsername\"\n    config:\n      function: \"replaceBeforeSeparator\"\n      replacement: \"redacted\"\n      separator: \"@\"\n  - name: \"redactLocation\"\n    config:\n      function: \"truncateFloat64\"\n      decimals: 1"
-	config, err := GetConfig([]byte(conf))
-	if err != nil {
-		t.Error(err)
-	}
-	if len(config.Redactors) != 3 {
-		t.Error("expected 3 redactors to be defined")
-	}
+// Test DropRedactor
+
+type DropRedactorAPIMock struct {
+	t *testing.T
 }
 
-func TestBuilder(t *testing.T) {
-	conf := "redactors:\n  - name: \"redact\"\n    config:\n      function: \"replace\"\n      replacement: \"REDACTED\"\n  - name: \"redactEmailUsername\"\n    config:\n      function: \"replaceBeforeSeparator\"\n      replacement: \"redacted\"\n      separator: \"@\"\n  - name: \"redactLocation\"\n    config:\n      function: \"truncateFloat64\"\n      decimals: 1"
-	config, err := GetConfig([]byte(conf))
-	if err != nil {
-		t.Error(err)
-	}
-	redactors, err := GetRedactors(*config)
-	if len(redactors) != 3 {
-		t.Error("expected 3 redactors to be defined")
-	}
+func (api *DropRedactorAPIMock) getKey() string {
+	api.t.Fail()
+	return ""
 }
 
-func TestReplace(t *testing.T) {
-	expected := "REDACTED"
-	var config = map[string]any{"function": "replace", "replacement": expected}
-	f, err := buildFunction(config)
-	if err != nil {
-		t.Error(err)
-	}
-	redacted, _ := f("foo")
-	if strings.Compare(redacted.(string), expected) != 0 {
-		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
-	}
+func (api *DropRedactorAPIMock) getValue() any {
+	api.t.Fail()
+	return ""
 }
 
-func TestReplaceBeforeSeparator(t *testing.T) {
-	expected := "redacted@email.com"
-	var config = map[string]any{"function": "replaceBeforeSeparator", "replacement": "redacted", "separator": "@"}
-	f, err := buildFunction(config)
-	if err != nil {
-		t.Error(err)
-	}
-	redacted, _ := f("anything@email.com")
-	if strings.Compare(redacted.(string), expected) != 0 {
-		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
-	}
+func (api *DropRedactorAPIMock) add(key string, value any) {
+	api.t.Fail()
 }
 
-func TestTruncateFloat64(t *testing.T) {
-	expected := 3.1
-	var config = map[string]any{"function": "truncateFloat64", "decimals": 1}
-	f, err := buildFunction(config)
-	if err != nil {
-		t.Error(err)
-	}
-	redacted, _ := f(3.141593)
-	if !almostEqual(redacted.(float64), expected) {
-		t.Errorf("\nexpected:\n%f\ngot:\n%f", expected, redacted)
-	}
+func (api *DropRedactorAPIMock) drop() {
+
 }
 
-const float64EqualityThreshold = 1e-9
-
-func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) <= float64EqualityThreshold
+func (api *DropRedactorAPIMock) setValue(value any) {
+	api.t.Fail()
 }
 
-func TestMD5(t *testing.T) {
-	expected := "acbd18db4cc2f85cedef654fccc4a4d8"
-	var config = map[string]any{"function": "md5"}
-	f, err := buildFunction(config)
+func TestDropRedactor(t *testing.T) {
+	conf := RedactorConf{Name: "drop", Type: "drop"}
+	redactor, err := buildRedactor(conf)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	redacted, _ := f("foo")
-	if strings.Compare(redacted.(string), expected) != 0 {
-		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
+	api := DropRedactorAPIMock{t: t}
+	err = redactor.redact(&api)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
-func TestSHA1(t *testing.T) {
-	expected := "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
-	var config = map[string]any{"function": "sha1"}
-	f, err := buildFunction(config)
+//////// Test ValueRedactor
+
+type ValueRedactorAPIMock struct {
+	t       *testing.T
+	value   any
+	opCount int
+}
+
+func (api *ValueRedactorAPIMock) getKey() string {
+	api.t.Fail()
+	return ""
+}
+
+func (api *ValueRedactorAPIMock) getValue() any {
+	if api.opCount == 0 {
+		api.opCount = api.opCount + 1
+		return api.value
+	} else {
+		api.t.Fail()
+		return nil
+	}
+}
+
+func (api *ValueRedactorAPIMock) add(key string, value any) {
+	api.t.Fail()
+}
+
+func (api *ValueRedactorAPIMock) drop() {
+	api.t.Fail()
+}
+
+func (api *ValueRedactorAPIMock) setValue(value any) {
+	if api.opCount == 1 {
+		api.opCount = api.opCount + 1
+		api.value = value
+	} else {
+		api.t.Fail()
+	}
+}
+
+func TestValueRedactor(t *testing.T) {
+	conf := RedactorConf{Name: "clear", Type: "value", Value: map[string]any{"function": "replace", "replacement": ""}}
+	redactor, err := buildRedactor(conf)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	redacted, _ := f("foo")
-	if strings.Compare(redacted.(string), expected) != 0 {
+	api := ValueRedactorAPIMock{t: t, value: "foo", opCount: 0}
+	err = redactor.redact(&api)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := ""
+	redacted := api.value.(string)
+	if strings.Compare(redacted, expected) != 0 {
 		t.Errorf("\nexpected:\n%s\ngot:\n%s", expected, redacted)
+	}
+}
+
+//////// Test KeyValueRedactor
+
+type KeyValueRedactorAPIMock struct {
+	t       *testing.T
+	key     string
+	value   any
+	opCount int
+}
+
+func (api *KeyValueRedactorAPIMock) getKey() string {
+	if api.opCount == 0 {
+		api.opCount = api.opCount + 1
+		return api.key
+	} else {
+		api.t.Fail()
+		return ""
+	}
+}
+
+func (api *KeyValueRedactorAPIMock) getValue() any {
+	if api.opCount == 1 {
+		api.opCount = api.opCount + 1
+		return api.value
+	} else {
+		api.t.Fail()
+		return nil
+	}
+}
+
+func (api *KeyValueRedactorAPIMock) add(key string, value any) {
+	if api.opCount == 3 {
+		api.opCount = api.opCount + 1
+		api.key = key
+		api.value = value
+	} else {
+		api.t.Fail()
+	}
+}
+
+func (api *KeyValueRedactorAPIMock) drop() {
+	if api.opCount == 2 {
+		api.opCount = api.opCount + 1
+	} else {
+		api.t.Fail()
+	}
+}
+
+func (api *KeyValueRedactorAPIMock) setValue(value any) {
+	api.t.Fail()
+}
+
+func TestKeyValueRedactor(t *testing.T) {
+	conf := RedactorConf{Name: "md5", Type: "both", Key: map[string]any{"function": "camelPrepend", "prefix": "hashed"}, Value: map[string]any{"function": "md5"}}
+	redactor, err := buildRedactor(conf)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	api := KeyValueRedactorAPIMock{t: t, key: "foo", value: "bar", opCount: 0}
+	err = redactor.redact(&api)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedKey := "hashedFoo"
+	redactedKey := api.key
+	if strings.Compare(redactedKey, expectedKey) != 0 {
+		t.Errorf("\nexpected:\n%s\ngot:\n%s", expectedKey, redactedKey)
+	}
+
+	expectedValue := "37b51d194a7513e45b56f6524f2d51f2"
+	redactedValue := api.value.(string)
+	if strings.Compare(redactedValue, expectedValue) != 0 {
+		t.Errorf("\nexpected:\n%s\ngot:\n%s", expectedValue, redactedValue)
 	}
 }

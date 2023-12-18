@@ -5,140 +5,95 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 	"io"
 	"log"
 	"os"
 	"redactor/redactors"
-	"reflect"
 )
 
-func maybeDie(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
+func logError(err error) {
+	log.Print(err)
 }
 
-func unmarshall(bytes []byte) map[string]any {
-	var objmap map[string]any
-	if err := json.Unmarshal(bytes, &objmap); err != nil {
-		log.Fatal(err)
-	}
-	return objmap
+func wrap(message string, err error) error {
+	return errors.Join(errors.New(message), err)
 }
 
-var basicTypes = map[string]bool{
-	"string":     true,
-	"bool":       true,
-	"float32":    true,
-	"float64":    true,
-	"rune":       true,
-	"byte":       true,
-	"complex64":  true,
-	"complex128": true,
-	"int":        true,
-	"int8":       true,
-	"int16":      true,
-	"int32":      true,
-	"int64":      true,
-	"uint":       true,
-	"uint8":      true,
-	"uint16":     true,
-	"uint32":     true,
-	"uint64":     true,
-	"uintptr":    true,
-}
-
-var redactorFunctions map[string]func(any) (any, error)
-var redactions map[string]func(any) (any, error)
-
-func initialise(bytes []byte) {
-	config, err := redactors.GetConfig(bytes)
-	redactions = make(map[string]func(any) (any, error))
-
-	redactorFunctions, err = redactors.GetRedactors(*config)
-	maybeDie(err)
-
-	for k, v := range config.Redactions {
-		redactions[k] = redactorFunctions[v]
-	}
-
-}
-
-func isABasicType(a any) bool {
-	t := reflect.TypeOf(a).String()
-	_, ok := basicTypes[t]
-	return ok
-}
-
-func isAMap(a any) bool {
-	_, ok := a.(map[string]any)
-	return ok
-}
-
-func isAnArray(a any) bool {
-	_, ok := a.([]any)
-	return ok
-}
-
-func redactMap(data *map[string]any) {
-	for s, a := range *data {
-		f, isRedacted := redactions[s]
-		if isRedacted && isABasicType(a) {
-			var err error
-			(*data)[s], err = f(a)
-			maybeDie(err)
-		}
-		if isAMap(a) {
-			subMap := a.(map[string]any)
-			redactMap(&subMap)
-		}
-		if isAnArray(a) {
-			anys := a.([]any)
-			for _, item := range anys {
-				if isAMap(item) {
-					subMap := item.(map[string]any)
-					redactMap(&subMap)
-				}
-			}
-		}
-	}
-}
-
-func marshall(data map[string]any) []byte {
+func marshall(data map[string]any) ([]byte, error) {
 	b, err := json.Marshal(data)
-	maybeDie(err)
-	return b
+	if err != nil {
+		return []byte{}, err
+	}
+	return b, nil
 }
 
-func redact(bytes []byte) []byte {
-	data := unmarshall(bytes)
-	redactMap(&data)
-	bytes = marshall(data)
-	return bytes
+func unmarshall(bytes []byte) (map[string]any, error) {
+	var data map[string]any
+	err := json.Unmarshal(bytes, &data)
+	if err != nil {
+		return make(map[string]any), err
+	}
+	return data, nil
 }
 
-func decodeConfig(s string) []byte {
+func redact(bytes []byte) ([]byte, error) {
+	data, err := unmarshall(bytes)
+	if err != nil {
+		return []byte{}, wrap("unable to unmarshall record", err)
+	}
+	err = redactors.Process(data)
+	if err != nil {
+		return []byte{}, wrap("unable to redact record", err)
+	}
+	bytes, err = marshall(data)
+	if err != nil {
+		return []byte{}, wrap("unable to marshall record", err)
+	}
+	return bytes, nil
+}
+
+func decodeConfig(s string) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		log.Fatal("error:", err)
+		return []byte{}, wrap("unable to base64 decode config", err)
 	}
 	reader, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		log.Fatal("error:", err)
+		return []byte{}, wrap("unable to decompress config", err)
 	}
 	uncompressed, err := io.ReadAll(reader)
 	if err != nil {
-		log.Fatal("error:", err)
+		return []byte{}, wrap("unable to read config into []byte", err)
 	}
-	return uncompressed
+	return uncompressed, nil
+}
+
+func initialise(bytes []byte) error {
+	err := redactors.Configure([]byte(redactors.Builtins))
+	if err != nil {
+		return wrap("unable to configure built-in redactors", err)
+	}
+	err = redactors.Configure(bytes)
+	if err != nil {
+		return wrap("unable to configure custom redactors", err)
+	}
+	return nil
 }
 
 func main() {
 	// Register your transform function.
 	// This is a good place to perform other setup too.
-	config := decodeConfig(os.Getenv("CONFIG"))
-	initialise(config)
+	config, err := decodeConfig(os.Getenv("CONFIG"))
+	if err != nil {
+		logError(wrap("unable to decode config", err))
+		return
+	}
+	err = initialise(config)
+	if err != nil {
+		logError(wrap("unable to initialise config", err))
+	}
 	transform.OnRecordWritten(doTransform)
 }
 
@@ -146,7 +101,10 @@ func main() {
 // return new records that will be written to the output topic
 func doTransform(e transform.WriteEvent) ([]transform.Record, error) {
 	var result []transform.Record
-	redacted := redact(e.Record().Value)
+	redacted, err := redact(e.Record().Value)
+	if err != nil {
+		return nil, wrap("unable to redact record", err)
+	}
 	var record = transform.Record{Headers: e.Record().Headers, Key: e.Record().Key, Value: redacted}
 	result = append(result, record)
 	return result, nil

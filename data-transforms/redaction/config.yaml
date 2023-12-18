@@ -1,22 +1,7 @@
-redactors:
-  - name: "redact"
-    config:
-      function: "replace"
-      replacement: "REDACTED"
-  - name: "redactEmailUsername"
-    config:
-      function: "replaceBeforeSeparator"
-      replacement: "redacted"
-      separator: "@"
-  - name: "redactLocation"
-    config:
-      function: "truncateFloat64"
-      decimals: 1
-
 redactions:
-  "firstName": "redact"
-  "lastName": "redact"
-  "gender": "redact"
+  "firstName": "md5"
+  "lastName": "md5"
+  "gender": "drop"
   "houseNumber": "redact"
   "street": "redact"
   "phone": "redact"
