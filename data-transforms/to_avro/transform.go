@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	avro "github.com/linkedin/goavro/v2"
-	redpanda "github.com/redpanda-data/redpanda/src/transform-sdk/go"
-	sr "github.com/redpanda-data/redpanda/src/transform-sdk/go/sr"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform/sr"
 )
 
 var codec avro.Codec
@@ -40,7 +40,7 @@ func main() {
 		panic(fmt.Sprintf("Error creating Avro codec: %v", err))
 	}
 	codec = *c
-	redpanda.OnRecordWritten(toAvro)
+	transform.OnRecordWritten(toAvro)
 }
 
 func parse(r string) (map[string]any, error) {
@@ -60,7 +60,7 @@ func parse(r string) (map[string]any, error) {
 	return m, nil
 }
 
-func toAvro(e redpanda.WriteEvent) ([]redpanda.Record, error) {
+func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
 	m, err := parse(string(e.Record().Value))
 	if err != nil {
 		fmt.Printf("Unable to parse record value: %v", err)
@@ -69,9 +69,9 @@ func toAvro(e redpanda.WriteEvent) ([]redpanda.Record, error) {
 	if err != nil {
 		fmt.Printf("Unable to encode map: %v", err)
 	}
-	record := redpanda.Record{
+	record := transform.Record{
 		Key:   e.Record().Key,
 		Value: binary,
 	}
-	return []redpanda.Record{record}, nil
+	return []transform.Record{record}, nil
 }

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/bcicen/jstream"
-	"github.com/redpanda-data/redpanda/src/transform-sdk/go"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 	"io"
 	"os"
 )
@@ -20,21 +20,21 @@ func main() {
 	fmt.Println("using delimitter: ", delim)
 
 	buffer := bytes.NewBuffer(make([]byte, 1024))
-	fn := func(e redpanda.WriteEvent) ([]redpanda.Record, error) {
+	fn := func(e transform.WriteEvent) ([]transform.Record, error) {
 		return doFlatten(e, buffer, delim)
 	}
 
-	redpanda.OnRecordWritten(fn)
+	transform.OnRecordWritten(fn)
 }
 
 // doTransform is where you read the record that was written, and then you can
 // return new records that will be written to the output topic
-func doFlatten(e redpanda.WriteEvent, buf *bytes.Buffer, delim string) ([]redpanda.Record, error) {
+func doFlatten(e transform.WriteEvent, buf *bytes.Buffer, delim string) ([]transform.Record, error) {
 	record := e.Record()
 
 	// Skip empty records.
 	if record.Value == nil || len(record.Value) == 0 {
-		return []redpanda.Record{}, nil
+		return []transform.Record{}, nil
 	}
 
 	buf.Reset()
@@ -42,11 +42,11 @@ func doFlatten(e redpanda.WriteEvent, buf *bytes.Buffer, delim string) ([]redpan
 	r := bytes.NewReader(record.Value)
 	err := Flatten(r, buf, delim)
 	if err != nil {
-		return []redpanda.Record{}, err
+		return []transform.Record{}, err
 	}
 
 	record.Value = buf.Bytes()
-	return []redpanda.Record{record}, err
+	return []transform.Record{record}, err
 }
 
 func Flatten(r io.Reader, w io.Writer, delim string) error {

@@ -5,14 +5,14 @@ import (
 	"regexp"
 	"strings"
 
-	redpanda "github.com/redpanda-data/redpanda/src/transform-sdk/go"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 )
 
 var (
 	// Prevent alloc on the transform path
-	resultSlice []redpanda.Record = make([]redpanda.Record, 1)
-	re          *regexp.Regexp    = nil
-	checkValue  bool              = false
+	resultSlice []transform.Record = make([]transform.Record, 1)
+	re          *regexp.Regexp     = nil
+	checkValue  bool               = false
 )
 
 func isTrueVar(v string) bool {
@@ -34,10 +34,10 @@ func main() {
 	mk, ok := os.LookupEnv("MATCH_VALUE")
 	checkValue = ok && isTrueVar(mk)
 
-	redpanda.OnRecordWritten(doRegexFilter)
+	transform.OnRecordWritten(doRegexFilter)
 }
 
-func doRegexFilter(e redpanda.WriteEvent) ([]redpanda.Record, error) {
+func doRegexFilter(e transform.WriteEvent) ([]transform.Record, error) {
 	var b []byte
 	if checkValue {
 		b = e.Record().Value

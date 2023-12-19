@@ -1,4 +1,4 @@
 github.com/bcicen/jstream v1.0.1 h1:BXY7Cu4rdmc0rhyTVyT3UkxAiX3bnLpKLas9btbH5ck=
 github.com/bcicen/jstream v1.0.1/go.mod h1:9ielPxqFry7Y4Tg3j4BfjPocfJ3TbsRtXOAYXYmRuAQ=
-github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231128192633-fe2d537402e2 h1:SdaOGxCFQVyyBcUM5eTl19uBn1IPM10VnWEqMicDatg=
-github.com/redpanda-data/redpanda/src/transform-sdk/go v0.0.0-20231128192633-fe2d537402e2/go.mod h1:pLVlv4tasly/dKBIXo6UAXoeHtlqHL2+1c8BR90qD1g=
+github.com/redpanda-data/redpanda/src/transform-sdk/go/transform v0.0.0-20231201202259-bdaf460a8ab9 h1:shRTsqcgpFqnQxZw2oi13Gb49+YSfAE4iJlZYGL/PYA=
+github.com/redpanda-data/redpanda/src/transform-sdk/go/transform v0.0.0-20231201202259-bdaf460a8ab9/go.mod h1:QGgiwwf/BIsD1b7EiyQ/Apzw+RLSpasRDdpOCiefQFQ=
