@@ -10,6 +10,9 @@ rpk*
 # Go
 go.work*
 
+# Kubernetes
+kubernetes/gitops/flux-system/
+
 # Python
 __pycache__/
 env/

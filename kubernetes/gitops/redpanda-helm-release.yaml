@@ -1,0 +1,24 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: redpanda
+  namespace: redpanda
+spec:
+  dependsOn:
+    - name: cert-manager
+      namespace: cert-manager
+  interval: 5m
+  chart:
+    spec:
+      chart: redpanda
+      version: "5.7.*"
+      sourceRef:
+        kind: HelmRepository
+        name: redpanda
+        namespace: redpanda
+      interval: 1m
+  values:
+    statefulset:
+      initContainers:
+        setDataDirOwnership:
+          enabled: true
