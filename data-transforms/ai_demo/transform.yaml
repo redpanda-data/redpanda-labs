@@ -1,0 +1,10 @@
+name: ai-qa-wasi
+input-topic: questions
+output-topic: answers
+language: rust
+env:
+  CONTENT: >-
+    Redpanda Data Transforms run directly inside the broker. 
+    The advantage of this is that it simplifies deployment and removes the operational overhead of additional systems.
+    Data transforms let you run common tasks, like filtering, scrubbing, and transcoding, within Redpanda.
+    For example, you may have consumers that require you to redact credit card numbers or convert JSON to Avro.

@@ -1,0 +1,9 @@
+[package]
+name = "ai-qa-wasi"
+version = "0.20.7-pre"
+edition = "2021"
+
+[dependencies]
+redpanda-transform-sdk = "23.3.2-rc1"
+tokenizers = { version = "0.15", default-features = false, features = ["unstable_wasm"] }
+tract-onnx = "0.20.22"
