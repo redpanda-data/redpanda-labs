@@ -20,8 +20,8 @@ func main() {
 	fmt.Println("using delimitter: ", delim)
 
 	buffer := bytes.NewBuffer(make([]byte, 1024))
-	fn := func(e transform.WriteEvent) ([]transform.Record, error) {
-		return doFlatten(e, buffer, delim)
+	fn := func(e transform.WriteEvent, w transform.RecordWriter) error {
+		return doFlatten(e, w, buffer, delim)
 	}
 
 	transform.OnRecordWritten(fn)
@@ -29,12 +29,12 @@ func main() {
 
 // doTransform is where you read the record that was written, and then you can
 // return new records that will be written to the output topic
-func doFlatten(e transform.WriteEvent, buf *bytes.Buffer, delim string) ([]transform.Record, error) {
+func doFlatten(e transform.WriteEvent, w transform.RecordWriter, buf *bytes.Buffer, delim string) error {
 	record := e.Record()
 
 	// Skip empty records.
 	if record.Value == nil || len(record.Value) == 0 {
-		return []transform.Record{}, nil
+		return nil
 	}
 
 	buf.Reset()
@@ -42,11 +42,11 @@ func doFlatten(e transform.WriteEvent, buf *bytes.Buffer, delim string) ([]trans
 	r := bytes.NewReader(record.Value)
 	err := Flatten(r, buf, delim)
 	if err != nil {
-		return []transform.Record{}, err
+		return err
 	}
 
 	record.Value = buf.Bytes()
-	return []transform.Record{record}, err
+	return w.Write(record)
 }
 
 func Flatten(r io.Reader, w io.Writer, delim string) error {
