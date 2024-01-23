@@ -26,7 +26,7 @@ Once in Redpanda we use WebAssembly to transform the data from JSON to Avro, on 
 
 > Before you start, make sure that you have `golang` version 1.20 or above installed on your system.
 
-1. Download and extract the sandbox version of `rpk` using the instructions for your platform from the Redpada [technical preview docimentation](https://docs.redpanda.com/current/labs/data-transform/#install-rpk).
+1. Download and extract the sandbox version of `rpk` using the instructions for your platform from the [Redpada documentation](https://docs.redpanda.com/current/get-started/rpk-install/).
 2. Start the containers using 
 ```
 # docker-compose up -d
@@ -67,7 +67,7 @@ deploy your transform to a topic:
 > Note: This may fail if `golang` is not correctly installed and configured on your system.
 7. Deploy the transform - this command will need the schema id from above and the names of the topics:
 ```
-# rpk transform deploy --env-var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
+# rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
 
 Deploy successful!
 ```
