@@ -1,0 +1,9 @@
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Optional pretty printing via jq
+if ! command -v jq &> /dev/null
+then
+    go run cmd/redact.go "$@"
+else
+    go run cmd/redact.go "$@" | jq
+fi

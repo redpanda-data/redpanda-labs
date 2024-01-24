@@ -1,0 +1,212 @@
+{
+  "version": 0,
+  "id": "82afb36f-fb11-4104-9572-2e575a82cd79",
+  "createdAt": "2023-12-08T10:55:45.274475Z",
+  "lastUpdatedAt": "2023-12-08T10:55:45.274475Z",
+  "deliveredAt": null,
+  "completedAt": null,
+  "orderValue": 16060,
+  "lineItems": [
+    {
+      "articleId": "34d29db2-9377-4fb2-84f5-5f5279cb66e1",
+      "name": "Cucumber",
+      "quantity": 50,
+      "quantityUnit": "pieces",
+      "unitPrice": 546,
+      "totalPrice": 27300
+    },
+    {
+      "articleId": "a9156e56-4e38-451a-8906-33a588f62e67",
+      "name": "Shallots",
+      "quantity": 282,
+      "quantityUnit": "gram",
+      "unitPrice": 376,
+      "totalPrice": 106032
+    },
+    {
+      "articleId": "59466e0c-198b-4ec0-9650-ec213a48c0ba",
+      "name": "Okra",
+      "quantity": 117,
+      "quantityUnit": "pieces",
+      "unitPrice": 233,
+      "totalPrice": 27261
+    },
+    {
+      "articleId": "ac2e2d66-8816-4f9a-ac1e-6a3f6c448026",
+      "name": "Sorrel",
+      "quantity": 150,
+      "quantityUnit": "pieces",
+      "unitPrice": 656,
+      "totalPrice": 98400
+    },
+    {
+      "articleId": "fde99a61-ab7e-451a-8eba-7e318a61ecb2",
+      "name": "Kohlrabi",
+      "quantity": 305,
+      "quantityUnit": "pieces",
+      "unitPrice": 482,
+      "totalPrice": 147010
+    },
+    {
+      "articleId": "f44f2173-65d2-4e9f-bd0f-2f0a4293b78c",
+      "name": "Radicchio",
+      "quantity": 16,
+      "quantityUnit": "gram",
+      "unitPrice": 259,
+      "totalPrice": 4144
+    },
+    {
+      "articleId": "93b6555f-e91f-4cbb-bf6a-41625bed41fe",
+      "name": "Artichoke",
+      "quantity": 109,
+      "quantityUnit": "gram",
+      "unitPrice": 301,
+      "totalPrice": 32809
+    },
+    {
+      "articleId": "9cc7bee5-3361-487d-b2cd-45f9949a0d4c",
+      "name": "Horseradish",
+      "quantity": 498,
+      "quantityUnit": "gram",
+      "unitPrice": 482,
+      "totalPrice": 240036
+    },
+    {
+      "articleId": "3d168cf6-96c2-43df-a391-a2d82573c1ab",
+      "name": "Pepper",
+      "quantity": 62,
+      "quantityUnit": "pieces",
+      "unitPrice": 442,
+      "totalPrice": 27404
+    },
+    {
+      "articleId": "b365ed86-0755-4fbb-8e22-a01b3f63c908",
+      "name": "Carrot",
+      "quantity": 184,
+      "quantityUnit": "gram",
+      "unitPrice": 122,
+      "totalPrice": 22448
+    },
+    {
+      "articleId": "e824b6a6-73e9-451f-81ee-09a9739433ef",
+      "name": "Chicory",
+      "quantity": 303,
+      "quantityUnit": "gram",
+      "unitPrice": 212,
+      "totalPrice": 64236
+    },
+    {
+      "articleId": "7e11c212-45b9-4e79-a9ee-10345c12e856",
+      "name": "Broadbeans",
+      "quantity": 119,
+      "quantityUnit": "pieces",
+      "unitPrice": 252,
+      "totalPrice": 29988
+    },
+    {
+      "articleId": "eecb7079-c8e0-4096-89f5-d31287ea9b56",
+      "name": "Tomato",
+      "quantity": 418,
+      "quantityUnit": "gram",
+      "unitPrice": 910,
+      "totalPrice": 380380
+    },
+    {
+      "articleId": "df6c6903-533f-4172-a21d-897d4dc7177f",
+      "name": "Spaghetti Squash",
+      "quantity": 231,
+      "quantityUnit": "pieces",
+      "unitPrice": 304,
+      "totalPrice": 70224
+    },
+    {
+      "articleId": "a1b86c9f-c9ae-46dd-a858-7f2e28c89cff",
+      "name": "Asparagus",
+      "quantity": 309,
+      "quantityUnit": "pieces",
+      "unitPrice": 361,
+      "totalPrice": 111549
+    },
+    {
+      "articleId": "60f50bd2-8513-403d-bb78-87004d01693b",
+      "name": "Cucumber",
+      "quantity": 307,
+      "quantityUnit": "gram",
+      "unitPrice": 376,
+      "totalPrice": 115432
+    },
+    {
+      "articleId": "6269a36b-902a-403c-b1c3-51c26b584aec",
+      "name": "Dandelion Greens",
+      "quantity": 388,
+      "quantityUnit": "pieces",
+      "unitPrice": 653,
+      "totalPrice": 253364
+    },
+    {
+      "articleId": "d6e4388d-18b2-4526-ae0a-e8e7c6f6f222",
+      "name": "Horseradish",
+      "quantity": 409,
+      "quantityUnit": "gram",
+      "unitPrice": 449,
+      "totalPrice": 183641
+    },
+    {
+      "articleId": "1735178c-87d4-4191-ba92-0c956ce5a552",
+      "name": "Arrowroot",
+      "quantity": 195,
+      "quantityUnit": "pieces",
+      "unitPrice": 90,
+      "totalPrice": 17550
+    },
+    {
+      "articleId": "6d69cceb-2437-439d-9bec-4303f9eafb78",
+      "name": "Broccoli Rabe",
+      "quantity": 263,
+      "quantityUnit": "gram",
+      "unitPrice": 759,
+      "totalPrice": 199617
+    },
+    {
+      "articleId": "25c2c8ca-83ca-4582-8f07-22403019ad08",
+      "name": "Okra",
+      "quantity": 193,
+      "quantityUnit": "gram",
+      "unitPrice": 856,
+      "totalPrice": 165208
+    },
+    {
+      "articleId": "0550e675-7399-4ac1-9a6d-78423a0e7ad0",
+      "name": "Pepper",
+      "quantity": 30,
+      "quantityUnit": "gram",
+      "unitPrice": 192,
+      "totalPrice": 5760
+    }
+  ],
+  "payment": {
+    "paymentId": "e5c9f270-f2f5-4b07-a758-b5bb4e2154d4",
+    "method": "DEBIT"
+  },
+  "deliveryAddress": {
+    "version": 0,
+    "id": "521944eb-f6ab-4435-8dae-396662c65916",
+    "customer": {
+      "id": "9240ad07-c1de-4fc4-abdd-9552864a17d1",
+      "type": "PERSONAL"
+    },
+    "type": "INVOICE",
+    "state": "Colorado",
+    "houseNumber": "REDACTED",
+    "city": "Jarredfurt",
+    "zip": "25193",
+    "phone": "X-XXX-XXX-7207",
+    "additionalAddressInfo": "",
+    "createdAt": "2023-12-08T10:55:45.274525Z",
+    "revision": 0,
+    "hashedStreet": "9242af1088d3710b4cb2a49eb9007799",
+    "truncatedLatitude": -74.9,
+    "truncatedLongitude": -92.0
+  },
+  "revision": 0
+}
