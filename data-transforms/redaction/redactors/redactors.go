@@ -2,6 +2,7 @@ package redactors
 
 import (
 	"errors"
+	"fmt"
 	"github.com/pmw-rp/jsonparser"
 	"gopkg.in/yaml.v3"
 	"redactor/functions"
@@ -65,6 +66,9 @@ func Configure(bytes []byte) error {
 		return wrap("unable to build redactors", err)
 	}
 	for _, redaction := range config.Redactions {
+		if redaction.Type != "drop" && (*redactors)[redaction.Type] == nil {
+			return errors.New(fmt.Sprintf("redactor is nil for redaction (path %s, type %s)", redaction.Path, redaction.Type))
+		}
 		redaction.Redactor = (*redactors)[redaction.Type]
 		redactions = append(redactions, redaction)
 	}

@@ -66,7 +66,11 @@ func processArguments() ([]byte, []byte) {
 
 func main() {
 	config, input := processArguments()
-	redaction.Initialise(config)
+	err := redaction.Initialise(config)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	redacted, err := redaction.Redact(input)
 	if err != nil {
 		fmt.Println(err)
