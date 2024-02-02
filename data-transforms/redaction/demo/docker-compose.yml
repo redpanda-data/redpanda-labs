@@ -1,0 +1,91 @@
+version: '3.9'
+services:
+  redpanda:
+    image: ${IMAGE}
+    container_name: redpanda
+    command:
+    - redpanda
+    - start
+    - --smp
+    - '1'
+    - --memory
+    - 4000M
+    - --overprovisioned
+    - --node-id
+    - '0'
+    - --seeds
+    - redpanda:33145
+    - --kafka-addr
+    - PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+    - --advertise-kafka-addr
+    - PLAINTEXT://redpanda:9092,OUTSIDE://localhost:9093
+    - --pandaproxy-addr
+    - PLAINTEXT://0.0.0.0:28083,OUTSIDE://0.0.0.0:8083
+    - --advertise-pandaproxy-addr
+    - PLAINTEXT://redpanda:28083,OUTSIDE://localhost:8083
+    - --rpc-addr 0.0.0.0:33145
+    - --advertise-rpc-addr redpanda:33145
+    ports:
+    - 8083:8083
+    - 9093:9093
+    healthcheck:
+      test: curl --fail http://localhost:8083/topics || exit 1
+      interval: 10s
+      retries: 5
+      timeout: 10s
+      start_period: 15s
+    volumes:
+      - ./conf/.bootstrap.yaml:/etc/redpanda/.bootstrap.yaml
+  console:
+    image: docker.redpanda.com/vectorized/console:latest
+    restart: on-failure
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    container_name: console
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redpanda
+  owl-shop:
+    image: quay.io/cloudhut/owl-shop:latest
+    container_name: owl-shop
+    environment:
+      - SHOP_KAFKA_BROKERS=redpanda:9092
+      - SHOP_KAFKA_TOPICREPLICATIONFACTOR=1
+      - SHOP_TRAFFIC_INTERVAL_RATE=10000
+      - SHOP_TRAFFIC_INTERVAL_DURATION=1s
+    depends_on:
+      deploy-transform:
+        condition: service_completed_successfully
+  deploy-transform:
+    container_name: transform
+    build:
+      args:
+        - IMAGE=${IMAGE}
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: /bin/bash -c
+    working_dir: /redaction
+    environment:
+      - RPK_BROKERS=redpanda:9092
+      - RPK_ADMIN_HOSTS=redpanda:9644
+    command:
+      - rpk topic create owlshop-orders -p6 -r1 -c cleanup.policy=compact; rpk topic create owlshop-orders-protobuf -p6 -r1 -c cleanup.policy=compact; rpk topic create owlshop-orders-redacted -p6 -r1 -c cleanup.policy=compact; /redaction/deploy-redaction /demo/config.yaml owlshop-orders owlshop-orders-redacted
+    volumes:
+      - ..:/redaction
+      - .:/demo
+    depends_on:
+      redpanda:
+        condition: service_healthy

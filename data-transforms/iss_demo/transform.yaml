@@ -1,4 +1,4 @@
 name: iss_demo
 input-topic: ""
 output-topic: ""
-language: tinygo
+language: tinygo-no-goroutines

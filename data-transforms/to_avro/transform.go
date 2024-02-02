@@ -60,7 +60,7 @@ func parse(r string) (map[string]any, error) {
 	return m, nil
 }
 
-func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
+func toAvro(e transform.WriteEvent, w transform.RecordWriter) error {
 	m, err := parse(string(e.Record().Value))
 	if err != nil {
 		fmt.Printf("Unable to parse record value: %v", err)
@@ -73,5 +73,5 @@ func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
 		Key:   e.Record().Key,
 		Value: binary,
 	}
-	return []transform.Record{record}, nil
+	return w.Write(record)
 }

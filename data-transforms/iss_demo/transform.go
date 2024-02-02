@@ -55,12 +55,12 @@ type iss_position struct {
 	Longitude float64 `json:"longitude,string"`
 }
 
-func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
+func toAvro(e transform.WriteEvent, w transform.RecordWriter) error {
 	// Parse our inbound JSON into a map[string]any
 	position, err := parse(e.Record().Value)
 	if err != nil {
 		fmt.Printf("Unable to parse record value: %v", err)
-		return nil, nil
+		return nil
 	}
 
 	// Build the magic byte and schema ID (first byte is 0x0 and then 4 bytes for the ID as a BigEndian unsigned int)
@@ -72,7 +72,7 @@ func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
 	binaryOut, err := codec.BinaryFromNative(hdr, position)
 	if err != nil {
 		fmt.Printf("Unable to encode map: %v", err)
-		return nil, nil
+		return nil
 	}
 
 	// Create a Record with the existing key and our new binary value
@@ -82,7 +82,7 @@ func toAvro(e transform.WriteEvent) ([]transform.Record, error) {
 	}
 
 	// Return a single entry slice with this record in it
-	return []transform.Record{record}, nil
+	return w.Write(record)
 }
 
 func parse(bytes []byte) (map[string]any, error) {

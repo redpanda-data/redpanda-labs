@@ -1,5 +1,6 @@
 # IDE
 settings.json
+.idea/
 
 # Compiled wasm artifacts
 *.wasm
@@ -25,3 +26,6 @@ env/
 venv/
 .env
 .venv
+
+# Redaction docker .env exception
+!data-transforms/redaction/demo/.env
