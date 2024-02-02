@@ -1,0 +1,111 @@
+= Transcode CSV Records to Avro Records
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing
+:description: Transcode CSV records to Avro using data transforms.
+
+This is an example of how to transcode CSV records to Avro records using xref:ROOT:develop:data-transforms/how-transforms-work.adoc[Redpanda data transforms]. The transforms function reads CSV
+formatted records from an input topic, converts them to Avro encoded records based on the given schema, and writes them to an output topic.
+
+include::data-transforms:partial$prerequisites.adoc[]
+
+== Run the example
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the `docker-compose/single-broker/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/single-broker
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version.
++
+[,bash]
+----
+export REDPANDA_VERSION=23.3.1
+----
+
+. Start Redpanda in Docker by running the following command:
++
+```bash
+docker compose up -d
+```
+
+. Change into the `data-transforms/to_avro/` directory:
++
+[,bash]
+----
+cd ../../data-transforms/to_avro
+----
+
+. Create the topics to store the CSV and Avro records:
++
+```bash
+docker exec -it redpanda-0 rpk topic create nasdaq_history_csv
+docker exec -it redpanda-0 rpk topic create nasdaq_history_avro
+```
+
+. Register the Avro schema:
++
+```bash
+# Create the schema
+curl -s "http://localhost:18081/schemas/types" | jq .
+# Post the schema
+jq '. | {schema: tojson}' schema.avsc | \
+   curl -X POST "http://localhost:18081/subjects/nasdaq_history_avro-value/versions" \
+        -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+        -d @-
+```
++
+If the request is successful the version ID is returned. You'll pass this ID to the transforms function in the `SCHEMA_ID` environment variable later on. You can also find the version ID using the following command:
++
+```shell
+curl -s "http://localhost:53362/subjects/nasdaq_history_avro-value/versions" | jq .
+```
++
+Example output:
++
+[.no-copy]
+----
+[
+  1
+]
+----
+
+. Deploy the transforms function:
++
+```bash
+docker exec -it redpanda-0 transform build
+docker exec -it redpanda-0 transform deploy --var=SCHEMA_ID=1 \
+                       --input-topic=nasdaq_history_csv \
+                       --output-topic=nasdaq_history_avro
+```
++
+This example accepts the following environment variables:
++
+- `SCHEMA_ID` (*required*): The ID of the Avro schema stored in the Redpanda schema registry.
+
+. Produce CSV data:
++
+```bash
+cd test
+./produce.sh HistoricalData_1692981579371.csv nasdaq_history_csv
+```
+
+. Consume CSV data:
++
+```bash
+docker exec -it redpanda-0 topic consume nasdaq_history_csv
+```
++
+The transforms function converts these CSV records to Avro and produces the results to the `consume nasdaq_history_avro` topic.
+
+. Consume Avro data:
++
+```bash
+docker exec -it redpanda-0 topic consume nasdaq_history_avro
+```
+
+include::docker-compose:partial$docker-clean-up.adoc[]

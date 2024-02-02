@@ -1,0 +1,170 @@
+= Build a Chat Room Application with Redpanda Cloud and Java
+:description: Create a basic chat room application with Redpanda Cloud and Kafka Java clients.
+:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-java.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-java.adoc" } ]
+:page-cloud: true
+:page-categories: Development, Clients
+:page-layout: lab
+
+Create a basic chat room application with Redpanda Cloud and https://central.sonatype.com/artifact/org.apache.kafka/kafka-clients[Kafka Java clients^].
+
+This example shows you how to:
+
+* Write a client application in Java to produce and consume chat room messages.
+* Build and run multiple clients to exchange chat messages streamed through Redpanda Cloud.
+
+image::chat-room.gif[Demo of the application, where two users are chatting to each other]
+
+include::chat-room:partial$intro.adoc[]
+
+== Prerequisites
+
+- Complete the {docs-get-started-base}quick-start-cloud.adoc[Redpanda Cloud Quickstart] before continuing. This example expands on the quickstart.
+
+- Install the following:
++
+--
+** Java 11 or 17 (OpenJDK is recommended)
+** Maven
+--
++
+[tabs]
+====
+Windows/Linux::
++
+--
+You can download OpenJDK from https://adoptium.net/temurin/releases[Adoptium^], and can follow the installation instructions for Maven on the https://maven.apache.org/install.html[official Maven website^].
+--
+macOS::
++
+--
+Mac users with Homebrew installed can run the following commands to install these dependencies:
+
+```bash
+brew install openjdk@11 maven
+```
+
+Make sure to follow any symlinking instructions in the Caveats output.
+--
+====
+
+When the prerequisites are installed, the following commands should print the version of both Java and Maven:
+
+[,bash]
+----
+java --version
+mvn --version
+----
+
+NOTE: Redpanda Cloud uses TLS certificates signed by https://letsencrypt.org/[Let's Encrypt^]. Most programming languages will load their root certificate authority (CA), `ISRG Root X1`, by default so you shouldn't need to provide a custom CA certificate.
+
+== Run the example
+
+Compile the client chat application, run it from multiple client terminals, and chat between the clients.
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the example directory:
++
+[,bash]
+----
+cd clients/chat-room/cloud/java
+----
+
+. Open the Java files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.
+
+. Install the dependencies by building the project:
++
+[,bash]
+----
+mvn package
+----
++
+The output is verbose, but you should see a successful build message:
++
+----
+[INFO] BUILD SUCCESS
+----
+
+. Verify that the `chat-room` topic exists in your cluster by listing all topics:
++
+[,bash]
+----
+rpk topic list --tls-enabled
+----
++
+Output:
++
+[.no-copy]
+----
+NAME       PARTITIONS  REPLICAS
+chat-room  1           1
+----
+
+. If the topic doesn't exist yet, use {docs-reference-base}rpk/index.adoc[rpk] to create a `chat-room` topic:
++
+[,bash]
+----
+rpk topic create chat-room --tls-enabled
+----
++
+Output:
++
+[.no-copy]
+----
+TOPIC      STATUS
+chat-room  OK
+----
+
+. From `chat-room/cloud/java`, compile the client application:
++
+[,bash]
+----
+mvn compile
+----
+
+. Open at least two terminals, and for each terminal:
+.. Run the client application:
++
+[,bash]
+----
+mvn exec:java -Dexec.mainClass="com.example.Main"
+----
+.. When prompted with `Enter user name:`, enter a unique name for the chat room.
+. Use the chat application: enter a message in a terminal, and verify that the message is received in the other terminals.
++
+For example:
++
+----
+Enter user name:
+Alice
+Connected, press Ctrl+C to exit
+Alice: Hi, I'm Alice
+Bob: Hi Alice, I'm Bob, nice to meet you
+----
+
+== Files in the example
+
+This example includes the following files:
+
+- link:{content-url}/clients/chat-room/cloud/java/src/main/java/com/example/Admin.java[`src/main/java/com/example/Admin.java`]: Checks whether the `chat-room` topic exists and creates it if not.
+- link:{content-url}/clients/chat-room/cloud/java/src/main/java/com/example/ChatProducer.java[`src/main/java/com/example/ChatProducer.java`]: A producer that sends strings entered by the user of the terminal to the `chat-room` topic. Messages are sent as JSON encoded strings.
+- link:{content-url}/clients/chat-room/cloud/java/src/main/java/com/example/ChatConsumer.java[`src/main/java/com/example/ChatConsumer.java`]: A consumer that reads all messages from the `chat-room`
+topic and prints them to the console. You can start as many consumer groups as you like, but each group reads a message only once, which is why the example is using a generated UUID for the group ID. This way, each time you run the application, you see all previous messages.
+- link:{content-url}/clients/chat-room/cloud/java/src/main/java/com/example/Main.java[`src/main/java/com/example/Main.java`]: The client application that creates the topic, producer, and consumer and implements the chat logic.
+
+== Next steps
+
+This is a basic example of a chat room application. You can improve this application by implementing additional features and components, such as:
+
+* A user interface to make it more interactive and user-friendly.
+* A user registration and login system to authenticate users before they can access the chat room.
+* Rate limiting and other measures to prevent spamming and abuse in the chat room.
+
+include::ROOT:shared:partial$suggested-reading.adoc[]
+
+For additional resources to help you build stream processing
+applications that can aggregate, join, and filter your data streams, see:
+
+* https://university.redpanda.com/[Redpanda University^]
+* https://redpanda.com/blog[Redpanda Blog^]
+* https://redpanda.com/resources[Resources^]

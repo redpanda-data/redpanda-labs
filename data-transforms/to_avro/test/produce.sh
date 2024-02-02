@@ -4,6 +4,6 @@ topic="$2"
 {
     read # skip header row
     while read -r line; do
-        echo $line | ../rpk topic produce $topic -v
+        echo $line | docker exec -it redpanda-0 topic produce $topic -v
     done
 } < "$filename"

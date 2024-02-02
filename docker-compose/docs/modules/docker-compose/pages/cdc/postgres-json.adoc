@@ -1,0 +1,127 @@
+= Set Up Postgres CDC with Debezium and Redpanda
+:env-docker: true
+:page-categories: Integration
+:description: Use Debezium to capture the changes made to a Postgres database in real time and stream them to Redpanda.
+:page-layout: lab
+
+This example demonstrates using Debezium to capture the changes made to Postgres in real time and stream them to Redpanda.
+
+This read-to-run `docker-compose` setup contains the following containers:
+- `postgres` container with the `pandashop` database, containing a single table, `orders`
+- `debezium` container capturing changes made to the `orders` table in real time.
+- `redpanda` container to ingest change data streams produced by `debezium`
+
+For more information about `pandashop` schema, see the `/data/postgres_bootstrap.sql` file.
+
+image::postgres-architecture.png[Example architecture]
+
+include::docker-compose:partial$docker-prerequisites.adoc[]
+
+== Run the example
+
+. xref:redpanda-labs:docker-compose:attachment$cdc/mysql-json/docker-compose.yml[Download] the following Docker Compose file on your local file system.
++
+.Reveal the Docker Compose file
+[%collapsible]
+====
+.`docker-compose.yml`
+[,yaml,subs="attributes+"]
+----
+include::redpanda-labs:docker-compose:attachment$cdc/mysql-json/docker-compose.yml[]
+----
+====
+
+. Run the following in the directory where you saved the Docker Compose file:
++
+```bash
+docker compose up -d
+```
++
+When the `postgres` container starts, the `/data/postgres_bootstrap.sql` file creates the `pandashop` database and the `orders` table, followed by seeding the ` orders` table with a few records.
+
+. Log into Postgres:
++
+```sql
+docker compose exec postgres psql -U postgresuser -d pandashop
+```
+
+. Check the content inside the `orders` table:
++
+```sql
+select * from orders;
+```
++
+This is the source table.
+
+. While Debezium is up and running, create a source connector configuration to extract change data feeds from Postgres:
++
+```bash
+docker compose exec debezium curl -H 'Content-Type: application/json' debezium:8083/connectors --data '
+{
+  "name": "postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgresuser",
+    "database.password": "postgrespw",
+    "database.dbname" : "pandashop",
+    "database.server.name": "postgres",
+    "table.include.list": "public.orders",
+    "topic.prefix" : "dbz"
+  }
+}'
+```
++
+Notice the `database.*` configurations specifying the connectivity details to `postgres` container. Wait a minute or two until the connector gets deployed inside Debezium and creates the initial snapshot of change log topics in Redpanda.
+
+. Check the list of change log topics in Redpanda:
++
+```bash
+docker-compose exec redpanda rpk topic list
+```
++
+The output should contain two topics with the prefix `dbz.*` specified in the connector configuration. The topic `dbz.public.orders` holds the initial snapshot of change log events streamed from `orders` table.
++
+[.no-copy]
+----
+NAME               PARTITIONS  REPLICAS
+connect-status     5           1
+connect_configs    1           1
+connect_offsets    25          1
+dbz.public.orders  1           1
+----
+
+. Monitor for change events by consuming the `dbz.public.orders` topic:
++
+```bash
+docker-compose exec redpanda rpk topic consume dbz.public.orders
+```
+
+. While the consumer is running, open another terminal to insert a record to the `orders` table:
++
+```bash
+docker-compose exec postgres psql -U postgresuser -d pandashop
+```
+
+. Insert the following record:
++
+```sql
+INSERT INTO orders (customer_id, total) values (5, 500);
+```
+
+This will trigger a change event in Debezium, immediately publishing it to `dbz.public.orders` Redpanda topic, causing the consumer to display a new event in the console. That proves the end to end functionality of your CDC pipeline.
+
+include::docker-compose:partial$docker-customize.adoc[]
+
+include::docker-compose:partial$docker-clean-up.adoc[]
+
+== Next steps
+
+Now that you have change log events ingested into Redpanda. You process change log events to enable use cases such as:
+- Database replication
+- Stream processing applications
+- Streaming ETL pipelines
+- Update caches
+- Event-driven Microservices

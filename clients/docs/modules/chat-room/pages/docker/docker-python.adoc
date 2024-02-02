@@ -1,0 +1,131 @@
+= Build a Chat Room Application with Redpanda and Python
+:description: Create a basic chat room application with Redpanda and Kafka clients developed with kafka-python.
+:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-python.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-python.adoc" } ]
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Clients
+
+Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://kafka-python.readthedocs.io/en/master/[kafka-python^].
+
+This example shows you how to:
+
+* Write a client application in Python to produce and consume chat room messages.
+* Build and run multiple clients to exchange chat messages streamed through Redpanda.
+
+image::chat-room.gif[Demo of the application, where two users are chatting to each other]
+
+include::chat-room:partial$intro.adoc[]
+
+== Prerequisites
+
+- Download and install Python 3 from https://www.python.org/downloads[python.org^].
+
+- Complete the {docs-get-started-base}quick-start.adoc[Redpanda Quickstart]. This example expands on the quickstart. You can choose to run either one or three brokers.
+
+== Run the example
+
+Build the client chat application, run it from multiple client terminals, and chat between the clients.
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the example directory:
++
+[,bash]
+----
+cd clients/chat-room/docker/python
+----
+
+. Create a virtual environment:
++
+[,bash]
+----
+python3 -m venv .env
+source .env/bin/activate
+----
+
+. Install the required dependencies:
++
+[,bash]
+----
+pip3 install kafka-python
+----
+
+. Verify that the `chat-room` topic exists in your cluster by listing all topics:
++
+[,bash]
+----
+docker exec -it redpanda-0 rpk topic list
+----
++
+Output:
++
+[.no-copy]
+----
+NAME       PARTITIONS  REPLICAS
+chat-room  1           1
+----
+
+. If the topic doesn't exist yet, use {docs-reference-base}rpk/index.adoc[rpk] to create a `chat-room` topic:
++
+[,bash]
+----
+docker exec -it redpanda-0 rpk topic create chat-room
+----
++
+Output:
++
+[.no-copy]
+----
+TOPIC      STATUS
+chat-room  OK
+----
+
+. Open at least two terminals, and for each terminal:
+. Run the client application:
++
+```
+python app.py
+```
+
+. When prompted with `Enter user name:`, enter a unique name for the chat room.
+. Use the chat application: enter a message in a terminal, and verify that the message is received in the other terminals.
++
+For example:
++
+----
+Enter user name:
+Alice
+Connected, press Ctrl+C to exit
+Alice: Hi, I'm Alice
+Bob: Hi Alice, I'm Bob, nice to meet you
+----
+
+== Files in the example
+
+This example includes the following files:
+
+- link:{content-url}/clients/chat-room/docker/python/admin.py[`admin.py`]: Checks whether the `chat-room` topic exists and creates it if not.
+- link:{content-url}/clients/chat-room/docker/python/producer.py[`producer.py`]: A producer that sends strings entered by the user of the terminal to the
+`chat-room` topic. Messages are sent as JSON encoded strings.
+- link:{content-url}/clients/chat-room/docker/python/consumer.py[`consumer.py`]: A consumer that reads all messages from the `chat-room`
+topic and prints them to the console. You can start as many consumer groups as you like, but each group reads a message only once, which is why the example is using a generated UUID for the group ID. This way, each time you run the application, you see all previous messages.
+- link:{content-url}/clients/chat-room/docker/python/app.py[`app.py`]: The client application that creates the topic, producer, and consumer and implements the chat logic.
++
+NOTE: The broker settings in this code are from the Redpanda Quickstart, where the external port for broker `redpanda-0` is set to port 19092.
+
+== Next steps
+
+This is a basic example of a chat room application. You can improve this application by implementing additional features and components, such as:
+
+* A user interface to make it more interactive and user-friendly.
+* A user registration and login system to authenticate users before they can access the chat room.
+* Rate limiting and other measures to prevent spamming and abuse in the chat room.
+
+include::ROOT:shared:partial$suggested-reading.adoc[]
+
+For additional resources to help you build stream processing
+applications that can aggregate, join, and filter your data streams, see:
+
+* https://university.redpanda.com/[Redpanda University^]
+* https://redpanda.com/blog[Redpanda Blog^]
+* https://redpanda.com/resources[Resources^]

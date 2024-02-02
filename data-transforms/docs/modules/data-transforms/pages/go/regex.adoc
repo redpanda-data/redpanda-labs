@@ -1,0 +1,58 @@
+= Filter Messages into a New Topic using a Regex
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing
+:description: Filter messages from one topic into another using regular expressions (regex) and data transforms.
+
+This is an example of how to filter messages from one topic into another using regular expressions (regex) and xref:ROOT:develop:data-transforms/how-transforms-work.adoc[Redpanda data transforms].
+
+Regexes are implemented using Go's `regexp` library, which uses the same syntax as RE2.
+See the https://github.com/google/re2/wiki/Syntax[RE2 wiki] for help with syntax.
+
+include::data-transforms:partial$prerequisites.adoc[]
+
+== Run the example
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the `docker-compose/single-broker/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/single-broker
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version.
++
+[,bash]
+----
+export REDPANDA_VERSION=23.3.1
+----
+
+. Start Redpanda in Docker by running the following command:
++
+```bash
+docker compose up -d
+```
+
+. Change into the `data-transforms/regex/` directory:
++
+[,bash]
+----
+cd ../../data-transforms/regex
+----
+
+. Deploy the transforms function:
++
+
+```bash
+docker exec -it redpanda-0 rpk transform build
+docker exec -it redpanda-0 rpk transform deploy --var=PATTERN=myregex --input-topic=src --output-topic=sink
+```
++
+This example accepts the following environment variables:
++
+- `PATTERN` (*required*): The regex to match against records.
+- `MATCH_VALUE`: By default, the regex matches record keys, but if set to `true`, the regex will match values.
+
+include::docker-compose:partial$docker-clean-up.adoc[]

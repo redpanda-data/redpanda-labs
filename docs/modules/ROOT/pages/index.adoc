@@ -1,0 +1,2 @@
+= Redpanda Labs
+:page-layout: labs-search

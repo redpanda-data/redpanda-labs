@@ -1,0 +1,141 @@
+= Convert JSON Messages into Avro
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing
+:description: Query live tracking data from the International Space Station and convert it from JSON to Avro using data transforms.
+
+This example shows you how to query live tracking data from the International Space Station and convert it from JSON to Avro using xref:ROOT:develop:data-transforms/how-transforms-work.adoc[Redpanda data transforms].
+
+This example uses cURL to query data from `api.open-notify.org` which is then piped through to Redpanda using the `rpk` command-line client. When the data is in Redpanda, it's converted from JSON to Avro using the transforms function. Then, you can see the converted data in Redpanda Console.
+
+image::iss_overview.png[Architectural Overview]
+
+include::data-transforms:partial$prerequisites.adoc[]
+
+== Run the example
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the `docker-compose/single-broker/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/single-broker
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version.
++
+[,bash]
+----
+export REDPANDA_VERSION=23.3.1
+----
+
+. Start Redpanda in Docker by running the following command:
++
+```bash
+docker compose up -d
+```
+
+. Change into the `data-transforms/iss_demo/` directory:
++
+[,bash]
+----
+cd ../../data-transforms/iss_demo
+----
+
+. Post the Avro schema to the Schema Registry using a cURL command:
++
+```bash
+jq '. | {schema: tojson}' iss.avsc | curl -X POST "http://localhost:18081/subjects/iss_position/versions" -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+        -d @-
+```
++
+Take a note of the schema ID that is returned from this command (on a clean environment this will be `1`.
+
+. Set up your rpk profile:
++
+```bash
+docker exec -it redpanda-0 rpk profile create iss_demo --from-profile profile.yml
+```
+
+. Create the required topics `iss_json` and `iss_avro`:
++
+```bash
+docker exec -it redpanda-0 rpk topic create iss_json iss_avro
+```
+
+. Deploy the transforms function:
++
+```bash
+docker exec -it redpanda-0 rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
+```
++
+This example accepts the following environment variables:
++
+- `SCHEMA_ID` (*required*): The ID of the Avro schema stored in the Redpanda schema registry.
+
+Now, you can test that the data can be converted from JSON to Avro.
+
+. Get a single record representing the location of the ISS:
++
+```bash
+curl http://api.open-notify.org/iss-now.json
+```
++
+Example output:
++
+```json
+{"message": "success", "timestamp": 1695753164, "iss_position": {"latitude": "-12.8784", "longitude": "92.2935"}}
+```
+
+. Paste this record into `rpk topic produce` as follows:
++
+```bash
+docker exec -it redpanda-0 rpk topic produce iss_json
+```
+
+. Consume the Avro topic using `rpk topic consume` and observe that it has been converted to Avro:
++
+```bash
+docker exec -it redpanda-0 rpk topic consume iss_avro
+```
++
+Example output:
++
+```json
+{
+  "topic": "iss_avro",
+  "value": "\u0000\u0000\u0000\u0000\u0001\ufffd\ufffd\u0011\ufffd\ufffd\ufffd)\ufffd\u0010X9\ufffd\ufffd\u0012W@\ufffd\ufffd\ufffd\ufffd\u000c",
+  "timestamp": 1695753212929,
+  "partition": 0,
+  "offset": 0
+}
+```
+
+. Open http://localhost:8080/topics/iss_avro?p=-1&s=50&o=-1#messages[Redpanda Console] to view the decoded data.
++
+image::iss_console.png[Redpanda Console showing the decoded message]
+
+. Set up a loop to poll the location of the ISS:
++
+```bash
+while true
+do
+line=`curl http://api.open-notify.org/iss-now.json -s`
+echo $line | rpk topic produce iss_json
+sleep 1
+done
+```
+
+== Files in the example
+
+- link:{content-url}/data-transforms/iss_demo/iss.avsc[`iss.avsc`]: Avro schema used for conversion.
+- link:{content-url}/data-transforms/iss_demo/profile.yml[`profile.yml`]: Used to configure `rpk` with the `rpk profile` command.
+- link:{content-url}/data-transforms/iss_demo/transform.go[`transform.go`]: This is the Golang code that will be compiled to WebAssembly. This code:
+** Initializes the transform, including getting the schema from the Schema Registry and creating the `goavro` codec object (both stored in global variables).
+** Registers the callback `toAvro`.
+** `toAvro` parses the JSON into a struct `iss_now`, converts the struct into a map and then converts the map to Avro binary using the `goavro` codec.
+** Prepends the schema ID using the magic five bytes `0x0` followed by a BigEndian `uint32`.
+** This is all appended to the output slice.
+
+include::docker-compose:partial$docker-clean-up.adoc[]

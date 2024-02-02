@@ -1,0 +1,93 @@
+= Flatten JSON Messages
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing
+:description: Flatten JSON messages in topics using data transforms.
+
+This example uses xref:ROOT:develop:data-transforms/how-transforms-work.adoc[Redpanda data transforms] to take JSON messages in an input topic, flatten them using a customizable delimiter and produce the results to an output topic.
+
+.Example input topic
+```json
+{
+  "content": {
+    "id": 123,
+    "name": {
+      "first": "Dave",
+      "middle": null,
+      "last": "Voutila"
+    },
+    "data": [1, "fish", 2, "fish"]
+  }
+}
+```
+
+.Example output topic with flattened JSON
+```json
+{
+  "content.id": 123,
+  "content.name.first": "Dave",
+  "content.name.middle": null,
+  "content.name.last": "Voutila",
+  "content.data": [1, "fish", 2, "fish"]
+}
+```
+
+include::data-transforms:partial$prerequisites.adoc[]
+
+== Limitations
+
+- Arrays of objects are currently untested.
+- Providing a series of objects as input, not an an array, may result
+in a series of flattened objects as output.
+- Due to how JSON treats floating point values, values such as `1.0` that can be converted to an integer will lose the decimal point. For example `1.0` becomes `1`.
+
+== Run the example
+
+. {repository}fork[Fork the `redpanda-labs` repository] and clone your local fork.
+
+. Change into the `docker-compose/single-broker/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/single-broker
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version.
++
+[,bash]
+----
+export REDPANDA_VERSION=23.3.1
+----
+
+. Start Redpanda in Docker by running the following command:
++
+```bash
+docker compose up -d
+```
+
+. Change into the `data-transforms/flatten/` directory:
++
+[,bash]
+----
+cd ../../data-transforms/flatten
+----
+
+. Deploy the transforms function:
++
+```bash
+docker exec -it redpanda-0 rpk transform deploy --input-topic=src --output-topic=sink
+```
++
+This example accepts the following environment variables:
++
+- `RP_FLATTEN_DELIM`: The delimiter to use when flattening the JSON fields. Defaults to `.`.
++
+For example:
++
+```bash
+rpk transform deploy --var "RP_FLATTEN_DELIM=<delimiter>"
+```
+
+include::docker-compose:partial$docker-clean-up.adoc[]
+
+

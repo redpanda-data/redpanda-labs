@@ -1,0 +1,17 @@
+name: redpanda-labs
+title: Redpanda Labs
+version: ~
+nav:
+- modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    repository: https://github.com/redpanda-data/redpanda-labs/
+    #page-toctitle: 'On this page'
+    content-url: '{repository}tree/main'
+    docs-get-started-base: 'xref:ROOT:get-started:'
+    docs-reference-base: 'xref:ROOT:reference:'
+    docs-develop-base: 'xref:ROOT:develop:'
+    docs-manage-base: 'xref:ROOT:manage:'
+    docs-upgrade-base: 'xref:ROOT:upgrade:'
+
+

@@ -1,0 +1,45 @@
+= Enable Plain Login Authentication for Redpanda Console
+:env-docker: true
+:page-categories: Security, Management
+:description: Deploy Redpanda Console with a plain login provider so that users of Redpanda Console must log in with a username and password.
+:page-layout: lab
+
+This Docker Compose file configures Redpanda Console with a plain login provider so that users of Redpanda Console must log in with a username and password.
+
+This example uses features that require a license key for Redpanda Enterprise Edition. The license key is uploaded to the Redpanda broker through a separate container called `redpandarpk`. This container executes the `rpk cluster license set` command to load the license key from the given filepath.
+
+???add automatically to pages with page-edition Enterprise???
+To request a trial license, to extend your trial period, or to purchase an Enterprise Edition license,
+contact https://redpanda.com/try-redpanda?section=enterprise-trial[Redpanda Sales^].
+
+include::docker-compose:partial$docker-prerequisites.adoc[]
+
+== Run the example
+
+. xref:redpanda-labs:docker-compose:attachment$console-plain-login/docker-compose.yml[Download] the following Docker Compose file on your local file system.
++
+NOTE: If you are running on an ARM-based device such as the Apple M1 chip, uncomment the `platform: 'linux/amd64'` lines.
++
+.Reveal the Docker Compose file
+[%collapsible]
+====
+.`docker-compose.yml`
+[,yaml,subs="attributes+"]
+----
+include::redpanda-labs:docker-compose:attachment$console-plain-login/docker-compose.yml[]
+----
+====
+
+. Save your license key to `license/redpanda.license` in the same location as your Docker Compose file. Or, to use another location, update the license paths in the Docker Compose file to another directory that contains your license key.
+
+. Run the following in the directory where you saved the Docker Compose file:
++
+```bash
+docker compose up -d
+```
+
+. Open Redpanda Console at http://localhost:8080[localhost:8080^] and log in with the credentials for `john` or `jane`, which are defined in the Docker Compose file in the `CONSOLE_CONFIG_FILE` environment variable.
+
+include::docker-compose:partial$docker-customize.adoc[]
+
+include::docker-compose:partial$docker-clean-up.adoc[]

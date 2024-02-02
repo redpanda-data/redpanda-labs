@@ -1,0 +1,14 @@
+== What is a chat room application?
+
+A chat room application is software that enables users to engage in real-time textual communication with one another. These applications typically allow multiple users to join a chat room, where they can send messages and interact with others in a group conversation.
+
+Chat room applications often include features such as private messaging, user profiles, and notifications. Some popular chat room applications include Slack, Discord, and WhatsApp.
+
+== Why use Redpanda?
+
+Redpanda offers several features that make it ideal for building a fast, scalable, and robust chat room application.
+
+* Scalability: Redpanda can scale horizontally and vertically to accommodate growing chat room usage over time.
+* Low-latency: Redpanda is designed for minimal latency to provide a smooth user experience and fast message delivery.
+* Fault tolerance: Redpanda is resilient to failures, thanks to its built-in replication and partitioning capabilities. This built-in resilience ensures that the chat room application continues to serve users even if individual brokers in the cluster experience downtime.
+* Durability: Redpanda persists messages on disk, maintaining chat history and allowing users to read previous conversations.

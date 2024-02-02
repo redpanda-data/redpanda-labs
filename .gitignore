@@ -7,6 +7,12 @@ settings.json
 # rpk binary
 rpk*
 
+# Node.js
+node_modules/
+
+# Docs
+local-docs/
+
 # Go
 go.work*
 

@@ -1,0 +1,7 @@
+== Clean up
+
+To shut down and delete the containers along with all your cluster data:
+
+```bash
+docker compose down -v
+```
