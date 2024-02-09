@@ -1,0 +1,10 @@
+= Docker Compose Deployments
+:description: A collection of Docker Compose files that deploy Redpanda along with a variety of other applications for use in Redpanda Labs.
+
+{description}
+
+- link:./single-broker/README.adoc[Single broker]
+- link:./three-brokers/README.adoc[Three brokers]
+- link:./owl-shop/README.adoc[Owl shop streaming application]
+- link:./console-plain-login/README.adoc[Redpanda Console with Plain Login Authentication]
+- link:./cdc/README.adoc[Change data capture (CDC) with Debezium]

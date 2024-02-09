@@ -8,7 +8,7 @@ volumes:
   redpanda: null
 services:
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Redpanda version not set}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     command:
       - redpanda start
       - --smp 1
@@ -48,7 +48,7 @@ services:
       - /etc/redpanda/redpanda.license
       # rpk connects to the admin API of one broker to set the license key for the whole cluster.
       - --api-urls redpanda:9644
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Redpanda version not set}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     # mount the local directory that contains your license key to the container.
     # give Redpanda read and write access to the license.
     volumes:
@@ -59,7 +59,7 @@ services:
       - redpanda
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v${CONSOLE_VERSION:-2.3.8}
+    image: docker.redpanda.com/redpandadata/console:v${CONSOLE_VERSION:?Set a Redpanda Console version}
     # mount the local directory that contains your license key to the container.
     # give Redpanda Console read access to the license.
     volumes:

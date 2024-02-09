@@ -1,0 +1,16 @@
+= Filter JSON Messages into a New Topic using JQ
+
+This lab contains a data transform using the popular `jq` command line JSON processor.
+
+See the jq manual for more information on how to write a filter: https://jqlang.github.io/jq/manual/
+
+Environment variables:
+
+- FILTER: The jq expression that will execute against record values (required)
+
+To deploy this to a cluster you'll need to run the following in this directory:
+
+```
+./build.sh
+rpk transform deploy jq.wasm --name=<name> --var=FILTER='.myfilter' --input-topic=src --output-topic=sink
+```

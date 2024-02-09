@@ -1,0 +1,6 @@
+= Kubernetes Labs
+:description: A collection of Redpanda Labs that showcase how to work with Redpanda in Kubernetes.
+
+{description}
+
+- link:./gitops-helm/README.adoc[Set Up GitOps for the Redpanda Helm Chart]

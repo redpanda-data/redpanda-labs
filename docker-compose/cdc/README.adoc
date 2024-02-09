@@ -1,0 +1,8 @@
+= Change Data Capture (CDC) with Debezium and Redpanda
+
+A collection of Docker Compose files that demonstrate CDC from different databases with link:https://debezium.io/[Debezium]. Debezium has been configured to stream change events into Redpanda.
+
+Databases include:
+
+- link:./mysql-json/README.adoc[MySQL]
+- link:./postgres-json/README.adoc[Postgres]

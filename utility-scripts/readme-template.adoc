@@ -1,0 +1,24 @@
+= Lab Title
+// Required: Sets the UI template when published on the Redpanda docs site.
+:page-layout: lab
+// Required: Add a deployment type by uncommenting one of these lines
+//:env-docker: true // Docker
+//:env-kubernetes: true // Kubernetes
+//:env-linux: true // Linux
+//:page-cloud: true // Redpanda Cloud
+// Required: For more details about categories, see https://github.com/redpanda-data/redpanda-labs/blob/main/docs/CONTRIBUTING.md
+:page-categories:
+// Required: Add a short description of what the lab does.
+:description:
+
+Overview
+
+== Prerequisites
+
+== Limitations
+
+== Run the lab
+
+== Clean up
+
+

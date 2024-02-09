@@ -1,0 +1,44 @@
+site:
+  title: Redpanda Docs
+  start_page: redpanda-labs:ROOT:index.adoc
+  url: http://localhost:5002
+  robots: disallow
+  keys:
+    preview: true
+urls:
+  html_extension_style: indexify
+  latest_version_segment: 'current'
+output:
+  clean: true
+content:
+  sources:
+  - url: https://github.com/redpanda-data/documentation
+    branches: [main, v/*, api, site-search, shared]
+  - url: ../
+    branches: HEAD
+    start_paths: [docs,'*/docs']
+ui:
+  bundle:
+    url: https://github.com/redpanda-data/docs-ui/releases/latest/download/ui-bundle.zip
+    snapshot: true
+asciidoc:
+  attributes:
+  extensions:
+  - '@asciidoctor/tabs'
+  - '@redpanda-data/docs-extensions-and-macros/macros/glossary'
+  - '@redpanda-data/docs-extensions-and-macros/macros/config-ref'
+  - '@redpanda-data/docs-extensions-and-macros/macros/helm-ref'
+  - '@redpanda-data/docs-extensions-and-macros/asciidoc-extensions/add-line-numbers-highlights'
+antora:
+  extensions:
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/algolia-indexer/index'
+    excludes: ['.thumbs','script', '.page-versions','.feedback-section','.banner-container']
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
+  - '@redpanda-data/docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/validate-attributes'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-docs'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-labs'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/aggregate-terms'
+

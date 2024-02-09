@@ -1,6 +1,7 @@
 # IDE
 settings.json
 .idea/
+.DS_store
 
 # Compiled wasm artifacts
 *.wasm
