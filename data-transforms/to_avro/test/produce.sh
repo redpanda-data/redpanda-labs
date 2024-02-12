@@ -1,9 +1,16 @@
 #!/bin/bash
+
 filename="$1"
 topic="$2"
+
+if [[ -z "$filename" || -z "$topic" ]]; then
+    echo "Usage: $0 <filename> <topic>"
+    exit 1
+fi
+
 {
-    read # skip header row
-    while read -r line; do
-        echo $line | docker exec -it redpanda-0 topic produce $topic -v
+    read # Skip the header row
+    while IFS= read -r line; do
+        echo "$line" | rpk topic produce "$topic"
     done
 } < "$filename"

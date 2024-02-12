@@ -74,15 +74,6 @@ For example:
 export REDPANDA_VERSION={latest-redpanda-version}
 ----
 
-. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
-+
-For example:
-+
-[,bash,subs="attributes+"]
-----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
-----
-
 . Run the following in the directory where you saved the Docker Compose file:
 +
 ```bash
@@ -131,7 +122,7 @@ Notice the `database.*` configurations specifying the connectivity details to `p
 . Check the list of change log topics in Redpanda:
 +
 ```bash
-docker-compose exec redpanda rpk topic list
+docker compose exec redpanda rpk topic list
 ```
 +
 The output should contain two topics with the prefix `dbz.*` specified in the connector configuration. The topic `dbz.public.orders` holds the initial snapshot of change log events streamed from `orders` table.
@@ -148,14 +139,16 @@ dbz.public.orders  1           1
 . Monitor for change events by consuming the `dbz.public.orders` topic:
 +
 ```bash
-docker-compose exec redpanda rpk topic consume dbz.public.orders
+docker compose exec redpanda rpk topic consume dbz.public.orders
 ```
 
 . While the consumer is running, open another terminal to insert a record to the `orders` table:
 +
-```bash
-docker-compose exec postgres psql -U postgresuser -d pandashop
-```
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+docker compose exec postgres psql -U postgresuser -d pandashop
+----
 
 . Insert the following record:
 +

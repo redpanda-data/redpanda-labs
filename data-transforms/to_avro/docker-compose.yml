@@ -1,6 +1,7 @@
 version: '3.7'
 services:
-  redpanda-0:
+  redpanda:
+    container_name: redpanda
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     command:
     - redpanda

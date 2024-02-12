@@ -25,7 +25,7 @@ The demo runs using Docker Compose, with the following containers:
 * `redpanda`: Includes a single Redpanda broker.
 * `console`: Includes Redpanda Console.
 * `owl-shop`: Includes the Owlshop demo application that produces e-commerce data to the Redpanda broker.
-* `transform`: Includes all the requirements for deploying the transform function to the Redpanda broker, including `rpk`, Go, and the redaction transform code. The source code for the redaction transform is available in the `redaction` directory.
+* `transform`: Includes all the requirements for deploying the transforms function to the Redpanda broker, including `rpk`, Go, and the redaction transform code. The source code for the redaction transform is available in the `redaction` directory.
 
 == Prerequisites
 

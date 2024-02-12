@@ -15,7 +15,7 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
-This example uses Redpanda data transforms to take JSON messages in an input topic, flatten them using a customizable delimiter and produce the results to an output topic.
+This example uses Redpanda data transforms to take JSON messages in an input topic and flatten them using a customizable delimiter.
 
 .Example input topic
 ```json
@@ -48,9 +48,7 @@ This example uses Redpanda data transforms to take JSON messages in an input top
 You must have the following:
 
 - At least version 1.20 of https://go.dev/doc/install[Go^] installed on your host machine.
-- The link:https://docs.redpanda.com/current/get-started/rpk-install/[`rpk` command-line client].
-+
-Install `rpk` on your host machine and configure it to connect to your Redpanda cluster.
+- link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
 - https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
 
 == Limitations
@@ -102,19 +100,20 @@ docker compose up -d
 . Set up your rpk profile:
 +
 ```bash
-docker exec -it redpanda-0 rpk profile create flatten --from-profile profile.yml
+rpk profile create flatten --from-profile profile.yml
 ```
 
 . Create the required topics `iss_json` and `iss_avro`:
 +
 ```bash
-docker exec -it redpanda-0 rpk topic create src sink
+rpk topic create src sink
 ```
 
-. Deploy the transforms function:
+. Build and deploy the transforms function:
 +
 ```bash
-docker exec -it redpanda-0 rpk transform deploy --input-topic=src --output-topic=sink
+rpk transform build
+rpk transform deploy --input-topic=src --output-topic=sink
 ```
 +
 This example accepts the following environment variables:
@@ -126,6 +125,37 @@ For example:
 ```bash
 rpk transform deploy --var "RP_FLATTEN_DELIM=<delimiter>"
 ```
+
+. Produce a JSON message to the source topic:
++
+```bash
+rpk topic produce src
+```
+
+. Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
++
+```json
+{"message": "success", "timestamp": 1707743943, "iss_position": {"latitude": "-28.5723", "longitude": "-149.4612"}}
+```
+
+. Consume the sink topic to see the flattened result:
++
+```bash
+rpk topic consume sink
+```
++
+[json, role="no-copy"]
+----
+{
+  "topic": "sink",
+  "value": "{\n  \"message\": \"success\"  \"timestamp\": 1.707743943e+09  \"iss_position.latitude\": \"-28.5723\",\n  \"iss_position.longitude\": \"-149.4612\"\n}\n",
+  "timestamp": 1707744765541,
+  "partition": 0,
+  "offset": 0
+}
+----
+
+You can also see this in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
 
 == Clean up
 

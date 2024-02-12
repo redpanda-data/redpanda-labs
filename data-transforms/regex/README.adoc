@@ -15,7 +15,7 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
-This is an example of how to filter messages from one topic into another using regular expressions (regex) and Redpanda data transforms.
+This is an example of how to filter messages from one topic into another using regular expressions (regex) and Redpanda data transforms. If a source topic contains a key or value that matches the regex, it will be produced to the sink topic.
 
 Regexes are implemented using Go's `regexp` library, which uses the same syntax as RE2.
 See the https://github.com/google/re2/wiki/Syntax[RE2 wiki] for help with syntax.
@@ -25,9 +25,7 @@ See the https://github.com/google/re2/wiki/Syntax[RE2 wiki] for help with syntax
 You must have the following:
 
 - At least version 1.20 of https://go.dev/doc/install[Go^] installed on your host machine.
-- The link:https://docs.redpanda.com/current/get-started/rpk-install/[`rpk` command-line client].
-+
-Install `rpk` on your host machine and configure it to connect to your Redpanda cluster.
+- link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
 - https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
 
 == Run the lab
@@ -72,27 +70,58 @@ docker compose up -d
 . Set up your rpk profile:
 +
 ```bash
-docker exec -it redpanda-0 rpk profile create regex --from-profile profile.yml
+rpk profile create regex --from-profile profile.yml
 ```
 
 . Create the required topics:
 +
 ```bash
-docker exec -it redpanda-0 rpk topic create src sink
+rpk topic create src sink
 ```
 
 . Deploy the transforms function:
 +
-
 ```bash
-docker exec -it redpanda-0 rpk transform build
-docker exec -it redpanda-0 rpk transform deploy --var=PATTERN=myregex --input-topic=src --output-topic=sink
+rpk transform build
+rpk transform deploy --var=PATTERN="\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\\b" --var=MATCH_VALUE=true --input-topic=src --output-topic=sink
 ```
 +
 This example accepts the following environment variables:
 +
-- `PATTERN` (*required*): The regex to match against records.
+- `PATTERN` (*required*): The regex to match against records. Here, the regex finds messages containing email addresses.
 - `MATCH_VALUE`: By default, the regex matches record keys, but if set to `true`, the regex will match values.
+
+. Run `rpk topic produce`:
++
+[,bash]
+----
+rpk topic produce src
+----
+
+. Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
++
+```json
+Hello, please contact us at help@example.com.
+```
+
+. Consume the sink topic to see the email address was extracted and produced to the sink topic:
++
+```bash
+rpk topic consume sink
+```
++
+[json, role="no-copy"]
+----
+{
+  "topic": "sink",
+  "value": "Hello, please contact us at help@example.com.",
+  "timestamp": 1707749921393,
+  "partition": 0,
+  "offset": 0
+}
+----
+
+You can also see this in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
 
 == Clean up
 

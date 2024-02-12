@@ -34,9 +34,7 @@ image::iss_overview.png[Architectural Overview]
 You must have the following:
 
 - At least version 1.20 of https://go.dev/doc/install[Go^] installed on your host machine.
-- The link:https://docs.redpanda.com/current/get-started/rpk-install/[`rpk` command-line client].
-+
-Install `rpk` on your host machine and configure it to connect to your Redpanda cluster.
+- link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
 - https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
 
 == Run the lab
@@ -81,7 +79,7 @@ docker compose up -d
 . Post the Avro schema to the Schema Registry using a cURL command:
 +
 ```bash
-jq '. | {schema: tojson}' iss.avsc | curl -X POST "http://localhost:18081/subjects/iss_position/versions" -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+jq '. | {schema: tojson}' iss.avsc | curl -X POST "http://localhost:8081/subjects/iss_position/versions" -H "Content-Type: application/vnd.schemaregistry.v1+json" \
         -d @-
 ```
 +
@@ -90,19 +88,24 @@ Take a note of the schema ID that is returned from this command. In a clean envi
 . Set up your rpk profile:
 +
 ```bash
-docker exec -it redpanda-0 rpk profile create iss_demo --from-profile profile.yml
+rpk profile create iss_demo --from-profile profile.yml
 ```
++
+[.no-copy]
+----
+Created and switched to new profile "iss_demo".
+----
 
 . Create the required topics `iss_json` and `iss_avro`:
 +
 ```bash
-docker exec -it redpanda-0 rpk topic create iss_json iss_avro
+rpk topic create iss_json iss_avro
 ```
 
 . Deploy the transforms function:
 +
 ```bash
-docker exec -it redpanda-0 rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
+rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
 ```
 +
 This example accepts the following environment variables:
@@ -123,16 +126,18 @@ Example output:
 {"message": "success", "timestamp": 1695753164, "iss_position": {"latitude": "-12.8784", "longitude": "92.2935"}}
 ```
 
-. Paste this record into `rpk topic produce` as follows:
+. Run `rpk topic produce`:
 +
 ```bash
-docker exec -it redpanda-0 rpk topic produce iss_json
+rpk topic produce iss_json
 ```
 
-. Consume the Avro topic using `rpk topic consume` and observe that it has been converted to Avro:
+. Paste the output of the cURL command into the prompt and press kbd:[Ctrl + C] to exit the prompt.
+
+. Consume the Avro topic using `rpk topic consume` and observe that the transforms function has converted it to Avro:
 +
 ```bash
-docker exec -it redpanda-0 rpk topic consume iss_avro
+rpk topic consume iss_avro
 ```
 +
 Example output:
@@ -151,17 +156,6 @@ Example output:
 +
 image::iss_console.png[Redpanda Console showing the decoded message]
 
-. Set up a loop to poll the location of the ISS:
-+
-```bash
-while true
-do
-line=`curl http://api.open-notify.org/iss-now.json -s`
-echo $line | rpk topic produce iss_json
-sleep 1
-done
-```
-
 == Files in the example
 
 - link:{content-url}iss.avsc[`iss.avsc`]: Avro schema used for conversion.
@@ -179,4 +173,17 @@ To shut down and delete the containers along with all your cluster data:
 
 ```bash
 docker compose down -v
+```
+
+== Next steps
+
+You could set up a loop to poll the location of the ISS and produce it to the `iss_json` topic. For example:
+
+```bash
+while true
+do
+line=`curl http://api.open-notify.org/iss-now.json -s`
+echo $line | rpk topic produce iss_json
+sleep 1
+done
 ```

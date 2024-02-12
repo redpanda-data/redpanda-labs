@@ -10,6 +10,6 @@ description: |
   - MATCH_VALUE: By default, the regex matches keys, but if set to true, the regex will match values
 input-topic: ""
 output-topic: ""
-language: tinygo
+language: tinygo-no-goroutines
 env:
   PATTERN: '<required>'

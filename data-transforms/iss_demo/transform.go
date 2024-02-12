@@ -32,7 +32,7 @@ func main() {
 		panic(fmt.Sprintf("Unable to retrieve schema for id: %d", id))
 	}
 
-	// Create Avro codec to use in transform function
+	// Create Avro codec to use in transforms function
 	c, err := avro.NewCodec(schema.Schema)
 	if err != nil {
 		panic(fmt.Sprintf("Error creating Avro codec: %v", err))
@@ -40,7 +40,7 @@ func main() {
 	codec = *c
 	schemaId = int32(id)
 
-	// Register your transform function.
+	// Register your transforms function.
 	transform.OnRecordWritten(toAvro)
 }
 

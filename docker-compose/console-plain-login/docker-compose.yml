@@ -59,7 +59,7 @@ services:
       - redpanda
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v${CONSOLE_VERSION:?Set a Redpanda Console version}
+    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:?Set a Redpanda Console version}
     # mount the local directory that contains your license key to the container.
     # give Redpanda Console read access to the license.
     volumes:

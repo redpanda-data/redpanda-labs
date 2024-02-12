@@ -74,7 +74,7 @@ npm i
 +
 [,bash]
 ----
-docker exec -it redpanda-0 rpk topic list
+docker exec -it redpanda rpk topic list
 ----
 +
 Output:
@@ -89,7 +89,7 @@ chat-room  1           1
 +
 [,bash]
 ----
-docker exec -it redpanda-0 rpk topic create chat-room
+docker exec -it redpanda rpk topic create chat-room
 ----
 +
 Output:
@@ -126,7 +126,7 @@ This example includes the following files:
 
 - link:{content-url}src/admin.ts[`sr/admin.ts`]: Checks whether the `chat-room` topic exists and creates it if not.
 +
-NOTE: The broker settings in this code are from the Redpanda Quickstart, where the external port for broker `redpanda-0` is set to port 19092.
+NOTE: The broker settings in this code are from the Redpanda Quickstart, where the external port for broker `redpanda` is set to port 19092.
 - link:{content-url}src/producer.ts[`src/producer.ts`]: A producer that sends strings entered by the user of the terminal to the `chat-room` topic. Messages are sent as JSON encoded strings.
 - link:{content-url}src/consumer.ts[`src/consumer.ts`]: A consumer that reads all messages from the `chat-room`
 topic and prints them to the console. You can start as many consumer groups as you like, but each group reads a message only once, which is why the example is using a generated UUID for the group ID. This way, each time you run the application, you see all previous messages.

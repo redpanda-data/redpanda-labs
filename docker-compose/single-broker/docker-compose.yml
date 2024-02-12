@@ -45,7 +45,7 @@ services:
       - 19644:9644
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v${CONSOLE_VERSION:?Set a Redpanda Console version}
+    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:?Set a Redpanda Console version}
     networks:
       - redpanda_network
     entrypoint: /bin/sh

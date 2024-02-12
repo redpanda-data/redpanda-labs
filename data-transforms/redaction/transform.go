@@ -32,7 +32,7 @@ func decodeConfig(s string) ([]byte, error) {
 }
 
 func main() {
-	// Register your transform function.
+	// Register your transforms function.
 	// This is a good place to perform other setup too.
 	config, err := decodeConfig(os.Getenv("CONFIG"))
 	if err != nil {
