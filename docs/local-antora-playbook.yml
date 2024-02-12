@@ -12,18 +12,14 @@ output:
   clean: true
 content:
   sources:
-  - url: ../../docs
-    branches: HEAD
   - url: https://github.com/redpanda-data/documentation
-    branches: [v/*, api, site-search]
-  - url: ../
+    branches: [main, v/*, api, site-search, shared]
+  - url: .
     branches: HEAD
     start_paths: [docs,'*/docs']
-  - url: ../../shared-docs
-    branches: HEAD
 ui:
   bundle:
-    url: ../../docs-ui/build/ui-bundle.zip
+    url: https://github.com/redpanda-data/docs-ui/releases/latest/download/ui-bundle.zip
     snapshot: true
 asciidoc:
   attributes:
@@ -36,11 +32,10 @@ asciidoc:
 antora:
   extensions:
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
-  - require: '../../docs-extensions-and-macros/extensions/unlisted-pages'
-  - require: '../../docs-extensions-and-macros/extensions/add-global-attributes'
-  - '../../docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
-  - require: '../../docs-extensions-and-macros/extensions/validate-attributes'
-  - require: '../../docs-extensions-and-macros/extensions/find-related-docs'
-  - require: '../../docs-extensions-and-macros/extensions/find-related-labs'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/validate-attributes'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-docs'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-labs'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/aggregate-terms'
 
