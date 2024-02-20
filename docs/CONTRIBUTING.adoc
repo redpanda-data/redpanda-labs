@@ -13,7 +13,7 @@ We recommend using https://code.visualstudio.com/download[Visual Studio Code] wi
 
 == For GitHub users
 
-Every lab directory should feature a `README.adoc` file (README) at its root. The README serves as the primary point of interaction for users on GitHub, so ensuring its clarity, conciseness, and comprehensiveness is key to engaging and assisting users effectively. This document should either:
+Every lab directory should feature a `README.adoc` file (README) at its root. The README serves as the primary point of interaction for users on GitHub. This document should either:
 
 - Provide docs for the lab, including:
 +
@@ -45,7 +45,7 @@ Documentation metadata, defined in the <<attributes, Asciidoc header>> of each p
 :env-docker: true
 ----
 
-These attributes are also used to automatically create cross-links between related documents and lab projects, enhancing discoverability and context. If a source page falls into the same categories as the target page and the deployment types of both the target page and the source page matches, those pages are considered related and cross-links are automatically added.
+If a lab page falls into the same categories as a doc page and the deployment types of both the doc page and the lab page matches, those pages are considered related and cross-links are automatically added.
 
 .Crosslinks on a lab page
 image::docs-lab.png[link=https://docs.redpanda.com/redpanda-labs/]
@@ -223,9 +223,9 @@ Documentation categories are a crucial part of organizing content in a way that 
 
 ==== Central repository for categories
 
-The categories for Redpanda docs and labs are centrally managed in a YAML file located in the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[Redpanda docs repository].
+The categories for Redpanda docs are centrally managed in a YAML file located in the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[Redpanda docs repository].
 
-This centralized approach allows the documentation team to maintain a coherent structure across all documentation, ensuring that every piece of content is appropriately categorized and easily discoverable.
+This centralized approach allows the documentation team to maintain a coherent structure across all documentation, ensuring that every topic is appropriately categorized.
 
 ==== Contribute to category definitions
 
@@ -246,9 +246,7 @@ When suggesting new categories or modifications to existing ones, consider the f
 - *Relevance*: Categories should be directly relevant to Redpanda and its ecosystem, reflecting topics that users are likely to search for.
 - *Clarity*: Category names and definitions should be clear and self-explanatory, avoiding jargon where possible.
 - *Consistency*: Proposals should maintain consistency with existing categories, fitting logically within the overall structure.
-- *Breadth vs. Depth*: Aim for categories that are broad enough to encompass multiple related topics but specific enough to be meaningful and useful for navigation.
-
-By actively participating in the definition and refinement of documentation categories, you contribute to the continual improvement of Redpanda's documentation, enhancing the user experience for developers and operators alike.
+- *Breadth vs depth*: Aim for categories that are broad enough to encompass multiple related topics but specific enough to be meaningful and useful for navigation.
 
 === Build and test your changes locally
 
