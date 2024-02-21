@@ -12,7 +12,7 @@ Contributions are welcome. Just fork the repo (or submodule) and send a pull req
 
 | Project       | Description   |
 | ------------- | ------------- |
-| [`clients`](https://github.com/redpanda-data/redpanda-labs/clients) | A collection of Redpanda clients available in different programming languages. |
+| [`clients`](https://github.com/redpanda-data/redpanda-labs/tree/main/clients) | A collection of Redpanda clients available in different programming languages. |
 | [`data-transforms`](https://github.com/redpanda-data/redpanda-labs/tree/main/data-transforms) | Example topic data transforms powered by WebAssembly (Wasm). |
 | [`docker-compose`](https://github.com/redpanda-data/redpanda-labs/tree/main/docker-compose) | Example deployments of Redpanda, Redpanda Console, and Redpanda Connectors using Docker. |
 | [`kubernetes`](https://github.com/redpanda-data/redpanda-labs/tree/main/kubernetes) | Examples of deploying and managing Redpanda in Kubernetes. |
