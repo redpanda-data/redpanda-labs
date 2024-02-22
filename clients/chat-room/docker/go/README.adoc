@@ -74,7 +74,7 @@ go get github.com/google/uuid@v1.3.0
 +
 [,bash]
 ----
-docker exec -it redpanda rpk topic list
+docker exec -it redpanda-0 rpk topic list
 ----
 +
 Output:
@@ -89,7 +89,7 @@ chat-room  1           1
 +
 [,bash]
 ----
-docker exec -it redpanda rpk topic create chat-room
+docker exec -it redpanda-0 rpk topic create chat-room
 ----
 +
 Output:
