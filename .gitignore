@@ -1,12 +1,19 @@
 # IDE
 settings.json
 .idea/
+.DS_store
 
 # Compiled wasm artifacts
 *.wasm
 
 # rpk binary
 rpk*
+
+# Node.js
+node_modules/
+
+# Docs
+local-docs/
 
 # Go
 go.work*

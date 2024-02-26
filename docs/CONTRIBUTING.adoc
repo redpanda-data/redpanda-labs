@@ -1,0 +1,306 @@
+= Contribute Docs for Redpanda Labs
+:page-layout: lab
+// If this page is being rendered on GitHub, set the root directory for all images to modules/ROOT/images/.
+ifndef::env-site[]
+:imagesdir: modules/ROOT/images/
+endif::[]
+
+Welcome to the Redpanda Labs documentation guide! Whether you're new to documenting open-source projects or an experienced contributor, this guide will help you understand how to create and contribute high-quality documentation for Redpanda Labs.
+
+Before you begin, familiarize yourself with the basics of https://asciidoctor.org/docs/what-is-asciidoc/[Asciidoc] and https://docs.antora.org/[Antora], the tools we use to write and organize our documentation.
+
+We recommend using https://code.visualstudio.com/download[Visual Studio Code] with the https://marketplace.visualstudio.com/items?itemName=asciidoctor.asciidoctor-vscode[Asciidoc extension] to edit documentation. The Asciidoc extension provides useful features such as folding conditionals and titles to make it easier to work with large documents.
+
+== For GitHub users
+
+Every lab directory should feature a `README.adoc` file (README) at its root. The README serves as the primary point of interaction for users on GitHub. This document should either:
+
+- Provide docs for the lab, including:
++
+--
+** *Overview*: A brief introduction to what the lab is about and what it aims to demonstrate or achieve.
+** *Prerequisites*: Any requirements or setup steps needed before running the lab.
+** *Run the lab*: Step-by-step instructions on how to execute the lab, including commands, configurations, and any specific notes or warnings.
+** *Clean up*: Any required steps to stop the lab and uninstall any dependencies.
+--
++
+If you want to publish your README content on the Redpanda docs site, you can symlink it to avoid duplication. See <<Publish on Redpanda docs>>.
+
+- Provide a link to the Redpanda docs site if instructions are published there. See <<Publish on Redpanda docs>>.
+
+[[publish]]
+== Publish on Redpanda docs
+
+Labs can be published on the https://docs.redpanda.com/redpanda-labs/[official Redpanda docs site] by following a specific directory structure for Antora. When you publish labs on the Redpanda docs site, they are automatically indexed to make them searchable through Algolia and to enhance discoverability.
+
+.Landing page for Redpanda Labs in the docs
+image::docs-labs.png[link=https://docs.redpanda.com/redpanda-labs/]
+
+Documentation metadata, defined in the <<attributes, Asciidoc header>> of each page, generates search filters and automates cross-linking between related documents. Example metadata includes:
+
+[,yaml]
+----
+:page-layout: lab
+:page-categories: Development, Stream Processing
+:env-docker: true
+----
+
+If a lab page falls into the same categories as a doc page and the deployment types of both the doc page and the lab page matches, those pages are considered related and cross-links are automatically added.
+
+.Crosslinks on a lab page
+image::docs-lab.png[link=https://docs.redpanda.com/redpanda-labs/]
+
+.Crosslinks on a docs page
+image::docs-link-to-labs.png[link=https://docs.redpanda.com/redpanda-labs/]
+
+=== Create the documentation structure
+
+Your lab's documentation should be placed within a `docs/` directory in your project, following the Antora documentation structure. The `redpanda-labs` repository includes an initialization script in the `utility-scripts/` directory that creates this structure for you.
+
+To autogenerate this directory structure for your lab, execute the following script from the `utility-scripts/` directory of this repository.
+
+NOTE: This script is not supported on Windows. If you're using Windows, create the directory structure manually.
+
+```bash
+cd utility-scripts
+./init-lab-with-docs.sh <lab-project-directory>
+```
+
+Replace `<lab-project-directory>` with the name of your lab directory. If this directory does not exist, it will be created.
+
+.Required directory structure
+----
+📒 redpanda-labs-repo
+  📂 <lab-project-name> <1>
+    📂 docs <2>
+      📄 antora.yml <3>
+      📂 modules
+        📂 <lab-project-name> <4>
+          📁 attachments <5>
+          📁 examples <6>
+          📁 images <7>
+          📁 pages <8>
+          📁 partials <9>
+----
+
+<1> The directory of your labs project.
+<2> (Required) The `docs/` directory where all Antora content for docs is stored.
+<3> (Required) A component version descriptor file that indicates to Antora that the contents should be collected and processed.
+<4> (Required) This named module directory is where you can place all your documentation.
+<5> (Optional) The `attachments/` directory is where you can store files to be uploaded as attachments.
+<6> (Optional) The `examples/` directory is where you can store code files to be included in the documentation.
+<7> (Optional) The `images/` directory is where you can store images to be included in the documentation.
+<8> (Required) The `pages/` directory is where you store your Asciidoc documentation pages.
+<9> (Optional) The `partials/` directory is where you can store reusable snippets of Asciidoc content to be included in the documentation.
+
+=== Avoid duplication in the README
+
+To avoid duplicating content in both the README and the Antora docs you can choose one of the following options:
+
+- <<symlink, *Symlink the README*>> (preferred): Ideal for keeping documentation in one location and allowing GitHub users to find docs without leaving the repository. Ensure your README uses Asciidoc markup to be compatible with Antora.
+
+- *Link to Docs in README*: Best for extensive documentation that requires single-sourcing. Simplify your README to include a link to the published docs on the Redpanda site.
+
+TIP: If you think that users will clone the repo locally and want access to docs without internet access, choose the symlinking option.
+
+.Pros and cons of symlinking vs providing a doc link in the README
+|===
+| **Option** | **Pros** | **Cons**
+
+| Symlink (preferred)
+a| - Improved user experience. Documentation in both contexts
+ - Seamless integration with GitHub
+a| No single-sourcing. GitHub does not support the https://docs.asciidoctor.org/asciidoc/latest/directives/include/[Asciidoc include directive], so you cannot create reusable snippets of content and share them across multiple labs.
+
+| Antora Structure + README Link
+a| Single-sourcing. You can use the https://docs.asciidoctor.org/asciidoc/latest/directives/include/[Asciidoc include directive] to share content efficiently across pages.
+a| Additional click required. Users follow a link to the docs in the README, which makes documentation separate from GitHub.
+|===
+
+[[symlink]]
+=== Use symlinks
+
+Symlinks are a powerful tool for managing documentation efficiently, allowing you to maintain a single source of truth while ensuring your content is accessible both on GitHub and within the Redpanda docs site. You can symlink not only README files but also example code, images, and attachments so that all relevant documentation components are seamlessly integrated and accessible.
+
+To create a symlink for your README, execute the following script from the `utility-scripts/` directory of this repository.
+
+NOTE: This script is not supported on Windows. If you're using Windows, create the symlinks manually. See the https://docs.antora.org/antora/latest/symlinks/#windows[Antora documentation] for instructions.
+
+```bash
+cd utility-scripts
+./symlink-docs.sh <lab-project-directory> <target-asciidoc-filename>
+```
+
+Replace `<lab-project-directory>` with the name of your lab directory. Replace `<target-asciidoc-filename>` with the Asciidoc filename that you want to generate.
+
+To create symlinks for other files:
+
+. Change into the desired location in the `docs/` directory.
+. Create relative symlinks to the target content files. This enables you to reference the same content in multiple places without duplication.
++
+For example, if you had this structure:
++
+----
+📒 repository
+  📂 my-lab <1>
+    📄 README.adoc
+    📂 docs <2>
+      📄 antora.yml <3>
+      📂 modules
+        📂 my-lab <4>
+          📁 pages <8>
+----
++
+And, you wanted to symlink the README, you would do the following:
++
+```bash
+cd my-lab/docs/modules/my-lab/pages
+ln -s ../../../../README.adoc <doc-filename>.adoc
+```
++
+Replace `<doc-filename>` with the name of the file to create. This filename appears in the docs URL.
+
+. Ensure your symlinks are correct by verifying that the content appears as expected in both locations.
+
+For guidelines on structuring your content and creating symlinks that comply with Antora's requirements, see the https://docs.antora.org/antora/latest/symlinks/[Antora docs].
+
+==== Use conditionals for platform-specific content
+
+If you decide to <<symlink, symlink the README>> so that it can be published on the Redpanda docs, you may need to tailor certain sections to fit each context. https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/[AsciiDoc conditionals] offer a straightforward solution to this requirement, enabling you to include or exclude specific content based on the environment in which the document is rendered.
+
+For example, a common use case for conditionals is adding images. On GitHub, you add images by referencing a relative path to the image such as `image::../../images/some-image.png`. But, for the documentation site, images must be in the Antora structure and you must use https://docs.antora.org/antora/latest/page/image-resource-id-examples/[Antora resource IDs] to reference images such as `image::<module>:some-image.png`. To handle this difference in referencing image paths, you can keep images in the Antora structure and use conditionals to set the relative path from the source README to the images directory for when the content is rendered on GitHub.
+
+To conditionally render content based on whether the document is viewed on GitHub or on the Redpanda docs site, use the `env-github` and `env-site` attributes. The `env-github` attribute is automatically set when viewing on GitHub, allowing for easy differentiation.
+
+For example, if you have a directory structure like this where the images are in the Antora `images/` directory:
+
+----
+📒 redpanda-labs-repo
+  📂 <lab-project-name>
+  📄 README.adoc
+    📂 docs
+      📄 antora.yml
+      📂 modules
+        📂 <lab-project-name>
+          📁 images
+            📄 some-image.png
+          📁 pages
+            📄 README.adoc (symlinked)
+----
+
+[source,asciidoc]
+----
+\ifndef::env-site[]
+:imagesdir: docs/modules/<lab-project-name>/images/
+\endif::[]
+
+image::some-image.png[]
+----
+
+[[attributes]]
+=== Add attributes to pages
+
+When contributing documentation, make sure to add the following attributes to your pages to categorize and identify your content:
+
+- `page-categories`: Assigns <<categories, categories>> to your page. Use a comma-separated list for multiple categories. Categories are validated against a https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[centralized list]. These categories are used to generate links to related docs and related labs as well as provide filters on the Redpanda Labs landing page.
+- `env-kubernetes`, `env-docker`, `page-cloud`: Indicates the deployment environment or platform your lab is designed for.
+- `page-layout: lab`: Specifies the page layout template to be used, indicating that the page is part of Redpanda Labs.
+
+For example:
+
+```asciidoc
+:page-layout: lab
+:page-categories: Development, Stream Processing
+:env-docker: true
+
+<content here>
+```
+
+[[categories]]
+=== Manage and define categories
+
+Documentation categories are a crucial part of organizing content in a way that is intuitive and accessible to users. Categories ensure consistency across the Redpanda docs and labs, facilitating easier navigation and a better understanding of the content structure.
+
+==== Central repository for categories
+
+The categories for Redpanda docs are centrally managed in a YAML file located in the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[Redpanda docs repository].
+
+This centralized approach allows the documentation team to maintain a coherent structure across all documentation, ensuring that every topic is appropriately categorized.
+
+==== Contribute to category definitions
+
+The Redpanda docs team welcomes contributions and suggestions for improving or expanding the category definitions. If you have ideas for new categories or adjustments to existing ones that could enhance the organization and discoverability of content, we encourage you to contribute in the following ways:
+
+. Open a pull request.
++
+If you're familiar with the structure of the YAML file and have a specific change in mind, the most direct way to propose a category update is by opening a pull request against the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[`valid-categories.yml` file]. Include a brief explanation of your proposed changes and how they improve the documentation structure.
+
+. Create an issue.
++
+If you're less comfortable making direct changes or if your suggestion requires broader discussion, you can https://github.com/redpanda-data/documentation-private/issues/new/choose[open an issue] in the private Redpanda docs repository. In your issue, describe the proposed category addition or modification, providing context on why the change is beneficial and how it fits within the overall documentation strategy.
+
+==== Guidelines for proposing categories
+
+When suggesting new categories or modifications to existing ones, consider the following guidelines to ensure your proposal aligns with the documentation goals:
+
+- *Relevance*: Categories should be directly relevant to Redpanda and its ecosystem, reflecting topics that users are likely to search for.
+- *Clarity*: Category names and definitions should be clear and self-explanatory, avoiding jargon where possible.
+- *Consistency*: Proposals should maintain consistency with existing categories, fitting logically within the overall structure.
+- *Breadth vs depth*: Aim for categories that are broad enough to encompass multiple related topics but specific enough to be meaningful and useful for navigation.
+
+=== Build and test your changes locally
+
+You should build and preview the docs on your local machine to see your changes before going live.
+
+. Make sure you have https://nodejs.org/en/download[Node.js] 16 or higher installed on your machine.
++
+[,bash]
+----
+node --version
+----
++
+If this command fails, you don't have Node.js installed.
+
+. Install dependencies.
++
+[,bash]
+----
+cd docs
+npm install && npm update
+----
+
+. Build the site.
++
+[,bash]
+----
+npm run build
+----
++
+The `build` script generates the site HTML, CSS and JavaScript files. Now, you can serve them locally using a local web server.
+
+. Serve the site:
++
+[,bash]
+----
+npm run serve
+----
++
+The web server's host URL is printed to the console.
+
+. Use kbd:[Ctrl+C] to stop the process.
+
+== Documentation guidelines
+
+For rules and recommendations as well as help with Asciidoc syntax, see the link:https://github.com/redpanda-data/docs-site/blob/main/meta-docs/STYLE-GUIDE.adoc[Redpanda docs style guide].
+
+In general:
+
+* Keep your language simple and accessible.
+* Use code blocks and screenshots where applicable to illustrate your points.
+* Organize content logically, using headings to break up sections for easy navigation.
+* When documenting code examples, explain not just the "how" but also the "why" behind the code.
+* Review your documentation for clarity and accuracy before submitting.
+
+== Community
+
+Discussions about Redpanda Labs take place on this repository's https://github.com/redpanda-data/redpanda-labs/issues[issues] and the link:https://redpanda.com/slack[Redpanda community Slack].

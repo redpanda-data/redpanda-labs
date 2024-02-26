@@ -1,0 +1,29 @@
+{
+  "name": "redpanda-docs-playbook",
+  "version": "1.0.0",
+  "description": "Redpanda documentation",
+  "license": "ISC",
+  "scripts": {
+    "build": "antora --to-dir local-docs --fetch local-antora-playbook.yml",
+    "serve": "wds --node-resolve --open / --watch --root-dir local-docs --port 5002",
+    "start": "cross-env-shell LIVERELOAD=true npx gulp"
+  },
+  "dependencies": {
+    "@antora/cli": "3.1.2",
+    "@antora/site-generator": "3.1.2",
+    "@asciidoctor/tabs": "^1.0.0-beta.5",
+    "@redpanda-data/docs-extensions-and-macros": "latest"
+  },
+  "devDependencies": {
+    "@web/dev-server": "^0.2.1",
+    "cross-env": "^7.0.3",
+    "gulp": "^4.0.2",
+    "gulp-connect": "^5.7.0",
+    "open": "^9.1.0"
+  },
+  "overrides": {
+    "vinyl-fs": {
+      "glob-stream": "~7.0"
+    }
+  }
+}

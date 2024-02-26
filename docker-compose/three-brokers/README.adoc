@@ -1,0 +1,90 @@
+= Start a Cluster of Redpanda Brokers with Redpanda Console in Docker
+:env-docker: true
+:page-categories: Monitoring, Management, Deployment
+:description: Start three Redpanda brokers and Redpanda Console to start developing your application on Redpanda locally.
+:page-layout: lab
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 23.3.5
+:latest-console-version: 2.4.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+This Docker Compose example starts three Redpanda brokers and Redpanda Console.
+
+This Docker Compose file is also used in the https://docs.redpanda.com/current/get-started/quick-start/[Redpanda Quickstart].
+
+== Prerequisites
+
+You must have https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
+
+== Run the lab
+
+// For GitHub, provide instructions for cloning the repo.
+ifndef::env-site[]
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/three-brokers/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/three-brokers
+----
+endif::[]
+// For the docs site, provide a download link since we have symlinked the Docker Compose file into the attachments directory of the Antora structure. See https://docs.antora.org/antora/latest/page/attachments/
+ifdef::env-site[]
+. xref:redpanda-labs:docker-compose:attachment$three-brokers/docker-compose.yml[Download] the following Docker Compose file on your local file system.
++
+.Reveal the Docker Compose file
+[%collapsible]
+====
+.`docker-compose.yml`
+[,yaml,subs="attributes+"]
+----
+include::redpanda-labs:docker-compose:attachment$three-brokers/docker-compose.yml[]
+----
+====
+endif::[]
+
+. Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
+
+. Run the following in the directory where you saved the Docker Compose file:
++
+```bash
+docker compose up -d
+```
+
+. Open Redpanda Console at http://localhost:8080[localhost:8080^].
+
+== Clean up
+
+To shut down and delete the containers along with all your cluster data:
+
+```bash
+docker compose down -v
+```

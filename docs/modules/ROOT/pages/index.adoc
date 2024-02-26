@@ -1,0 +1,3 @@
+= Redpanda Labs
+:page-layout: labs-search
+:page-aliases: ROOT:get-started:code-examples.adoc, ROOT:development:code-examples.adoc, ROOT:introduction:code-examples.adoc, ROOT:develop:code-examples.adoc, ROOT:console:reference/docker-compose.adoc, ROOT:reference:console/docker-compose.adoc, ROOT:reference:docker-compose.adoc

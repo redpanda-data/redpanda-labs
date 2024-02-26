@@ -5,7 +5,7 @@ description: |
   See the jq manual for more information: https://jqlang.github.io/jq/manual/
 
   Environment variables:
-  - FILTER: The jq expression that will executre against record values (required)
+  - FILTER: The jq expression that will execute against record values (required)
 input-topic: ""
 output-topic: ""
 language: cpp

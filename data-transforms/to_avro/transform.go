@@ -34,7 +34,7 @@ func main() {
 	}
 	fmt.Printf("Schema: %s", schema.Schema)
 
-	// Create Avro codec to use in transform function
+	// Create Avro codec to use in transforms function
 	c, err := avro.NewCodec(schema.Schema)
 	if err != nil {
 		panic(fmt.Sprintf("Error creating Avro codec: %v", err))

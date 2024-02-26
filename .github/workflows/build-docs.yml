@@ -1,0 +1,14 @@
+# This workflow triggers a build of the production documentation site.
+
+name: Build production site
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger build
+      run: curl -X POST -d {} https://api.netlify.com/build_hooks/65c0cd2e63853f0b159cdbc6

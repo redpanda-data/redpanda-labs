@@ -1,0 +1,87 @@
+= Contributing to Redpanda Labs
+
+Thank you for considering a contribution to Redpanda Labs! Any contributions you make will benefit everybody else and are greatly appreciated.
+
+This document contains a set of guidelines for contributing to Redpanda Labs. These are mostly guidelines, not rules, so use your best judgment and feel free to propose changes to this document in a pull request.
+
+== What is Redpanda Labs?
+
+Redpanda Labs is a project dedicated to providing practical, real-world examples that help developers understand how to use Redpanda to build applications and systems. We aim to cover a wide range of use cases, from simple data streaming to complex stream processing architectures.
+
+== How can I contribute?
+
+Contributions to Redpanda Labs can come in many forms, from writing code examples, improving documentation, reporting bugs, and suggesting new features.
+
+=== Your first code contribution
+
+Unsure where to begin contributing to Redpanda Labs? You can start by looking through `beginner` and `help-wanted` issues:
+
+* https://github.com/redpanda-data/redpanda-labs/labels/beginner[Beginner issues] - issues that should only require a few lines of code and a test or two.
+* https://github.com/redpanda-data/redpanda-labs/labels/help%20wanted[Help wanted issues] - issues that should be a bit more involved than `beginner` issues.
+
+=== Pull requests
+
+The process described here has several goals:
+
+* Maintain Redpanda Labs' quality.
+* Fix problems that are important to users.
+* Engage the community in working toward the best possible Redpanda Labs.
+* Enable a sustainable system for Redpanda Labs' maintainers to review contributions.
+
+Follow these steps for your contribution:
+
+. https://github.com/redpanda-data/redpanda-labs/fork[Fork the repo] and create your branch from `main`.
+. If you've added code, add tests as GitHub Actions that can be triggered on new pull requests to your project directory on the `main` branch.
+. Follow the <<Coding conventions>>.
+. Make sure to document how to run your lab. See the link:./docs/CONTRIBUTING.adoc[contribution guide for docs].
+. Submit your pull request.
+. If you haven't already, complete the Contributor License Agreement ("CLA").
+
+=== Reporting bugs
+
+This section guides you through submitting a bug report. Following these guidelines helps maintainers and the community understand your report, reproduce the behavior, and find related reports.
+
+.Before submitting a bug report
+* Check the https://github.com/redpanda-data/redpanda-labs/issues[issues] for a list of current known issues.
+* Perform a cursory search to see if the problem has already been reported. If it has, add a comment to the existing issue instead of opening a new one.
+
+.How do I submit a good bug report?
+Bugs are tracked as https://github.com/redpanda-data/redpanda-labs/issues[GitHub issues]. Explain the problem and include additional details:
+
+* *Use a clear and descriptive title* for the issue.
+* *Describe the exact steps which reproduce the problem* with as much detail as possible.
+* *Describe the behavior you observed* and what you expected to see.
+* *Include screenshots and animated GIFs* if possible.
+* *If you're suggesting a change/improvement*, explain how it should work and why it would be beneficial.
+
+=== Suggesting enhancements
+
+This section guides you through submitting an enhancement suggestion, including completely new features and minor improvements to existing functionality.
+
+.Before submitting an enhancement suggestion
+* Check if you're using the latest version and if you can find the enhancement you're suggesting in the already https://github.com/redpanda-data/redpanda-labs/issues[listed issues].
+* Perform a cursory search to see if the enhancement has already been suggested.
+
+.How do I submit a good enhancement suggestion?
+Enhancement suggestions are tracked as https://github.com/redpanda-data/redpanda-labs/issues[GitHub issues]. Provide the following information:
+
+* *Use a clear and descriptive title* for the issue.
+* *Provide a step-by-step description* of the suggested enhancement with as many details as possible.
+* *Provide specific examples* to demonstrate how the enhancement would work.
+* *Explain why this enhancement would be useful* to most Redpanda users.
+
+=== Contribute to docs
+
+See the link:./docs/CONTRIBUTING.adoc[docs contribution guide for Redpanda Labs].
+
+[[conventions]]
+=== Coding conventions
+
+Start reading our code and you'll get the hang of it. We optimize for readability:
+
+* Include comments in your code where necessary.
+* Use descriptive variable names.
+
+== Community
+
+Discussions about Redpanda Labs take place on this repository's https://github.com/redpanda-data/redpanda-labs/issues[issues] and the link:https://redpanda.com/slack[Redpanda community Slack].

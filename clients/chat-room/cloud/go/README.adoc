@@ -1,0 +1,151 @@
+= Build a Chat Room Application with Redpanda Cloud and Golang
+:description: Create a basic chat room application with Redpanda Cloud and Kafka clients developed with franz-go.
+:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-go.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-go.adoc" } ]
+:page-cloud: true
+:page-categories: Development, Clients
+:page-layout: lab
+:page-aliases: ROOT:develop:guide-go-cloud.adoc
+// Set the path to content in this lab for both the docs site and the local GitHub README
+:content-url: ./
+ifdef::env-site[]
+:content-url: https://github.com/redpanda-data/redpanda-labs/blob/main/clients/chat-room/cloud/go/
+endif::[]
+ifndef::env-site[]
+:imagesdir: ../../../docs/modules/clients/images/
+endif::[]
+
+Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://github.com/twmb/franz-go[franz-go^].
+
+This example shows you how to:
+
+* Write a client application in Go to produce and consume chat room messages.
+* Build and run multiple clients to exchange chat messages streamed through Redpanda Cloud.
+
+image::chat-room.gif[Demo of the application, where two users are chatting to each other]
+
+== What is a chat room application?
+
+A chat room application is software that enables users to engage in real-time textual communication with one another. These applications typically allow multiple users to join a chat room, where they can send messages and interact with others in a group conversation.
+
+Chat room applications often include features such as private messaging, user profiles, and notifications. Some popular chat room applications include Slack, Discord, and WhatsApp.
+
+== Why use Redpanda?
+
+Redpanda offers several features that make it ideal for building a fast, scalable, and robust chat room application.
+
+* Scalability: Redpanda can scale horizontally and vertically to accommodate growing chat room usage over time.
+* Low-latency: Redpanda is designed for minimal latency to provide a smooth user experience and fast message delivery.
+* Fault tolerance: Redpanda is resilient to failures, thanks to its built-in replication and partitioning capabilities. This built-in resilience ensures that the chat room application continues to serve users even if individual brokers in the cluster experience downtime.
+* Durability: Redpanda persists messages on disk, maintaining chat history and allowing users to read previous conversations.
+
+== Prerequisites
+
+- Download and install Go from https://go.dev/doc/install[go.dev^].
+
+- Complete the link:https://docs.redpanda.com/current/get-started/quick-start-cloud/[Redpanda Cloud Quickstart] before continuing. This example expands on the quickstart.
+
+NOTE: Redpanda Cloud uses TLS certificates signed by https://letsencrypt.org/[Let's Encrypt^]. Most programming languages will load their root certificate authority (CA), `ISRG Root X1`, by default so you shouldn't need to provide a custom CA certificate.
+
+== Run the lab
+
+Build the client chat application, run it from multiple client terminals, and chat between the clients.
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the example directory:
++
+[,bash]
+----
+cd clients/chat-room/cloud/go
+----
+
+. Open the Golang files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.
+
+. Install the required dependencies:
++
+[,bash]
+----
+go get github.com/twmb/franz-go@v1.15.0
+go get github.com/twmb/franz-go/pkg/kadm@v1.10.0
+go get github.com/google/uuid@v1.3.0
+----
+
+. Verify that the `chat-room` topic exists in your cluster by listing all topics:
++
+[,bash]
+----
+rpk topic list --tls-enabled
+----
++
+Output:
++
+[.no-copy]
+----
+NAME       PARTITIONS  REPLICAS
+chat-room  1           1
+----
+
+. If the topic doesn't exist yet, use link:https://docs.redpanda.com/current/get-started/rpk/[`rpk`] to create a `chat-room` topic:
++
+[,bash]
+----
+rpk topic create chat-room --tls-enabled
+----
++
+Output:
++
+[.no-copy]
+----
+TOPIC      STATUS
+chat-room  OK
+----
+
+. Open at least two terminals, and for each terminal:
+. Run the client application:
++
+```
+go run .
+```
+. When prompted with `Enter user name:`, enter a unique name for the chat room.
+. Use the chat application: enter a message in a terminal, and verify that the message is received in the other terminals.
++
+For example:
++
+----
+Enter user name:
+Alice
+Connected, press Ctrl+C to exit
+Alice: Hi, I'm Alice
+Bob: Hi Alice, I'm Bob, nice to meet you
+----
+
+== Files in the example
+
+This example includes the following files:
+
+- link:{content-url}admin.go[`admin.go`]: Checks whether the `chat-room` topic exists and creates it if not.
+- link:{content-url}producer.go[`producer.go`]: A producer that sends strings entered by the user of the terminal to the `chat-room` topic. Messages are sent as JSON encoded strings.
+- link:{content-url}consumer.go[`consumer.go`]: A consumer that reads all messages from the `chat-room`
+topic and prints them to the console. You can start as many consumer groups as you like, but each group reads a message only once, which is why the example is using a generated UUID for the group ID. This way, each time you run the application, you see all previous messages.
+- link:{content-url}main.go[`main.go`]: The client application that creates the topic, producer, and consumer and implements the chat logic.
+
+== Next steps
+
+This is a basic example of a chat room application. You can improve this application by implementing additional features and components, such as:
+
+* A user interface to make it more interactive and user-friendly.
+* A user registration and login system to authenticate users before they can access the chat room.
+* Rate limiting and other measures to prevent spamming and abuse in the chat room.
+
+== Suggested reading
+
+For additional resources to help you build stream processing
+applications that can aggregate, join, and filter your data streams, see:
+
+* https://university.redpanda.com/[Redpanda University^]
+* https://redpanda.com/blog[Redpanda Blog^]
+* https://redpanda.com/resources[Resources^]
