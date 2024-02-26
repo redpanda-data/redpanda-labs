@@ -5,7 +5,7 @@
 :page-layout: lab
 :env-docker: true
 :page-categories: Development, Clients
-:page-aliases: ROOT:develop:guide-nodejs.adoc
+:page-aliases: 23.3@ROOT:develop:guide-nodejs.adoc
 // Set the path to content in this lab for both the docs site and the local GitHub README
 :content-url: ./
 ifdef::env-site[]

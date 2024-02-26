@@ -4,7 +4,7 @@
 :env-docker: true
 :page-categories: Development, Clients
 :page-layout: lab
-:page-aliases: ROOT:develop:guide-java.adoc
+:page-aliases: 23.3@ROOT:develop:guide-java.adoc
 // Set the path to content in this lab for both the docs site and the local GitHub README
 :content-url: ./
 ifdef::env-site[]
