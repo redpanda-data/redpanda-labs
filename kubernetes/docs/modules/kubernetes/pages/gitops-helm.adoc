@@ -1,1 +1,1 @@
-/Users/jakecahill/documents/redpanda-labs/kubernetes/gitops-helm/README.adoc
+../../../../gitops-helm/README.adoc

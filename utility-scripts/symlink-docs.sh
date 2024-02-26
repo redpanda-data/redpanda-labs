@@ -34,17 +34,20 @@ PAGES_DIR="$MODULES_DIR/pages"
 mkdir -p "$PAGES_DIR"
 
 # The README.adoc to symlink
-README_SOURCE="$PARENT_DIR/$NORMALIZED_INPUT_PATH/README.adoc"
+README_SOURCE="$NORMALIZED_INPUT_PATH/README.adoc" # Adjusted to be relative
 README_DESTINATION="$PAGES_DIR/$TARGET_FILENAME"
 
+# Compute relative path from destination to source using Perl for macOS compatibility
+RELATIVE_PATH=$(perl -e 'use File::Spec; print File::Spec->abs2rel(@ARGV)' "$PARENT_DIR/$NORMALIZED_INPUT_PATH" "$PAGES_DIR")
+
 # Check for README existence
-if [ ! -f "$README_SOURCE" ]; then
+if [ ! -f "$PARENT_DIR/$NORMALIZED_INPUT_PATH/README.adoc" ]; then
     echo "Error: README.adoc does not exist in '$PARENT_DIR/$NORMALIZED_INPUT_PATH'."
     exit 1
 fi
 
-# Create or update the symlink
-ln -sf "$README_SOURCE" "$README_DESTINATION"
-echo "Symlink created/updated for $README_SOURCE -> $README_DESTINATION"
+# Create or update the symlink with relative path
+ln -sf "$RELATIVE_PATH/README.adoc" "$README_DESTINATION"
+echo "Symlink created/updated for $RELATIVE_PATH/README.adoc -> $README_DESTINATION"
 
 echo "Symlinking complete."

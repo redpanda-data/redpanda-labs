@@ -1,1 +1,0 @@
-/Users/jakecahill/documents/redpanda-labs/data-transforms/iss_demo/README.adoc

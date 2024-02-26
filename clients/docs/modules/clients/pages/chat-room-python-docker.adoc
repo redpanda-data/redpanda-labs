@@ -1,1 +1,0 @@
-/Users/jakecahill/documents/redpanda-labs/clients/chat-room/docker/python/README.adoc
