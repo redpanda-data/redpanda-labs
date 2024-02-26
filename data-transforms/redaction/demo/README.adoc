@@ -46,7 +46,7 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/data-transforms/redaction/demo
 ----
 
-. Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 For example:
 +
@@ -55,7 +55,8 @@ For example:
 export REDPANDA_VERSION={latest-redpanda-version}
 ----
 
-. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/console/releases[GitHub releases].
 +
 For example:
 +
