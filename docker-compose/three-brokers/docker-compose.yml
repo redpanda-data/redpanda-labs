@@ -28,7 +28,8 @@ services:
       - --advertise-rpc-addr redpanda-0:33145
       # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
-      # Enable logs for debugging.
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
       - --default-log-level=info
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda-0
@@ -53,6 +54,7 @@ services:
       - --rpc-addr redpanda-1:33145
       - --advertise-rpc-addr redpanda-1:33145
       - --mode dev-container
+      - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
@@ -80,6 +82,7 @@ services:
       - --rpc-addr redpanda-2:33145
       - --advertise-rpc-addr redpanda-2:33145
       - --mode dev-container
+      - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}

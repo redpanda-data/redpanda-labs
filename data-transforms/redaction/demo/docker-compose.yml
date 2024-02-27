@@ -7,6 +7,7 @@ services:
     - redpanda
     - start
     - --mode dev-container
+    - --smp 1
     - --memory
     - 4000M
     - --seeds

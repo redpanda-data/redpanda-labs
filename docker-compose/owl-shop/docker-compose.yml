@@ -24,7 +24,10 @@ services:
       # Redpanda brokers use the RPC API to communicate with each other internally.
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
+      # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
     ports:
       - 18081:18081
       - 18082:18082

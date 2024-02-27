@@ -21,7 +21,10 @@ services:
     container_name: redpanda
     command:
       - redpanda start
+      # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
       # Address the broker advertises to clients that connect to the Kafka API.
       # Use the internal addresses to connect to the Redpanda brokers
