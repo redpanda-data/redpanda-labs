@@ -26,14 +26,10 @@ services:
       # Redpanda brokers use the RPC API to communicate with each other internally.
       - --rpc-addr redpanda-0:33145
       - --advertise-rpc-addr redpanda-0:33145
-      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
-      - --smp 1
-      # The amount of memory to make available to Redpanda.
-      - --memory 1G
       # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
       # Enable logs for debugging.
-      - --default-log-level=debug
+      - --default-log-level=info
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda-0
     volumes:
@@ -56,10 +52,8 @@ services:
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
       - --rpc-addr redpanda-1:33145
       - --advertise-rpc-addr redpanda-1:33145
-      - --smp 1
-      - --memory 1G
       - --mode dev-container
-      - --default-log-level=debug
+      - --default-log-level=info
       - --seeds redpanda-0:33145
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda-1
@@ -85,10 +79,8 @@ services:
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:38081
       - --rpc-addr redpanda-2:33145
       - --advertise-rpc-addr redpanda-2:33145
-      - --smp 1
-      - --memory 1G
       - --mode dev-container
-      - --default-log-level=debug
+      - --default-log-level=info
       - --seeds redpanda-0:33145
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda-2

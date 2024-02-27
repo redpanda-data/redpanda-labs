@@ -6,13 +6,9 @@ services:
     command:
     - redpanda
     - start
-    - --smp
-    - '1'
+    - --mode dev-container
     - --memory
     - 4000M
-    - --overprovisioned
-    - --node-id
-    - '0'
     - --seeds
     - redpanda:33145
     - --kafka-addr

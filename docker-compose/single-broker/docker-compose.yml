@@ -24,14 +24,10 @@ services:
       # Redpanda brokers use the RPC API to communicate with each other internally.
       - --rpc-addr redpanda-0:33145
       - --advertise-rpc-addr redpanda-0:33145
-      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
-      - --smp 1
-      # The amount of memory to make available to Redpanda.
-      - --memory 1G
       # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
       # Enable logs for debugging.
-      - --default-log-level=debug
+      - --default-log-level=info
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda-0
     volumes:
