@@ -65,15 +65,6 @@ cd clients/chat-room/cloud/go
 
 . Open the Golang files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.
 
-. Install the required dependencies:
-+
-[,bash]
-----
-go get github.com/twmb/franz-go@v1.15.0
-go get github.com/twmb/franz-go/pkg/kadm@v1.10.0
-go get github.com/google/uuid@v1.3.0
-----
-
 . Verify that the `chat-room` topic exists in your cluster by listing all topics:
 +
 [,bash]
