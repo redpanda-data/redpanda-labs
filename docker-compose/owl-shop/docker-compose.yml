@@ -10,8 +10,6 @@ services:
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     command:
       - redpanda start
-      - --smp 1
-      - --overprovisioned
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
       # Address the broker advertises to clients that connect to the Kafka API.
       # Use the internal addresses to connect to the Redpanda brokers
@@ -26,7 +24,10 @@ services:
       # Redpanda brokers use the RPC API to communicate with each other internally.
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
+      # Mode dev-container uses well-known configuration properties for development in containers.
       - --mode dev-container
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
     ports:
       - 18081:18081
       - 18082:18082

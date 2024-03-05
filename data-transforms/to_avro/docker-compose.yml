@@ -6,13 +6,8 @@ services:
     command:
     - redpanda
     - start
-    - --smp
-    - '1'
-    - --reserve-memory
-    - 0M
-    - --overprovisioned
-    - --node-id
-    - '0'
+    - --mode dev-container
+    - --smp 1
     - --kafka-addr
     - PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
     - --advertise-kafka-addr
