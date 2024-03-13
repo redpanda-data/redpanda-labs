@@ -1,5 +1,4 @@
 version: "3.7"
-name: redpanda-quickstart-three-brokers
 networks:
   redpanda_network:
     driver: bridge
