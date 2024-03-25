@@ -1,0 +1,8 @@
+certifi==2024.2.2
+charset-normalizer==3.3.2
+confluent-kafka==2.3.0
+fastavro==1.9.4
+idna==3.6
+protobuf==5.26.0
+requests==2.31.0
+urllib3==2.2.1
