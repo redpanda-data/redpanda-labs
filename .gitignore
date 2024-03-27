@@ -6,9 +6,6 @@ settings.json
 # Compiled wasm artifacts
 *.wasm
 
-# rpk binary
-rpk*
-
 # Node.js
 node_modules/
 

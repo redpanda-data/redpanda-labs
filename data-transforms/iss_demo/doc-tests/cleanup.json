@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "id": "cleanup-docker",
+      "description": "Clean up Docker containers",
+      "steps": [
+        {
+          "action": "runShell",
+          "command": "docker compose down -v"
+        }
+      ]
+    }
+  ]
+}

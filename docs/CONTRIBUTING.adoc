@@ -265,7 +265,6 @@ If this command fails, you don't have Node.js installed.
 +
 [,bash]
 ----
-cd docs
 npm install && npm update
 ----
 

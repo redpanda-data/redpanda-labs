@@ -14,7 +14,7 @@ content:
   sources:
   - url: https://github.com/redpanda-data/documentation
     branches: [main, v/*, api, site-search, shared]
-  - url: .
+  - url: ~+
     branches: HEAD
     start_paths: [docs,'*/docs']
 ui:

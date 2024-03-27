@@ -1,0 +1,92 @@
+name: Run doc tests
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths-ignore:
+      - '**/docs/**'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      data-transforms-flatten: ${{ steps.filter.outputs.data-transforms-flatten }}
+      data-transforms-iss: ${{ steps.filter.outputs.data-transforms-iss }}
+      data-transforms-redaction: ${{ steps.filter.outputs.data-transforms-redaction }}
+      data-transforms-regex: ${{ steps.filter.outputs.data-transforms-regex }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Determine changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            data-transforms-flatten:
+              - 'data-transforms/flatten/**'
+            data-transforms-iss:
+              - 'data-transforms/iss_demo/**'
+            data-transforms-redaction:
+              - 'data-transforms/redaction/**'
+            data-transforms-regex:
+              - 'data-transforms/regex/**'
+
+  run-tests:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '21'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install tools
+        run: |
+          #!/bin/bash
+          set -e
+
+          FILENAME="rpk-linux-amd64.zip"
+          URL_BASE="https://github.com/redpanda-data/redpanda/releases"
+
+          # Download the latest version of rpk
+          echo "Downloading ${FILENAME}..."
+          curl -LO "${URL_BASE}/latest/download/${FILENAME}"
+
+          # Ensure the unzip command is available
+          sudo apt-get update && sudo apt-get install -y unzip && sudo apt-get install expect -y && sudo apt-get install jq -y
+
+          # Unzip the rpk binary to the target directory
+          unzip -o "${FILENAME}" -d $HOME/.local/bin
+
+          # Remove the downloaded archive
+          rm "${FILENAME}"
+
+          # Add the target directory to PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+          # Verify installation
+          echo "rpk has been installed. Version information:"
+          rpk version
+
+      - name: Test data-transforms/flatten
+        if: needs.setup.outputs.data-transforms-flatten == 'true'
+        run: cd data-transforms/flatten && node test.js
+      - name: Test data-transforms/iss_demo
+        if: needs.setup.outputs.data-transforms-iss == 'true'
+        run: cd data-transforms/iss_demo && node test.js
+
+      - name: Test data-transforms/redaction
+        if: needs.setup.outputs.data-transforms-redaction == 'true'
+        run: cd data-transforms/redaction/demo && node test.js
+
+      - name: Test data-transforms/regex
+        if: needs.setup.outputs.data-transforms-regex == 'true'
+        run: cd data-transforms/regex && node test.js

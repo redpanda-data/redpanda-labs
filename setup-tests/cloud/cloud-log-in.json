@@ -1,0 +1,49 @@
+{
+  "tests": [
+    {
+      "steps": [
+        {
+          "action": "setVariables",
+          "path": "setup-tests/cloud/.env"
+        },
+        {
+          "action": "goTo",
+          "url": "https://cloud.redpanda.com"
+        },
+        {
+          "action": "find",
+          "selector": "[name=username]",
+          "click": true
+        },
+        {
+          "action": "typeKeys",
+          "keys": ["jake@redpanda.com", "$ENTER$"]
+        },
+        {
+          "action": "wait"
+        },
+        {
+          "action": "find",
+          "selector": "[data-provider=Username-Password-Authentication]",
+          "click": true
+        },
+        {
+          "action": "wait"
+        },
+        {
+          "action": "find",
+          "selector": "[type=password]",
+          "click": true
+        },
+        {
+          "action": "typeKeys",
+          "keys": ["$PASSWORD", "$ENTER$"]
+        },
+        {
+          "action": "wait",
+          "duration": 10000
+        }
+      ]
+    }
+  ]
+}
