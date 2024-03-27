@@ -31,6 +31,7 @@ try {
         fs.writeFileSync(outputPath, JSON.stringify(failedSteps, null, 2));
         console.log('Failed tests have been written to test_output.json');
         console.log(JSON.stringify(failedSteps, null, 2))
+        process.exit(1)
       } else {
         console.log('All tests passed.');
       }

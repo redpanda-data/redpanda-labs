@@ -82,9 +82,9 @@ docker compose build
 . Start the containers:
 +
 ```bash
-docker compose up --detach
+docker compose up --detach --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up --detach"})
+// (step {"action":"runShell", "command": "docker compose up --detach --wait"})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 5000})
 

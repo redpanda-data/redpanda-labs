@@ -78,9 +78,9 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 . Start Redpanda in Docker by running the following command:
 +
 ```bash
-docker compose up -d
+docker compose up -d --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up -d"})
+// (step {"action":"runShell", "command": "docker compose up -d --wait"})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 5000})
 
