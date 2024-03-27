@@ -15,6 +15,11 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-flatten-go", "description": "Flatten JSON messages", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
+
 This example uses Redpanda data transforms to take JSON messages in an input topic and flatten them using a customizable delimiter.
 
 .Example input topic
@@ -96,18 +101,23 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose up -d
 ```
+// (step {"action":"runShell", "command": "docker compose up -d"})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 10000})
 
 . Set up your rpk profile:
 +
 ```bash
-rpk profile create flatten --from-profile profile.yml
+rpk profile create flatten
 ```
+// (step {"action":"runShell", "command": "rpk profile create flatten --from-profile profile.yml"})
 
 . Create the required topics `iss_json` and `iss_avro`:
 +
 ```bash
 rpk topic create src sink
 ```
+// (step {"action":"runShell", "command": "rpk topic create src sink"})
 
 . Build and deploy the transforms function:
 +
@@ -115,6 +125,10 @@ rpk topic create src sink
 rpk transform build
 rpk transform deploy --input-topic=src --output-topic=sink
 ```
+// (step {"action":"runShell", "command": "rpk transform build"})
+// (step {"action":"runShell", "command": "rpk transform deploy --input-topic=src --output-topic=sink --var 'RP_FLATTEN_DELIM=.'"})
+// Wait for the transform to be processed by Redpanda
+// (step {"action":"wait", "duration": 10000})
 +
 This example accepts the following environment variables:
 +
@@ -131,6 +145,7 @@ rpk transform deploy --var "RP_FLATTEN_DELIM=<delimiter>"
 ```bash
 rpk topic produce src
 ```
+// (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "{\"message\": \"success\", \"timestamp\": 1707743943,\"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}"]})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +
@@ -141,8 +156,9 @@ rpk topic produce src
 . Consume the sink topic to see the flattened result:
 +
 ```bash
-rpk topic consume sink
+rpk topic consume sink --num 1
 ```
+// (step {"action":"runShell", "command": "rpk topic consume sink --num 1", "output": "/position\\.longitude/"})
 +
 [json, role="no-copy"]
 ----
@@ -157,6 +173,8 @@ rpk topic consume sink
 
 You can also see this in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
 
+// (step {"action":"runShell", "command": "rpk profile delete flatten"})
+
 == Clean up
 
 To shut down and delete the containers along with all your cluster data:
@@ -164,5 +182,5 @@ To shut down and delete the containers along with all your cluster data:
 ```bash
 docker compose down -v
 ```
-
+// (test end)
 
