@@ -116,8 +116,10 @@ rpk topic create iss_json iss_avro
 . Deploy the transforms function:
 +
 ```bash
+rpk transform build
 rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
 ```
+// (step {"action":"runShell", "command": "rpk transform build"})
 // (step {"action":"runShell", "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro"})
 // Wait for the transform to be processed by Redpanda
 // (step {"action":"wait", "duration": 10000})
