@@ -34,6 +34,7 @@ antora:
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/validate-attributes'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-docs'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-labs'
