@@ -38,8 +38,9 @@ jobs:
   run-tests:
     needs: setup
     strategy:
+      fail-fast: false # Ensure all matrix jobs run to completion even if one fails
       matrix:
-        os: [ubuntu-latest, macos-13] # use macos 13 as it's the latest supported version for the Docker setup action
+        os: [ubuntu-latest, macos-13] # Use macos 13 as it's the latest supported version for the Docker setup action
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
