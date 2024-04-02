@@ -99,7 +99,7 @@ rpk topic create src sink
 +
 ```bash
 rpk transform build
-rpk transform deploy --var=FILTER="del(.email)" --input-topic=src --output-topic=sink
+rpk transform deploy --var 'FILTER=del(.email)' --input-topic=src --output-topic=sink
 ```
 // (step {"action":"runShell", "command": "rpk transform build"})
 // (step {"action":"runShell", "command": "rpk transform deploy --var 'FILTER=del(.email)' --input-topic=src --output-topic=sink"})
@@ -117,6 +117,7 @@ This example accepts the following environment variable:
 rpk topic produce src
 ----
 // (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "{\"foo\": 42, \"email\": \"help@example.com\"}"]})
+// (step {"action":"wait", "duration": 5000})
 
 . Paste the following into the prompt and press kbd:[Ctrl + D] to exit:
 +
