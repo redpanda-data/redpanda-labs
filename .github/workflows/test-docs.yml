@@ -39,7 +39,7 @@ jobs:
     needs: setup
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-13] # use macos 13 as it's the latest supported version for the Docker setup action
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
@@ -84,7 +84,7 @@ jobs:
           rpk version
 
       - name: Install tools on macOS
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-13'
         run: |
           #!/bin/bash
           set -e
@@ -95,6 +95,10 @@ jobs:
           # Verify installation
           echo "rpk has been installed. Version information:"
           rpk version
+
+      - name: Setup Docker on macOS
+        if: matrix.os == 'macos-13'
+        uses: douglascamata/setup-docker-macos-action@v1-alpha
 
       - name: Setup | Rust
         uses: ATiltedTree/setup-rust@v1
