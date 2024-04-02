@@ -130,7 +130,6 @@ rpk topic produce src
 ```bash
 rpk topic consume sink --num 1
 ```
-// (step {"action":"runShell", "command": "rpk topic consume sink --num 1"})
 
 +
 [json, role="no-copy"]
