@@ -14,6 +14,10 @@ ifdef::env-site[]
 :latest-redpanda-version: {full-version}
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-jq-rust", "description": "Transform JSON Messages into a New Topic using JQ", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
 
 This lab contains a reusable data transform using `jaq` a rust version of the the popular `jq` command line JSON processor.
 
@@ -65,18 +69,24 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose up -d
 ```
+// (step {"action":"runShell", "command": "docker compose up -d --wait"})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 5000})
 
 . Set up your rpk profile:
 +
 ```bash
-rpk profile create regex --from-profile profile.yml
+rpk profile create jq --from-profile profile.yml
 ```
+// (step {"action":"runShell", "command": "rpk profile create jq --from-profile profile.yml"})
 
 . Create the required topics:
 +
 ```bash
 rpk topic create src sink
 ```
+// (step {"action":"runShell", "command": "rpk topic create src sink"})
+
 
 . Deploy the transforms function:
 +
@@ -84,6 +94,10 @@ rpk topic create src sink
 rpk transform build
 rpk transform deploy --var=FILTER="del(.email)" --input-topic=src --output-topic=sink
 ```
+// (step {"action":"runShell", "command": "rpk transform build"})
+// (step {"action":"runShell", "command": "rpk transform deploy --var 'FILTER=del(.email)' --input-topic=src --output-topic=sink"})
+// Wait for the transform to be processed by Redpanda
+// (step {"action":"wait", "duration": 10000})
 +
 This example accepts the following environment variable:
 +
@@ -95,6 +109,7 @@ This example accepts the following environment variable:
 ----
 rpk topic produce src
 ----
+// (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["iss_json", "{\"foo\": 42, \"email\": \"help@example.com\"}"]})
 
 . Paste the following into the prompt and press kbd:[Ctrl + D] to exit:
 +
@@ -105,8 +120,10 @@ rpk topic produce src
 . Consume the sink topic to see the email address was deleted and the record produced to the sink topic:
 +
 ```bash
-rpk topic consume sink
+rpk topic consume sink --num 1
 ```
+// (step {"action":"runShell", "command": "rpk topic consume sink --num 1"})
+
 +
 [json, role="no-copy"]
 ----
@@ -128,3 +145,6 @@ To shut down and delete the containers along with all your cluster data:
 ```bash
 docker compose down -v
 ```
+
+// (step {"action":"runShell", "command": "rpk profile delete jq"})
+// (test end)

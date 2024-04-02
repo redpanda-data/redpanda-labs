@@ -14,6 +14,7 @@ jobs:
       data-transforms-iss: ${{ steps.filter.outputs.data-transforms-iss }}
       data-transforms-redaction: ${{ steps.filter.outputs.data-transforms-redaction }}
       data-transforms-regex: ${{ steps.filter.outputs.data-transforms-regex }}
+      data-transforms-jq: ${{ steps.filter.outputs.data-transforms-jq }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -31,10 +32,15 @@ jobs:
               - 'data-transforms/redaction/**'
             data-transforms-regex:
               - 'data-transforms/regex/**'
+            data-transforms-jq:
+              - 'data-transforms/jq/**'
 
   run-tests:
     needs: setup
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -48,7 +54,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install tools
+      - name: Install tools on Ubuntu
+        if: matrix.os == 'ubuntu-latest'
         run: |
           #!/bin/bash
           set -e
@@ -61,7 +68,7 @@ jobs:
           curl -LO "${URL_BASE}/latest/download/${FILENAME}"
 
           # Ensure the unzip command is available
-          sudo apt-get update && sudo apt-get install -y unzip && sudo apt-get install expect -y && sudo apt-get install jq -y
+          sudo apt-get update && sudo apt-get install -y unzip expect jq
 
           # Unzip the rpk binary to the target directory
           unzip -o "${FILENAME}" -d $HOME/.local/bin
@@ -75,6 +82,25 @@ jobs:
           # Verify installation
           echo "rpk has been installed. Version information:"
           rpk version
+
+      - name: Install tools on macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          #!/bin/bash
+          set -e
+
+          # Install rpk using brew
+          brew install redpanda-data/tap/redpanda
+
+          # Verify installation
+          echo "rpk has been installed. Version information:"
+          rpk version
+
+      - name: Setup | Rust
+        uses: ATiltedTree/setup-rust@v1
+        with:
+          rust-version: stable
+          components: clippy
 
       - name: Test data-transforms/flatten
         if: needs.setup.outputs.data-transforms-flatten == 'true'
@@ -90,3 +116,7 @@ jobs:
       - name: Test data-transforms/regex
         if: needs.setup.outputs.data-transforms-regex == 'true'
         run: cd data-transforms/regex && node test.js
+
+      - name: Test data-transforms/jq
+        if: needs.setup.outputs.data-transforms-jq == 'true'
+        run: cd data-transforms/jq && node test.js
