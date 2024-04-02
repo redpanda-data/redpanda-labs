@@ -28,6 +28,12 @@ See the jq manual for more information on how to write a filter: https://jqlang.
 You must have the following:
 
 - At least version 1.75 of https://rustup.rs/[Rust^] installed on your host machine.
+- The Wasm target for Rust installed. To install this target, run the following:
++
+[source,bash]
+----
+rustup target add wasm32-wasi
+----
 - link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
 - https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
 
