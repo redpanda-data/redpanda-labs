@@ -1,6 +1,6 @@
 = Build a Chat Room Application with Redpanda Cloud and Golang
 :description: Create a basic chat room application with Redpanda Cloud and Kafka clients developed with franz-go.
-:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-go.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-go.adoc" } ]
+:page-context-links: [{"name": "Docker", "to": "redpanda-labs:clients:docker-go.adoc" },{"name": "Cloud", "to": "redpanda-labs:clients:cloud-go.adoc" } ]
 :page-cloud: true
 :page-categories: Development, Clients
 :page-layout: lab

@@ -1,6 +1,6 @@
 = Build a Chat Room Application with Redpanda and Java
 :description: Create a basic chat room application with Redpanda and Kafka Java clients.
-:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-java.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-java.adoc" } ]
+:page-context-links: [{"name": "Docker", "to": "redpanda-labs:clients:docker-java.adoc" },{"name": "Cloud", "to": "redpanda-labs:clients:cloud-java.adoc" } ]
 :env-docker: true
 :page-categories: Development, Clients
 :page-layout: lab

@@ -1,6 +1,6 @@
 = Build a Chat Room Application with Redpanda and Python
 :description: Create a basic chat room application with Redpanda and Kafka clients developed with kafka-python.
-:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-python.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-python.adoc" } ]
+:page-context-links: [{"name": "Docker", "to": "redpanda-labs:clients:docker-python.adoc" },{"name": "Cloud", "to": "redpanda-labs:clients:cloud-python.adoc" } ]
 :page-layout: lab
 :env-docker: true
 :page-categories: Development, Clients
