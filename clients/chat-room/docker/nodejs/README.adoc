@@ -1,6 +1,6 @@
 = Build a Chat Room Application with Redpanda and Node.js
 :description: Create a basic chat room application with Redpanda and Kafka clients developed with kafkajs.
-:page-context-links: [{"name": "Docker", "to": "chat-room:docker/docker-nodejs.adoc" },{"name": "Cloud", "to": "chat-room:cloud/cloud-nodejs.adoc" } ]
+:page-context-links: [{"name": "Docker", "to": "redpanda-labs:clients:docker-nodejs.adoc" },{"name": "Cloud", "to": "redpanda-labs:clients:cloud-nodejs.adoc" } ]
 :page-aliases: features:guide-nodejs.adoc, development:guide-nodejs.adoc
 :page-layout: lab
 :env-docker: true
