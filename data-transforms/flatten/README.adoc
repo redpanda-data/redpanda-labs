@@ -108,7 +108,7 @@ docker compose up -d --wait
 . Set up your rpk profile:
 +
 ```bash
-rpk profile create flatten
+rpk profile create flatten --from-profile profile.yml
 ```
 // (step {"action":"runShell", "command": "rpk profile create flatten --from-profile profile.yml"})
 
