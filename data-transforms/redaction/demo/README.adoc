@@ -18,6 +18,11 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-redaction-go", "description": "Redact Information in JSON Messages", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
+
 This example shows you how to use Redpanda data transforms to redact information in JSON messages.
 
 The demo runs using Docker Compose, with the following containers:
@@ -70,18 +75,24 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose build
 ```
+// (step {"action":"runShell", "command": "docker compose build"})
 
 . If you are running on an ARM-based device such as the Apple M1 chip, open the `docker-compose.yml` file and uncomment the `platform: 'linux/amd64'` line.
 
 . Start the containers:
 +
 ```bash
-docker compose up --detach
+docker compose up --detach --wait
 ```
+// (step {"action":"runShell", "command": "docker compose up --detach --wait"})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 5000})
 
 . Navigate to http://localhost:8080 to see the Redpanda Console.
 
 . Go to *Topics* and select *owlshop-orders-redacted* and see the redacted orders.
+
+// (step {"action":"checkLink", "url": "http://localhost:8080/topics/owlshop-orders-redacted?p=-1&s=50&o=-1#messages"})
 
 == Clean up
 
@@ -90,3 +101,5 @@ To stop the containers:
 ```shell
 docker compose down
 ```
+
+// (test end)

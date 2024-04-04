@@ -15,6 +15,11 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-regex-go", "description": "Filter Messages into a New Topic using a Regex", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
+
 This is an example of how to filter messages from one topic into another using regular expressions (regex) and Redpanda data transforms. If a source topic contains a key or value that matches the regex, it will be produced to the sink topic.
 
 Regexes are implemented using Go's `regexp` library, which uses the same syntax as RE2.
@@ -64,27 +69,41 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 . Start Redpanda in Docker by running the following command:
 +
 ```bash
-docker compose up -d
+docker compose up -d --wait
 ```
+// (step {"action":"runShell", "command": "docker compose up -d --wait"})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 5000})
 
 . Set up your rpk profile:
 +
 ```bash
 rpk profile create regex --from-profile profile.yml
 ```
+// (step {"action":"runShell", "command": "rpk profile create regex --from-profile profile.yml"})
 
 . Create the required topics:
 +
 ```bash
 rpk topic create src sink
 ```
+// (step {"action":"runShell", "command": "rpk topic create src sink"})
+
+. Build the transforms function:
++
+```bash
+rpk transform build
+```
+// (step {"action":"runShell", "command": "rpk transform build"})
 
 . Deploy the transforms function:
 +
 ```bash
-rpk transform build
-rpk transform deploy --var=PATTERN="\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\\b" --var=MATCH_VALUE=true --input-topic=src --output-topic=sink
+./deploy-transform.sh
 ```
+// (step {"action":"runShell", "command": "./deploy-transform.sh"})
+// Wait for the transform to be processed by Redpanda
+// (step {"action":"wait", "duration": 10000})
 +
 This example accepts the following environment variables:
 +
@@ -97,6 +116,7 @@ This example accepts the following environment variables:
 ----
 rpk topic produce src
 ----
+// (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at help@example.com."]})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +
@@ -107,8 +127,9 @@ Hello, please contact us at help@example.com.
 . Consume the sink topic to see the email address was extracted and produced to the sink topic:
 +
 ```bash
-rpk topic consume sink
+rpk topic consume sink --num 1
 ```
+// (step {"action":"runShell", "command": "rpk topic consume sink --num 1"})
 +
 [json, role="no-copy"]
 ----
@@ -130,3 +151,5 @@ To shut down and delete the containers along with all your cluster data:
 ```bash
 docker compose down -v
 ```
+// (step {"action":"runShell", "command": "rpk profile delete regex"})
+// (test end)

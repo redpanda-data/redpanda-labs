@@ -1,0 +1,42 @@
+{
+  "tests": [
+    {
+      "id": "fetch-versions-and-install-rpk",
+      "description": "Fetch the latest versions of Redpanda and Redpanda Console for tests",
+      "steps": [
+        {
+          "action": "runShell",
+          "command": "node ../../../setup-tests/redpanda-versions/fetch-console.js",
+          "setVariables": [
+            {
+              "name": "REDPANDA_CONSOLE_VERSION",
+              "regex": ".*"
+            }
+          ]
+        },
+        {
+          "action": "runShell",
+          "command": "node ../../../setup-tests/redpanda-versions/fetch-redpanda.js",
+          "setVariables": [
+            {
+              "name": "REDPANDA_VERSION",
+              "regex": ".*"
+            }
+          ]
+        },
+        {
+          "action": "runShell",
+          "command": "bash ../../../setup-tests/tools/install-rpk.sh"
+        },
+        {
+          "action": "runShell",
+          "command": "echo $REDPANDA_VERSION"
+        },
+        {
+          "action": "runShell",
+          "command": "echo $REDPANDA_CONSOLE_VERSION"
+        }
+      ]
+    }
+  ]
+}

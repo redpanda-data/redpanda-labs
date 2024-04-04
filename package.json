@@ -1,18 +1,22 @@
 {
-  "name": "redpanda-docs-playbook",
+  "name": "redpanda-labs",
   "version": "1.0.0",
-  "description": "Redpanda documentation",
+  "description": "Redpanda labs",
   "license": "ISC",
   "scripts": {
-    "build": "antora --to-dir local-docs --fetch local-antora-playbook.yml",
+    "build": "antora --to-dir local-docs --fetch docs/local-antora-playbook.yml",
     "serve": "wds --node-resolve --open / --watch --root-dir local-docs --port 5002",
-    "start": "cross-env-shell LIVERELOAD=true npx gulp"
+    "start": "cross-env-shell LIVERELOAD=true npx gulp",
+    "test": "cd data-transforms/flatten && node test.js"
   },
   "dependencies": {
     "@antora/cli": "3.1.2",
     "@antora/site-generator": "3.1.2",
     "@asciidoctor/tabs": "^1.0.0-beta.5",
-    "@redpanda-data/docs-extensions-and-macros": "latest"
+    "@octokit/rest": "^20.0.2",
+    "@redpanda-data/docs-extensions-and-macros": "latest",
+    "doc-detective-core": "^2.11.0",
+    "semver": "^7.6.0"
   },
   "devDependencies": {
     "@web/dev-server": "^0.2.1",
