@@ -20,7 +20,7 @@ endif::[]
 
 This example demonstrates using Debezium to capture the changes made to Postgres in real time and stream them to Redpanda.
 
-This read-to-run `docker-compose` setup contains the following containers:
+This ready-to-run `docker-compose` setup contains the following containers:
 
 - `postgres` container with the `pandashop` database, containing a single table, `orders`
 - `debezium` container capturing changes made to the `orders` table in real time.

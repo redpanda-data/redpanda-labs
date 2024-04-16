@@ -20,7 +20,7 @@ endif::[]
 
 This example demonstrates how to use Debezium to capture the changes made to MySQL in real time and stream them to Redpanda.
 
-This read-to-run Docker Compose setup contains the following containers:
+This ready-to-run Docker Compose setup contains the following containers:
 
 - `mysql` container with the `pandashop` database, containing a single table, `orders`
 - `debezium` container capturing changes made to the `orders` table in real time.
