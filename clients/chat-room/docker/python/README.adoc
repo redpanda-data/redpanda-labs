@@ -14,7 +14,7 @@ ifndef::env-site[]
 :imagesdir: ../../../docs/modules/clients/images/
 endif::[]
 
-Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://kafka-python.readthedocs.io/en/master/[kafka-python^].
+Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://kafka-python.readthedocs.io/en/master/[kafka-python-ng^].
 
 This example shows you how to:
 
@@ -73,7 +73,7 @@ source .env/bin/activate
 +
 [,bash]
 ----
-pip3 install kafka-python
+pip3 install kafka-python-ng
 ----
 
 . Verify that the `chat-room` topic exists in your cluster by listing all topics:
