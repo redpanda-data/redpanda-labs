@@ -14,7 +14,7 @@ ifndef::env-site[]
 :imagesdir: ../../../docs/modules/clients/images/
 endif::[]
 
-Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://kafka-python.readthedocs.io/en/master/[kafka-python^].
+Create a basic chat room application with Redpanda Cloud and Kafka clients developed with https://kafka-python.readthedocs.io/en/master/[kafka-python-ng^].
 
 This example shows you how to:
 
@@ -75,7 +75,7 @@ source .env/bin/activate
 +
 [,bash]
 ----
-pip3 install kafka-python
+pip3 install kafka-python-ng
 ----
 
 . Open the Python files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.
