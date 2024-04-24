@@ -102,7 +102,7 @@ jobs:
         uses: douglascamata/setup-docker-macos-action@v1-alpha
 
       - name: Setup | Rust
-        uses: ATiltedTree/setup-rust@v1
+        uses: hecrj/setup-rust-action@v2
         with:
           rust-version: stable
           components: clippy
