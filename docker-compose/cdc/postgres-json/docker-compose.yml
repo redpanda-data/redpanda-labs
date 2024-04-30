@@ -9,7 +9,7 @@ services:
     ports:
       - 5432:5432
     healthcheck:
-      test: "pg_isready -U postgresuser -d shipment_db"
+      test: "pg_isready -U postgresuser -d pandashop"
       interval: 2s
       timeout: 20s
       retries: 10
@@ -18,8 +18,9 @@ services:
       - POSTGRES_PASSWORD=postgrespw
       - POSTGRES_DB=pandashop
       - PGPASSWORD=postgrespw
-    volumes:
-      - ./data:/docker-entrypoint-initdb.d
+    configs:
+      - source: init.postgres
+        target: /docker-entrypoint-initdb.d/postgres_bootstrap.sql
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     container_name: redpanda
@@ -67,3 +68,20 @@ services:
     depends_on: [postgres, redpanda]
     ports:
       - 8083:8083
+configs:
+  init.postgres:
+    content: |
+      -- Create the orders table
+      create table orders (
+          order_id serial primary key,
+          customer_id int,
+          total float,
+          created_at timestamp default now()
+      );
+
+      -- Populate it with a few values
+      insert into orders(customer_id, total) values (1,50);
+      insert into orders(customer_id, total) values (2,100);
+      insert into orders(customer_id, total) values (2,50);
+      insert into orders(customer_id, total) values (3,10);
+      insert into orders(customer_id, total) values (4,90);
