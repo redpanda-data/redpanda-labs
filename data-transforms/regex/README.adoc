@@ -25,6 +25,8 @@ This is an example of how to filter messages from one topic into another using r
 Regexes are implemented using Go's `regexp` library, which uses the same syntax as RE2.
 See the https://github.com/google/re2/wiki/Syntax[RE2 wiki] for help with syntax.
 
+The regex used in this example matches the typical email address pattern.
+
 == Prerequisites
 
 You must have the following:
@@ -105,6 +107,8 @@ rpk transform build
 // Wait for the transform to be processed by Redpanda
 // (step {"action":"wait", "duration": 10000})
 +
+See the file `deploy-transform.sh` to understand the regex used in the transform. Only input that matches the regular expression will be transformed.
++
 This example accepts the following environment variables:
 +
 - `PATTERN` (*required*): The regex to match against records. Here, the regex finds messages containing email addresses.
@@ -122,12 +126,14 @@ rpk topic produce src
 +
 ```json
 Hello, please contact us at help@example.com.
+Hello, please contact us at support.example.com.
+Hello, please contact us at help@example.edu.
 ```
 
-. Consume the sink topic to see the email address was extracted and produced to the sink topic:
+. Consume the sink topic to see that input lines containing email addresses were extracted and produced to the sink topic:
 +
 ```bash
-rpk topic consume sink --num 1
+rpk topic consume sink --num 2
 ```
 // (step {"action":"runShell", "command": "rpk topic consume sink --num 1"})
 +
@@ -136,11 +142,20 @@ rpk topic consume sink --num 1
 {
   "topic": "sink",
   "value": "Hello, please contact us at help@example.com.",
-  "timestamp": 1707749921393,
+  "timestamp": 1714525578013,
   "partition": 0,
   "offset": 0
 }
+{
+  "topic": "sink",
+  "value": "Hello, please contact us at help@example.edu.",
+  "timestamp": 1714525579192,
+  "partition": 0,
+  "offset": 1
+}
 ----
+
+Note that the second input line, `Hello, please contact us at support.example.com.`, is not in the sink topic because the string did not match the regex (there is no email address). 
 
 You can also see this in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
 
