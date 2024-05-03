@@ -157,7 +157,9 @@ rpk topic consume sink --num 2
 
 Note that the second input line, `Hello, please contact us at support.example.com.`, is not in the sink topic because the string did not match the regex (there is no email address). 
 
-You can also see this in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
+You can also see the `sink` topic contents in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
+
+Switch to the http://localhost:8080/topics/src?p=-1&s=50&o=-1#messages[`src` topic] to see all of the events, including the one that does not match the regex and is not in the `sink` topic.
 
 == Clean up
 
