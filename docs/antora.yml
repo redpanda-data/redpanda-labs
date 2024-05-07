@@ -3,5 +3,6 @@ title: Redpanda Labs
 version: ~
 asciidoc:
   attributes:
+    full-version: 24.1.1
 
 
