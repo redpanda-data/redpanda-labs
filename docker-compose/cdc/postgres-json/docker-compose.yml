@@ -9,7 +9,7 @@ services:
     ports:
       - 5432:5432
     healthcheck:
-      test: "pg_isready -U postgresuser -d shipment_db"
+      test: "pg_isready -U postgresuser -d pandashop"
       interval: 2s
       timeout: 20s
       retries: 10
