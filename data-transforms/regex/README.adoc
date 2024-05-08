@@ -121,6 +121,8 @@ This example accepts the following environment variables:
 rpk topic produce src
 ----
 // (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at help@example.com."]})
+// (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at support.example.com."]})
+// (step {"action":"runShell", "command": "bash ../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at help@example.edu."]})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +
@@ -135,7 +137,7 @@ Hello, please contact us at help@example.edu.
 ```bash
 rpk topic consume sink --num 2
 ```
-// (step {"action":"runShell", "command": "rpk topic consume sink --num 1"})
+// (step {"action":"runShell", "command": "rpk topic consume sink --num 2", "output": "/help@example\\.(com|edu)/"})
 +
 [json, role="no-copy"]
 ----
@@ -155,7 +157,7 @@ rpk topic consume sink --num 2
 }
 ----
 
-Note that the second input line, `Hello, please contact us at support.example.com.`, is not in the sink topic because the string did not match the regex (there is no email address). 
+NOTE: The second input line, `Hello, please contact us at support.example.com.`, is not in the sink topic because it did not match the regex that identifies valid email addresses.
 
 You can also see the `sink` topic contents in http://localhost:8080/topics/sink?p=-1&s=50&o=-1#messages[Redpanda Console].
 
