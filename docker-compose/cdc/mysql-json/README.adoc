@@ -6,8 +6,8 @@
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
-:latest-redpanda-version: 23.3.5
-:latest-console-version: 2.4.0
+:latest-redpanda-version: 24.1.1
+:latest-console-version: 2.5.2
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
@@ -36,8 +36,6 @@ You must have https://docs.docker.com/compose/install/[Docker and Docker Compose
 
 == Run the lab
 
-// For GitHub, provide instructions for cloning the repo.
-ifndef::env-site[]
 . Clone this repository:
 +
 ```bash
@@ -50,21 +48,6 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 ----
 cd redpanda-labs/docker-compose/cdc/mysql-json
 ----
-endif::[]
-// For the docs site, provide a download link since we have symlinked the Docker Compose file into the attachments directory of the Antora structure. See https://docs.antora.org/antora/latest/page/attachments/
-ifdef::env-site[]
-. xref:redpanda-labs:docker-compose:attachment$cdc/mysql-json/docker-compose.yml[Download] the following Docker Compose file on your local file system.
-+
-.Reveal the Docker Compose file
-[%collapsible]
-====
-.`docker-compose.yml`
-[,yaml,subs="attributes+"]
-----
-include::redpanda-labs:docker-compose:attachment$cdc/mysql-json/docker-compose.yml[]
-----
-====
-endif::[]
 
 . Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
