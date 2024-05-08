@@ -14,8 +14,8 @@ endif::[]
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
-:latest-redpanda-version: 23.3.5
-:latest-console-version: 2.4.0
+:latest-redpanda-version: 24.1.1
+:latest-console-version: 2.5.2
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
