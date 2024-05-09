@@ -75,7 +75,8 @@ source .env/bin/activate
 +
 [,bash]
 ----
-pip3 install kafka-python-ng
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 ----
 
 . Open the Python files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.

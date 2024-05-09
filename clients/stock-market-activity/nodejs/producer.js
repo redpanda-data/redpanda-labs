@@ -8,16 +8,16 @@ import { Kafka } from "kafkajs";
 
 let args = parseArgs(process.argv.slice(2));
 const help = `
-  ${chalk.red("producer.js")} - produce events to an event bus by reading data from csv file
+  ${chalk.red("producer.js")} - produce events to Redpanda by reading data from csv file
 
   ${chalk.bold("USAGE")}
 
   > node producer.js --help
   > node producer.js [-f path_to_file] [-t topic_name] [-b host:port] [-d date_column_name] [-r] [-l]
 
-  By default the producer script will stream data from market_activity.csv and output events to topic market_activity.
+  By default the producer streams data from market_activity.csv and outputs events to the topic market_activity.
 
-  If either the loop or reverse arguments are given, file content is read into memory prior to sending events.
+  If either the loop or reverse arguments are given, file content is read into memory before sending events.
   Don't use the loop/reverse arguments if the file size is large or your system memory capacity is low.
 
   ${chalk.bold("OPTIONS")}
@@ -25,7 +25,7 @@ const help = `
       -h, --help                  Shows this help message
 
       -f, --file, --csv           Reads from file and outputs events to a topic named after the file
-                                    default: ../../spark/scala/src/main/resources/market_activity.csv
+                                    default: ../data/market_activity.csv
 
       -t, --topic                 Topic where events are sent
                                     default: market_activity
@@ -42,23 +42,23 @@ const help = `
 
   ${chalk.bold("EXAMPLES")}
 
-      Stream data from default file and output events to default topic on default broker:
+      Stream data from the default file and output events to the default topic on the default broker:
 
           > node producer.js
 
-      Stream data from data.csv and output to a topic named data on broker at brokerhost.dev port 19092:
+      Stream data from data.csv and output to a topic named data on a broker at brokerhost.dev port 19092:
 
           > node producer.js -f data.csv -b brokerhost.dev:19092
 
-      Read data from default file and output events to default topic on broker at localhost port 19092:
+      Read data from the default file and output events to the default topic on the broker at localhost port 19092:
 
           > node producer.js --brokers localhost:19092
 
-      Read data from default file into memory, reverse contents, and send events to default topic on broker at localhost port 19092:
+      Read data from the default file into memory, reverse the contents, and send the events to the default topic on broker at localhost port 19092:
 
           > node producer.js -rb localhost:19092
 
-      Read data from default file into memory, reverse contents, output ISO date string for Date prop:
+      Read data from the default file into memory, reverse the contents, and output ISO date strings:
 
         > node producer.js --brokers localhost:19092 --reverse --date Date
 
@@ -74,7 +74,7 @@ if (args.help || args.h) {
 
 const brokers = (args.brokers || args.b || "localhost:9092").split(",");
 const csvPath =
-  args.csv || args.file || args.f || "../../spark/scala/src/main/resources/market_activity.csv";
+  args.csv || args.file || args.f || "../data/market_activity.csv";
 const topic =
   args.topic || args.t || path.basename(csvPath, ".csv") || path.basename(csvPath, ".CSV");
 const dateProp = args.date || args.d;
