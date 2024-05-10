@@ -132,19 +132,19 @@ python producer.py [options]
 | Specify the path to the CSV file to be processed. Defaults to `../data/market_activity.csv`.
 
 | `-t`, `--topic`
-| Specify the Kafka topic to which events will be published. Defaults to the name of the CSV file (without its extension).
+| Specify the topic to which events will be published. Defaults to the name of the CSV file (without its extension).
 
 | `-b`, `--broker`, `--brokers`
-| Comma-separated list of the host and port for each Kafka broker. Defaults to `localhost:9092`.
+| Comma-separated list of the host and port for each Redpanda broker. Defaults to `localhost:9092`.
 
 | `-d`, `--date`
-| Specify the column in the CSV file that contains date information, which will be converted and manipulated based on the script settings.
+| Specify the column in the CSV file that contains date information. By default, the script converts these dates to ISO 8601 format. If the looping option (`-l`) is enabled, the script will increment each date by one day for each iteration of the loop, allowing for dynamic time series simulation.
 
 | `-r`, `--reverse`
-| Read the file into memory and reverse the order of data before sending it to Kafka.
+| Read the file into memory and reverse the order of data before sending it to Redpanda. When used with the `-l` option, data is reversed only once before the looping starts, not during each loop iteration.
 
 | `-l`, `--loop`
-| Continuously loop through the file, reading it into memory and sending data to Kafka in a loop. Useful for continuous testing or simulation.
+| Continuously loop through the file, reading it into memory and sending data to Redpanda in a loop. When combined with the `-d` option, it modifies the specified date column by incrementally increasing the date with each loop iteration, simulating real-time data flow over days. When used with `-r`, the data order is reversed initially, and then the loop continues with the reversed data set.
 |===
 
 == Clean up

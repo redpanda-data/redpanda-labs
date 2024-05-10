@@ -10,6 +10,7 @@ from kafka import KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import KafkaError
 
+# Configure logging to display information and error messages
 logging.basicConfig(level=logging.INFO)
 
 # Parse command-line arguments
@@ -22,21 +23,21 @@ parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the or
 parser.add_argument("-l", "--loop", action="store_true", help="Loop through data continuously.")
 args = parser.parse_args()
 
-# Configure Kafka producer
+# Initialize Kafka producer with serialization settings for keys and values
 producer = KafkaProducer(
     bootstrap_servers=args.brokers.split(','),
     key_serializer=lambda k: k.encode('utf-8') if k else None,
     value_serializer=lambda v: v.encode('utf-8')
 )
 
-# Function to log message delivery status
+# Callback function to log message delivery success
 def on_send_success(record_metadata):
     logging.info(f"Message delivered to {record_metadata.topic} [{record_metadata.partition}] offset {record_metadata.offset}")
-
+# Callback function to log message delivery success
 def on_send_error(excp):
     logging.error('Message delivery failed: %s', excp)
 
-# Kafka admin client for topic creation
+# Initialize Kafka admin client to manage topics
 admin_client = KafkaAdminClient(bootstrap_servers=args.brokers.split(','))
 topic_list = [NewTopic(name=args.topic, num_partitions=1, replication_factor=1)]
 try:
@@ -44,9 +45,8 @@ try:
 except Exception as e:
     logging.error("Failed to create topic: %s", e)
 
-# Main logic for processing files and sending data
+# Main loop to process each CSV file found in the directory
 data_files = glob.glob(f"{pathlib.Path(args.file).parent.resolve()}/*.csv")
-
 try:
     while True:
         for file in data_files:
@@ -55,21 +55,22 @@ try:
                 reader = csv.DictReader(csvfile)
                 rows = list(reader)
                 if args.reverse:
-                    rows.reverse()
+                    rows.reverse()  # Reverse the order of data if requested
 
                 for row in rows:
                     if args.date and args.date in row:
+                        # Increment date by one second for simulation purposes
                         row[args.date] = (datetime.strptime(row[args.date], "%m/%d/%Y") + timedelta(seconds=1)).strftime("%m/%d/%Y")
                     message = str(row)
-                    # Sending the message
+                    # Send the message to Redpanda
                     producer.send(args.topic, value=message).add_callback(on_send_success).add_errback(on_send_error)
 
-                producer.flush()  # Ensure all messages are sent
+                producer.flush()  # Ensure all messages are sent before continuing
 
         if not args.loop:
-            break
+            break # Exit the loop if not set to continuous mode
 except KeyboardInterrupt:
     logging.info("Terminating the producer.")
 
-producer.close()
+producer.close() # Close the producer connection gracefully
 logging.info("Producer has been closed.")

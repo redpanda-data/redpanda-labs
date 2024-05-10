@@ -6,6 +6,7 @@ import { addDays } from "date-fns";
 import { createReadStream } from "fs";
 import { Kafka } from "kafkajs";
 
+// Parse command line arguments using minimist for flexibility in input options
 let args = parseArgs(process.argv.slice(2));
 const help = `
   ${chalk.red("producer.js")} - produce events to Redpanda by reading data from csv file
@@ -72,6 +73,7 @@ if (args.help || args.h) {
   process.exit(0);
 }
 
+// Setup Redpanda connection details
 const brokers = (args.brokers || args.b || "localhost:9092").split(",");
 const csvPath =
   args.csv || args.file || args.f || "../data/market_activity.csv";
@@ -81,13 +83,17 @@ const dateProp = args.date || args.d;
 const isReverse = args.reverse || args.r;
 const isLoop = args.loop || args.l;
 
+// Initialize Kafka client with specified broker details
 const redpanda = new Kafka({
   clientId: "example-producer-js",
   brokers,
 });
 const producer = redpanda.producer();
 
-/* Produce single message */
+/**
+ * Function to send a single JSON message to Redpanda.
+ * @param {Object} obj - The message object to send.
+ */
 const send = async (obj) => {
   try {
     const json = JSON.stringify(obj);
@@ -101,6 +107,9 @@ const send = async (obj) => {
   }
 };
 
+/**
+ * Main function to handle reading the CSV, processing data, and sending to Redpanda.
+ */
 const run = async () => {
   let lastDate;
   console.log("Producer connecting...");
@@ -117,7 +126,7 @@ const run = async () => {
         row[dateProp] = new Date(row[dateProp]);
       }
       if (isLoop || isReverse) {
-        // set last date if we have a date prop, and either if 1) we are on the first entry while reversed or 2) not reversed
+        // Set last date if we have a date prop, and either if 1) we are on the first entry while reversed or 2) not reversed
         if (dateProp && ((isReverse && !lastDate) || !isReverse)) lastDate = row[dateProp];
         data.push(row);
       } else {
@@ -125,14 +134,15 @@ const run = async () => {
       }
     })
     .on("end", async function () {
+      // Handle sending data in loops or after reversal
       if (isLoop || isReverse) {
-        if (isReverse) data.reverse();
+        if (isReverse) data.reverse(); // Reverse data order if specified
         for (let i = 0; i < data.length; i++) {
           await send(data[i]);
         }
         while (isLoop) {
           for (let i = 0; i < data.length; i++) {
-            if (dateProp) data[i][dateProp] = lastDate = addDays(lastDate, 1);
+            if (dateProp) data[i][dateProp] = lastDate = addDays(lastDate, 1); // Increment date
             await send(data[i]);
           }
         }
@@ -141,7 +151,9 @@ const run = async () => {
 };
 run().catch((e) => console.error(e));
 
-/* Disconnect on CTRL+C */
+/**
+* Gracefully disconnect producer on SIGINT (Ctrl+C).
+*/
 process.on("SIGINT", async () => {
   try {
     console.log("\nProducer disconnecting...");
