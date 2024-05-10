@@ -89,8 +89,9 @@ services:
           brokers: "redpanda:9092"
     depends_on:
       - redpanda
+      - connect
   connect:
-    image: docker.redpanda.com/redpandadata/connectors:latest
+    image: docker.redpanda.com/redpandadata/connectors:v1.0.23
     hostname: connect
     container_name: connect
     networks:
