@@ -16,6 +16,16 @@ use anyhow::{anyhow, ensure, Context, Result};
 use jaq_interpret::{Ctx, Filter, FilterT, ParseCtx, RcIter, Val};
 use redpanda_transform_sdk::{on_record_written, BorrowedRecord, RecordWriter, WriteEvent};
 
+
+// Use the talc custom allocator for our Wasm binary, it's both faster and smaller than the default
+// allocator that Rust uses for Wasm.
+// See: https://github.com/SFBdragon/talc/blob/master/talc/README_WASM.md
+//
+// SAFETY: The runtime environment must be single-threaded WASM.
+#[cfg(target_family = "wasm")]
+#[global_allocator]
+static ALLOCATOR: talc::TalckWasm = unsafe { talc::TalckWasm::new_global() };
+
 // This allows one to use $KEY to reference the record's key as a string.
 const KEY_VAR: &str = "KEY";
 
