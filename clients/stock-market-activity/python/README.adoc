@@ -53,22 +53,6 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/clients/stock-market-activity/python
 ----
 
-. Create a virtual environment:
-+
-[,bash]
-----
-python3 -m venv .env
-source .env/bin/activate
-----
-
-. Install the required dependencies:
-+
-[,bash]
-----
-pip3 install --upgrade pip
-pip3 install -r requirements.txt
-----
-
 . Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 For example:
@@ -92,6 +76,22 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 [source,bash]
 ----
 docker compose -f ../../../docker-compose/single-broker/docker-compose.yml up -d
+----
+
+. Create a virtual environment:
++
+[,bash]
+----
+python3 -m venv .env
+source .env/bin/activate
+----
+
+. Install the required dependencies:
++
+[,bash]
+----
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 ----
 
 . Start the producer:
