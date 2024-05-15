@@ -3,82 +3,74 @@ import csv
 import glob
 import logging
 import pathlib
+import sys
+import argparse
+from datetime import datetime, timedelta
+from kafka import KafkaProducer
+from kafka.admin import KafkaAdminClient, NewTopic
+from kafka.errors import KafkaError
 
-from dotenv import load_dotenv
-from confluent_kafka import Producer
-from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
-
-load_dotenv()
+# Configure logging to display information and error messages
 logging.basicConfig(level=logging.INFO)
 
-redpanda_brokers = os.getenv("REDPANDA_BROKERS")
-kafka_security_protocol = os.getenv("KAFKA_SECURITY_PROTOCOL")
-kafka_sasl_mechanism = os.getenv("KAFKA_SASL_MECHANISM")
-redpanda_username = os.getenv("REDPANDA_USERNAME")
-redpanda_password = os.getenv("REDPANDA_PASSWORD")
-logging.info("Connecting to: %s", redpanda_brokers)
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Streams CSV data into a Kafka topic using kafka-python-ng.")
+parser.add_argument("-f", "--file", default="../data/market_activity.csv", help="Path to the CSV file.")
+parser.add_argument("-t", "--topic", default="market_activity", help="Kafka topic to publish the messages.")
+parser.add_argument("-b", "--brokers", default="localhost:9092", help="Comma-separated list of brokers.")
+parser.add_argument("-d", "--date", help="Date column to manipulate.")
+parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the order of data before sending.")
+parser.add_argument("-l", "--loop", action="store_true", help="Loop through data continuously.")
+args = parser.parse_args()
 
-conf = {"bootstrap.servers": redpanda_brokers}
-if kafka_security_protocol and "SASL" in kafka_security_protocol:
-    conf.update(
-        {
-            "security.protocol": kafka_security_protocol,
-            "sasl_mechanism": kafka_sasl_mechanism,
-            "sasl_plain_username": redpanda_username,
-            "sasl_plain_password": redpanda_password,
-            # "ssl_cafile": "ca.crt",
-            # "ssl_certfile": "client.crt",
-            # "ssl_keyfile": "client.key"
-        }
-    )
+# Initialize Kafka producer with serialization settings for keys and values
+producer = KafkaProducer(
+    bootstrap_servers=args.brokers.split(','),
+    key_serializer=lambda k: k.encode('utf-8') if k else None,
+    value_serializer=lambda v: v.encode('utf-8')
+)
 
-#
-# Create topic
-#
-topic_name = os.getenv("REDPANDA_TOPIC_NAME", "test-topic")
-logging.info("Creating topic: %s", topic_name)
+# Callback function to log message delivery success
+def on_send_success(record_metadata):
+    logging.info(f"Message delivered to {record_metadata.topic} [{record_metadata.partition}] offset {record_metadata.offset}")
+# Callback function to log message delivery success
+def on_send_error(excp):
+    logging.error('Message delivery failed: %s', excp)
 
-admin = AdminClient(conf)
+# Initialize Kafka admin client to manage topics
+admin_client = KafkaAdminClient(bootstrap_servers=args.brokers.split(','))
+topic_list = [NewTopic(name=args.topic, num_partitions=1, replication_factor=1)]
 try:
-    topic = NewTopic(topic=topic_name, num_partitions=1, replication_factor=1)
-    admin.create_topics([topic])
-except KafkaException as e:
-    logging.error(e)
+    admin_client.create_topics(new_topics=topic_list, validate_only=False)
+except Exception as e:
+    logging.error("Failed to create topic: %s", e)
 
+# Main loop to process each CSV file found in the directory
+data_files = glob.glob(f"{pathlib.Path(args.file).parent.resolve()}/*.csv")
+try:
+    while True:
+        for file in data_files:
+            logging.info("Processing file: %s", file)
+            with open(file, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                rows = list(reader)
+                if args.reverse:
+                    rows.reverse()  # Reverse the order of data if requested
 
-#
-# Write to topic
-#
-def delivery_report(err, msg):
-    """Logs the success or failure of message delivery."""
-    if err is not None:
-        logging.error("Unable to deliver message: %s", err)
-    else:
-        out = f"topic: {msg.topic()}, "
-        out += f"partition: {msg.partition()}, "
-        out += f"offset: {msg.offset()}, "
-        out += f"value: {msg.value()}"
-        logging.info(out)
+                for row in rows:
+                    if args.date and args.date in row:
+                        # Increment date by one second for simulation purposes
+                        row[args.date] = (datetime.strptime(row[args.date], "%m/%d/%Y") + timedelta(seconds=1)).strftime("%m/%d/%Y")
+                    message = str(row)
+                    # Send the message to Redpanda
+                    producer.send(args.topic, value=message).add_callback(on_send_success).add_errback(on_send_error)
 
+                producer.flush()  # Ensure all messages are sent before continuing
 
-logging.info("Writing to topic: %s", topic_name)
-p = Producer(conf)
+        if not args.loop:
+            break # Exit the loop if not set to continuous mode
+except KeyboardInterrupt:
+    logging.info("Terminating the producer.")
 
-here = pathlib.Path(__file__).parent.resolve()
-for file in glob.glob(f"{here}/../data/*.csv"):
-    logging.info("Processing file: %s", file)
-    with open(file, encoding="utf-8") as f:
-        reader = csv.reader(f)
-        next(reader, None)  # skip the header
-        for row in reader:
-            val = ",".join(row)
-            try:
-                p.produce(
-                    topic=topic_name,
-                    value=val.encode("utf-8"),
-                    on_delivery=delivery_report,
-                )
-            except KafkaException as e:
-                logging.error(e)
-
-p.flush()
+producer.close() # Close the producer connection gracefully
+logging.info("Producer has been closed.")

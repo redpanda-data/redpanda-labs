@@ -73,7 +73,8 @@ source .env/bin/activate
 +
 [,bash]
 ----
-pip3 install kafka-python-ng
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 ----
 
 . Verify that the `chat-room` topic exists in your cluster by listing all topics:

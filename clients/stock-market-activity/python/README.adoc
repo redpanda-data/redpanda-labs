@@ -1,0 +1,163 @@
+= Stream Stock Market Data from a CSV file Using Python
+:env-docker: true
+:page-categories: Development, Clients
+:description: Stream data from a CSV file into a Redpanda topic.
+:page-layout: lab
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 24.1.1
+:latest-console-version: 2.5.2
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+This lab demonstrates how to use a Python Kafka producer to stream data from a CSV file into a Redpanda topic. The script simulates real-time stock market activity by pushing JSON formatted messages into a topic.
+
+[source,json]
+----
+{"Date":"10/22/2013","Close/Last":"$40.45","Volume":"8347540","Open":"$39.95","High":"$40.54","Low":"$39.80"}
+----
+
+This script allows you to loop through data continuously, reverse the order of data for different viewing perspectives, and manipulate date columns for time-series analysis.
+
+In this lab, you will:
+
+* Run the producer that streams data from a CSV file directly into a Redpanda topic.
+* Discover methods to alter the data stream, such as reversing the data sequence or looping through the data continuously for persistent simulations.
+* Adjust date fields dynamically to represent different time frames for analysis.
+
+== Prerequisites
+
+Before running the lab, ensure you have the following installed on your host machine:
+
+- https://docs.docker.com/compose/install/[Docker and Docker Compose^]
+
+- https://www.python.org/downloads[Python3^]
+
+== Run the lab
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `clients/stock-market-activity/python/` directory:
++
+[,bash]
+----
+cd redpanda-labs/clients/stock-market-activity/python
+----
+
+. Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
+
+. Start a local Redpanda cluster:
++
+[source,bash]
+----
+docker compose -f ../../../docker-compose/single-broker/docker-compose.yml up -d
+----
+
+. Create a virtual environment:
++
+[,bash]
+----
+python3 -m venv .env
+source .env/bin/activate
+----
+
+. Install the required dependencies:
++
+[,bash]
+----
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
+----
+
+. Start the producer:
++
+[source,bash]
+----
+python producer.py --brokers localhost:19092
+----
++
+You should see that the producer is sending messages to Redpanda:
++
+[.no-copy]
+----
+Message delivered to market_activity [0] offset 0
+----
+
+. Open Redpanda Console at http://localhost:8080/topics/market_activity[localhost:8080^].
+
+The producer sent the stock market data in the CSV file to the `market_activity` topic in Redpanda.
+
+=== Options
+
+The script supports several command-line options to control its behavior:
+
+[source,bash]
+----
+python producer.py [options]
+----
+
+[options="header",cols="1,3"]
+|===
+| Option | Description
+
+| `-h`, `--help`
+| Display the help message and exit.
+
+| `-f`, `--file`, `--csv`
+| Specify the path to the CSV file to be processed. Defaults to `../data/market_activity.csv`.
+
+| `-t`, `--topic`
+| Specify the topic to which events will be published. Defaults to the name of the CSV file (without its extension).
+
+| `-b`, `--broker`, `--brokers`
+| Comma-separated list of the host and port for each Redpanda broker. Defaults to `localhost:9092`.
+
+| `-d`, `--date`
+| Specify the column in the CSV file that contains date information. By default, the script converts these dates to ISO 8601 format. If the looping option (`-l`) is enabled, the script will increment each date by one day for each iteration of the loop, allowing for dynamic time series simulation.
+
+| `-r`, `--reverse`
+| Read the file into memory and reverse the order of data before sending it to Redpanda. When used with the `-l` option, data is reversed only once before the looping starts, not during each loop iteration.
+
+| `-l`, `--loop`
+| Continuously loop through the file, reading it into memory and sending data to Redpanda in a loop. When combined with the `-d` option, it modifies the specified date column by incrementally increasing the date with each loop iteration, simulating real-time data flow over days. When used with `-r`, the data order is reversed initially, and then the loop continues with the reversed data set.
+|===
+
+== Clean up
+
+To exit the virtual environment:
+
+[source,bash]
+----
+deactivate
+----
+
+To shut down and delete the containers along with all your cluster data:
+
+```bash
+docker compose -f ../../../docker-compose/single-broker/docker-compose.yml down -v
+```

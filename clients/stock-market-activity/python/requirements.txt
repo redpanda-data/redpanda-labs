@@ -1,6 +1,6 @@
 certifi==2023.7.22
 charset-normalizer==3.3.0
-confluent-kafka==2.3.0
+kafka-python-ng==2.2.2
 fastavro==1.8.4
 idna==3.4
 python-dotenv==0.20.0
