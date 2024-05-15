@@ -1,0 +1,34 @@
+input:
+  kafka:
+    addresses: [ ${REDPANDA_SERVERS} ]
+    tls:
+      enabled: true
+    sasl:
+      mechanism: "SCRAM-SHA-256"
+      user: ${REDPANDA_USER}
+      password: ${REDPANDA_PASS}
+    consumer_group: benthos
+    start_from_oldest: false # consume from latest
+    topics: [ ${REDPANDA_TOPICS} ]
+
+pipeline:
+  processors:
+  - openai_embeddings:
+      api_key: ${OPENAI_API_KEY}
+
+output:
+  mongodb:
+    url: mongodb+srv://${ATLAS_USER}:${ATLAS_PASS}@vectorstore.ozmdcxv.mongodb.net/?retryWrites=false
+    database: ${ATLAS_DB}
+    username: ""
+    password: ""
+    collection: ${ATLAS_COLLECTION}
+    operation: "insert-one"
+    write_concern:
+      w: 1
+      j: false
+      w_timeout: "10s"
+    document_map: |-
+      root.page_content = this.page_content
+      root.metadata = this.metadata
+      root.embedding = this.embedding
