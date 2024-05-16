@@ -1,0 +1,17 @@
+[package]
+name = "timestamp-converter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.82"
+apache-avro = { version = "0.16.0", features = ["snappy"] }
+chrono = "0.4.38"
+redpanda-transform-sdk-varint = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/varint" }
+redpanda-transform-sdk-types = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/core-types" }
+redpanda-transform-sdk-sys = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/core-sys" }
+redpanda-transform-sdk = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust" }
+redpanda-transform-sdk-sr-types = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/sr-types" }
+redpanda-transform-sdk-sr-sys = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/sr-sys" }
+redpanda-transform-sdk-sr = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/sr" }
+num-traits = "0.2.18"
