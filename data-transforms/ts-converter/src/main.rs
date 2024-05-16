@@ -279,8 +279,11 @@ fn main() -> anyhow::Result<()> {
         };
         match sr.create_schema(output_subject.as_str(), output_schema) {
             Ok(_) => {}
-            Err(e) => bail!("failed to create schema for output topic {}: {:?}",
-                output_topic, e)
+            Err(e) => bail!(
+                "failed to create schema for output topic {}: {:?}",
+                output_topic,
+                e
+            ),
         }
     };
 
@@ -293,7 +296,7 @@ fn main() -> anyhow::Result<()> {
     );
     on_record_written(|ev, w| {
         match avro::convert_event(ev, w, &output_topic, &mode, &target_type, &sr, fmt.as_ref()) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 // TODO: add in logic for either DLQ, pass-through, drop, or panic. For now, drop.
                 eprintln!("{:?}", e);

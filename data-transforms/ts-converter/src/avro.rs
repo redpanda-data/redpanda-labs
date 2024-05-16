@@ -1,12 +1,12 @@
 use anyhow::bail;
-use apache_avro::Schema;
 use apache_avro::types::Value;
-use chrono::{Datelike, DateTime, TimeZone, Utc};
+use apache_avro::Schema;
+use chrono::{DateTime, Datelike, TimeZone, Utc};
 use redpanda_transform_sdk::{BorrowedRecord, RecordWriter, WriteEvent};
 use redpanda_transform_sdk_sr::{SchemaFormat, SchemaId, SchemaRegistryClient};
 
-use crate::{Mode, Precision, TargetType};
 use crate::schema::decompose;
+use crate::{Mode, Precision, TargetType};
 
 const SECONDS_IN_A_DAY: i64 = 86_400;
 
@@ -271,9 +271,9 @@ mod tests {
         SchemaVersion, SubjectSchema,
     };
 
-    use crate::{avro, Mode, Precision, TargetType};
     use crate::avro::convert_value;
     use crate::schema::MAGIC_BYTES;
+    use crate::{avro, Mode, Precision, TargetType};
 
     const STRING_ISO8601: &str = "2024-01-03T19:38:06.988762314Z";
     const STRING_ISO8601_MILLIS: &str = "2024-01-03T19:38:06.988Z";
