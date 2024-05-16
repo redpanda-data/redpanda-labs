@@ -17,11 +17,9 @@ endif::[]
 // ========================AUTOMATED TESTS===================================
 // The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
 
-// (test start {"id":"data-transform-jq-rust", "description": "Transform JSON Messages into a New Topic using JQ", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
+// (test start {"id":"data-transform-ts-convert-rust", "description": "Convert timestamps from various forms, such as epochs to strings.", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
 
-This lab contains a reusable data transform using `jaq` a rust version of the the popular `jq` command line JSON processor.
-
-See the jq manual for more information on how to write a filter: https://jqlang.github.io/jq/manual/
+This lab contains an example transform written in Rust and using the Redpanda Schema Registry. It allows for transforming keys or values with timestamps in a variety of formats to different formats. For example, converting numeric epoch values in milliseconds to string-based output (or vice-versa).
 
 == Prerequisites
 
