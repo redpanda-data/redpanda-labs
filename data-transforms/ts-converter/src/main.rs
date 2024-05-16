@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::env;
 use std::fmt::Debug;
 
@@ -11,7 +12,7 @@ mod schema;
 const ENV_MODE: &str = "TIMESTAMP_MODE";
 const ENV_TARGET_TYPE: &str = "TIMESTAMP_TARGET_TYPE";
 const ENV_INPUT_TOPIC: &str = "REDPANDA_INPUT_TOPIC";
-const ENV_OUTPUT_TOPIC: &str = "REDPANDA_OUTPUT_TOPIC0";
+const ENV_OUTPUT_TOPIC: &str = "REDPANDA_OUTPUT_TOPIC_0";
 
 /// Optional format string for converting strings to another target type.
 const ENV_FORMAT: &str = "TIMESTAMP_STRING_FORMAT";
@@ -214,38 +215,57 @@ impl TryFrom<String> for TargetType {
 }
 
 fn main() -> anyhow::Result<()> {
-    // Identify our configuration from the environment.
-    let mode = env::var(ENV_MODE)
-        .map_or(Ok(Mode::Value), Mode::try_from)
-        .unwrap();
-    let target_type = TargetType::try_from(env::var(ENV_TARGET_TYPE).unwrap()).unwrap();
-    let input_topic = env::var(ENV_INPUT_TOPIC).unwrap();
-    let output_topic = env::var(ENV_OUTPUT_TOPIC).unwrap();
+    // Identify our configuration from the environment. This is a lot of error handling to avoid
+    // barfing unintelligible wasm stack traces.
+    let mode = match env::var(ENV_MODE).map_or(Ok(Mode::Value), Mode::try_from) {
+        Ok(m) => m,
+        Err(e) => bail!("failure parsing mode: {}", e),
+    };
+    let target_type = match TargetType::try_from(env::var(ENV_TARGET_TYPE).unwrap_or(String::new()))
+    {
+        Ok(t) => t,
+        Err(e) => bail!("failure parsing target type: {}", e),
+    };
+
+    let input_topic = match env::var(ENV_INPUT_TOPIC) {
+        Ok(t) => t,
+        Err(_) => bail!(
+            "no input topic found in environment value {}",
+            ENV_INPUT_TOPIC
+        ),
+    };
+    let output_topic = match env::var(ENV_OUTPUT_TOPIC) {
+        Ok(t) => t,
+        Err(_) => bail!(
+            "no output topic found in environment value {}",
+            ENV_OUTPUT_TOPIC
+        ),
+    };
 
     // See if we were given an optional source format to use for handling String inputs.
     let fmt = env::var(ENV_FORMAT).map_or(None, |s| Some(s));
 
     // Grab a connection to the Schema Registry and check our input topic.
     let mut sr = SchemaRegistryClient::new();
-    let input_schema = sr
-        .lookup_latest_schema(
-            format!(
-                "{}-{:?}",
-                input_topic,
-                if mode.is_key() { "key" } else { "value" }
-            )
-            .as_str(),
-        )
-        .unwrap();
+    let subject = format!(
+        "{}-{}",
+        input_topic,
+        if mode.is_key() { "key" } else { "value" }
+    );
+    let input_schema = match sr.lookup_latest_schema(subject.as_str()) {
+        Ok(s) => s,
+        Err(e) => bail!("failed to fetch schema for subject {}: {:?}", subject, e),
+    };
     // Intrinsic TOCTOU, but at least see if we can confirm support early.
     let format = match input_schema.schema().format() {
         SchemaFormat::Avro => SchemaFormat::Avro,
-        _ => anyhow::bail!("only Avro is currently supported"),
+        SchemaFormat::Json => bail!("json schema is not supported"),
+        SchemaFormat::Protobuf => bail!("protobuf schema is not supported"),
     };
 
     // Check our output topic schema exists. If not, create it.
     let output_subject = format!(
-        "{}-{:?}",
+        "{}-{}",
         output_topic,
         if mode.is_key() { "key" } else { "value" }
     );
@@ -255,13 +275,17 @@ fn main() -> anyhow::Result<()> {
             SchemaFormat::Protobuf => anyhow::bail!("protobuf not supported"),
             SchemaFormat::Json => anyhow::bail!("json not supported"),
         };
-        sr.create_schema(output_subject.as_str(), output_schema)?;
+        sr.create_schema(output_subject.as_str(), output_schema)
+            .expect("failed to create schema");
     };
 
     // Should probably use specific functions from Avro, Protobuf, etc. modules.
     // For now, we just assume Avro.
     // n.b. due to the signature of `on_record_written` using Fn and not MutFn, we can't pass
     // a mutable reference to the SchemaRegistryClient
+    println!("enabling timestamp conversion from {} to {} using Mode::{:?}, TargetType::{:?}, and incoming String format of {:?}",
+        input_topic, output_topic, mode, target_type, fmt
+    );
     on_record_written(|e, w| {
         avro::convert_event(e, w, &output_topic, &mode, &target_type, &sr, fmt.as_ref())
     })

@@ -87,12 +87,14 @@ pub fn convert_event(
 
     // Fetch or create the new output schema.
     // TODO: move this?
-    let subject = format!("{}-{:?}", output_topic, mode_str);
+    let subject = format!("{}-{}", output_topic, mode_str);
     let output_subject = sr.lookup_latest_schema(subject.clone())?;
     let output_schema = Schema::parse_str(output_subject.schema().schema())?;
 
     // Deserialize the data into an Avro value.
     // XXX: for now, we need to frame the data ourselves :'(
+    // TODO: garbage data needs to go either to a DLQ or just be produced as-is otherwise
+    //       the transform ends up stuck on the record if we panic.
     let value = apache_avro::from_avro_datum(&schema, &mut data, None)?;
     let converted = convert_value(&value, mode, target_type, fmt)?;
     let mut serialized = apache_avro::to_avro_datum(&output_schema, converted)?;
