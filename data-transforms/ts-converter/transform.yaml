@@ -1,4 +1,4 @@
-name: timestamp-converter
+name: ts-converter
 input-topic: ""
 output-topic: ""
 language: rust

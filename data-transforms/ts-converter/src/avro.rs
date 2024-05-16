@@ -1,12 +1,12 @@
 use anyhow::bail;
-use apache_avro::types::Value;
 use apache_avro::Schema;
-use chrono::{DateTime, Datelike, TimeZone, Utc};
+use apache_avro::types::Value;
+use chrono::{Datelike, DateTime, TimeZone, Utc};
 use redpanda_transform_sdk::{BorrowedRecord, RecordWriter, WriteEvent};
 use redpanda_transform_sdk_sr::{SchemaFormat, SchemaId, SchemaRegistryClient};
 
-use crate::schema::decompose;
 use crate::{Mode, Precision, TargetType};
+use crate::schema::decompose;
 
 const SECONDS_IN_A_DAY: i64 = 86_400;
 
@@ -41,9 +41,12 @@ pub fn convert_schema(
                     }
                 }
                 // TODO: This implementation does not support references currently
-                Ok(redpanda_transform_sdk_sr::Schema::new_avro(Schema::Record(new_schema).canonical_form(), Vec::new()))
+                Ok(redpanda_transform_sdk_sr::Schema::new_avro(
+                    Schema::Record(new_schema).canonical_form(),
+                    Vec::new(),
+                ))
             }
-            _ => bail!("cannot operate in field mode on non-Record Avro schema")
+            _ => bail!("cannot operate in field mode on non-Record Avro schema"),
         }
     } else {
         // Simple conversion based on TargetType
@@ -53,10 +56,14 @@ pub fn convert_schema(
             TargetType::Date => Schema::Date,
             TargetType::Time => Schema::TimeMicros,
         };
-        Ok(redpanda_transform_sdk_sr::Schema::new_avro(schema.canonical_form(), Vec::new()))
+        Ok(redpanda_transform_sdk_sr::Schema::new_avro(
+            schema.canonical_form(),
+            Vec::new(),
+        ))
     }
 }
 
+/// The main conversion logic for Avro data.
 pub fn convert_event(
     event: WriteEvent,
     writer: &mut RecordWriter,
@@ -74,12 +81,19 @@ pub fn convert_event(
         ("value", record.value())
     };
     if payload.is_none() {
+        // TODO: error handling for the pass-through case.
         return Ok(writer.write(record)?);
     }
 
     // Fetch and parse the Avro schema. Ideally, we'd be able to cache the result.
-    let (id, mut data) = decompose(payload.unwrap())?;
-    let raw_schema = sr.lookup_schema_by_id(SchemaId(id))?;
+    let (id, mut data) = match decompose(payload.unwrap()) {
+        Ok(tuple) => tuple,
+        Err(e) => bail!("failed to parse Avro framing: {:?}", e),
+    };
+    let raw_schema = match sr.lookup_schema_by_id(SchemaId(id)) {
+        Ok(s) => s,
+        Err(_) => bail!("failed to find schema for id {}", id),
+    };
     let schema = match raw_schema.format() {
         SchemaFormat::Avro => Schema::parse_str(raw_schema.schema())?,
         _ => bail!("unsupported schema type: schema is not Avro"),
@@ -88,16 +102,31 @@ pub fn convert_event(
     // Fetch or create the new output schema.
     // TODO: move this?
     let subject = format!("{}-{}", output_topic, mode_str);
-    let output_subject = sr.lookup_latest_schema(subject.clone())?;
-    let output_schema = Schema::parse_str(output_subject.schema().schema())?;
+    let output_subject = match sr.lookup_latest_schema(subject.clone()) {
+        Ok(s) => s,
+        Err(e) => bail!("failed to find schema for subject {}: {:?}", subject, e),
+    };
+    let output_schema = match Schema::parse_str(output_subject.schema().schema()) {
+        Ok(s) => s,
+        Err(e) => bail!("failed to parse schema: {:?}", e),
+    };
 
     // Deserialize the data into an Avro value.
     // XXX: for now, we need to frame the data ourselves :'(
     // TODO: garbage data needs to go either to a DLQ or just be produced as-is otherwise
-    //       the transform ends up stuck on the record if we panic.
-    let value = apache_avro::from_avro_datum(&schema, &mut data, None)?;
-    let converted = convert_value(&value, mode, target_type, fmt)?;
-    let mut serialized = apache_avro::to_avro_datum(&output_schema, converted)?;
+    //       the transform ends up stuck on the record if we panic...or I guess dropped?
+    let value = match apache_avro::from_avro_datum(&schema, &mut data, None) {
+        Ok(v) => v,
+        Err(e) => bail!("failed to deserialize Avro data: {:?}", e),
+    };
+    let converted = match convert_value(&value, mode, target_type, fmt) {
+        Ok(v) => v,
+        Err(e) => bail!("failed to convert Avro data: {:?}", e),
+    };
+    let mut serialized = match apache_avro::to_avro_datum(&output_schema, converted) {
+        Ok(v) => v,
+        Err(e) => bail!("failed to serialize converted Avro data: {:?}", e),
+    };
     let mut framed: Vec<u8> = Vec::new();
     framed.push(0);
     for byte in output_subject.id().0.to_be_bytes() {
@@ -111,7 +140,14 @@ pub fn convert_event(
     } else {
         BorrowedRecord::new(record.key(), Some(framed.as_slice()))
     };
-    Ok(writer.write(output)?)
+    match writer.write(output) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // XXX not sure that this would be recoverable...what's the error handling on the broker?
+            eprintln!("failed to write event: {:?}", e);
+            Ok(())
+        }
+    }
 }
 
 /// Scale `value` from one precision to another.
@@ -223,6 +259,8 @@ fn convert(long: i64, precision: Precision, target_type: &TargetType) -> anyhow:
 
 #[cfg(test)]
 mod tests {
+    use std::time::SystemTime;
+
     use apache_avro::types::Value;
     use redpanda_transform_sdk::{
         BorrowedRecord, RecordSink, RecordWriter, WriteError, WriteEvent, WriteOptions,
@@ -232,11 +270,10 @@ mod tests {
         Schema, SchemaId, SchemaRegistryClient, SchemaRegistryClientImpl, SchemaRegistryError,
         SchemaVersion, SubjectSchema,
     };
-    use std::time::SystemTime;
 
+    use crate::{avro, Mode, Precision, TargetType};
     use crate::avro::convert_value;
     use crate::schema::MAGIC_BYTES;
-    use crate::{avro, Mode, Precision, TargetType};
 
     const STRING_ISO8601: &str = "2024-01-03T19:38:06.988762314Z";
     const STRING_ISO8601_MILLIS: &str = "2024-01-03T19:38:06.988Z";
@@ -351,9 +388,21 @@ mod tests {
     }
 
     const TIME_CONVERSION_TESTS: [(Value, TargetType, Value); 3] = [
-        (Value::Int(SECONDS as i32), TargetType::Time, Value::TimeMicros(TIME_OF_DAY_IN_SECONDS * 1_000_000)),
-        (Value::Long(MILLIS), TargetType::Time, Value::TimeMicros(TIME_OF_DAY_IN_MILLIS * 1_000)),
-        (Value::TimestampMicros(MICROS), TargetType::Time, Value::TimeMicros(TIME_OF_DAY_IN_MICROSECONDS)),
+        (
+            Value::Int(SECONDS as i32),
+            TargetType::Time,
+            Value::TimeMicros(TIME_OF_DAY_IN_SECONDS * 1_000_000),
+        ),
+        (
+            Value::Long(MILLIS),
+            TargetType::Time,
+            Value::TimeMicros(TIME_OF_DAY_IN_MILLIS * 1_000),
+        ),
+        (
+            Value::TimestampMicros(MICROS),
+            TargetType::Time,
+            Value::TimeMicros(TIME_OF_DAY_IN_MICROSECONDS),
+        ),
     ];
 
     #[test]

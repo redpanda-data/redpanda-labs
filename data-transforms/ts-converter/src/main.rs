@@ -17,11 +17,13 @@ const ENV_OUTPUT_TOPIC: &str = "REDPANDA_OUTPUT_TOPIC_0";
 /// Optional format string for converting strings to another target type.
 const ENV_FORMAT: &str = "TIMESTAMP_STRING_FORMAT";
 
+/// The `chrono` parser accepts patterns that may result in no information being printed,
+/// such as just having a bunch of fixed literals. That would silently cause data to be
+/// dropped in the transform, so we do a validation step after parsing to see if we have
+/// any items that would print actual parts of the timestamp.
 fn parse_format(fmt: &str) -> anyhow::Result<Vec<Item<'static>>> {
     match StrftimeItems::new(fmt).parse_to_owned() {
         Ok(items) => {
-            // XXX The parser won't fail if there are only random literals,
-            // so check that we don't just have pure junk.
             if items
                 .iter()
                 .find(|&i| match i {
@@ -33,10 +35,10 @@ fn parse_format(fmt: &str) -> anyhow::Result<Vec<Item<'static>>> {
             {
                 Ok(items)
             } else {
-                anyhow::bail!("invalid datetime format: will result in data loss")
+                bail!("invalid datetime format: will result in data loss")
             }
         }
-        Err(e) => anyhow::bail!("parse error: {}", e),
+        Err(e) => bail!("parse error: {}", e),
     }
 }
 
@@ -272,11 +274,14 @@ fn main() -> anyhow::Result<()> {
     if sr.lookup_latest_schema(output_subject.as_str()).is_err() {
         let output_schema = match format {
             SchemaFormat::Avro => avro::convert_schema(input_schema.schema(), &mode, &target_type)?,
-            SchemaFormat::Protobuf => anyhow::bail!("protobuf not supported"),
-            SchemaFormat::Json => anyhow::bail!("json not supported"),
+            SchemaFormat::Protobuf => bail!("protobuf not supported"),
+            SchemaFormat::Json => bail!("json not supported"),
         };
-        sr.create_schema(output_subject.as_str(), output_schema)
-            .expect("failed to create schema");
+        match sr.create_schema(output_subject.as_str(), output_schema) {
+            Ok(_) => {}
+            Err(e) => bail!("failed to create schema for output topic {}: {:?}",
+                output_topic, e)
+        }
     };
 
     // Should probably use specific functions from Avro, Protobuf, etc. modules.
@@ -286,8 +291,16 @@ fn main() -> anyhow::Result<()> {
     println!("enabling timestamp conversion from {} to {} using Mode::{:?}, TargetType::{:?}, and incoming String format of {:?}",
         input_topic, output_topic, mode, target_type, fmt
     );
-    on_record_written(|e, w| {
-        avro::convert_event(e, w, &output_topic, &mode, &target_type, &sr, fmt.as_ref())
+    on_record_written(|ev, w| {
+        match avro::convert_event(ev, w, &output_topic, &mode, &target_type, &sr, fmt.as_ref()) {
+            Ok(_) => {},
+            Err(e) => {
+                // TODO: add in logic for either DLQ, pass-through, drop, or panic. For now, drop.
+                eprintln!("{:?}", e);
+            }
+        };
+        // XXX We *must* not return Err for now as it will panic the Rust wasm runtime.
+        anyhow::Ok(())
     })
 }
 
