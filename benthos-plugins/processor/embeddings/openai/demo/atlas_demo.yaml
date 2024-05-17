@@ -15,10 +15,11 @@ pipeline:
   processors:
   - openai_embeddings:
       api_key: ${OPENAI_API_KEY}
+      model: ${OPENAI_EMBEDDING_MODEL}
 
 output:
   mongodb:
-    url: mongodb+srv://${ATLAS_USER}:${ATLAS_PASS}@vectorstore.ozmdcxv.mongodb.net/?retryWrites=false
+    url: ${ATLAS_CONNECTION_STRING}
     database: ${ATLAS_DB}
     username: ""
     password: ""
@@ -29,6 +30,6 @@ output:
       j: false
       w_timeout: "10s"
     document_map: |-
-      root.page_content = this.page_content
+      root.text = this.text
       root.metadata = this.metadata
       root.embedding = this.embedding

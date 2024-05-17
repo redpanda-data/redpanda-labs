@@ -60,7 +60,7 @@ type embeddingsProcessor struct {
 }
 
 type Document struct {
-	Text      string                 `json:"page_content"`
+	Text      string                 `json:"text"`
 	Metadata  map[string]interface{} `json:"metadata"`
 	Embedding []float64              `json:"embedding"`
 }

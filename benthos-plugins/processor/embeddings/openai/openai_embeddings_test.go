@@ -19,7 +19,7 @@ func TestEmbeddingsProcessor(t *testing.T) {
 	embedProc, err := newEmbeddingsProcessor(c, nil, nil)
 	assert.NoError(t, err)
 
-	out, err := embedProc.Process(context.Background(), service.NewMessage([]byte(`{"page_content": "this is a test", "metadata": {"source": "testing"}}`)))
+	out, err := embedProc.Process(context.Background(), service.NewMessage([]byte(`{"text": "this is a test", "metadata": {"source": "testing"}}`)))
 	assert.NoError(t, err)
 	assert.IsType(t, service.MessageBatch{}, out)
 }
