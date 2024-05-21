@@ -105,7 +105,7 @@ rpk registry schema create src-value --schema epoch.avsc
 +
 ```bash
 rpk transform build
-rpk transform deploy --file ts-converter.wasm --input src --output sink --var "TIMESTAMP_TARGET_TYPE=string[%+]"
+rpk transform deploy --file ts-converter.wasm -i src -o sink --var "TIMESTAMP_TARGET_TYPE=string[%+]"
 ```
 // (step {"action":"runShell", "command": "rpk transform build"})
 // (step {"action":"runShell", "command": "bash ./doc-tests/deploy-transform.sh"})
