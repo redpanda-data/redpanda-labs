@@ -15,3 +15,9 @@ redpanda-transform-sdk-sr-types = { version = "0.0.0-dev", path = "../../../redp
 redpanda-transform-sdk-sr-sys = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/sr-sys" }
 redpanda-transform-sdk-sr = { version = "0.0.0-dev", path = "../../../redpanda/src/transform-sdk/rust/sr" }
 num-traits = "0.2.18"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
