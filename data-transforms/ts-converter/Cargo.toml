@@ -1,5 +1,5 @@
 [package]
-name = "timestamp-converter"
+name = "ts-converter"
 version = "0.1.0"
 edition = "2021"
 
