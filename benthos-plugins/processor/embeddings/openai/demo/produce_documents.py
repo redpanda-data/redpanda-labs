@@ -8,6 +8,7 @@ from typing import List
 import nest_asyncio
 from tqdm import tqdm
 from langchain_community.document_loaders.sitemap import SitemapLoader
+from langchain_community.document_loaders import WebBaseLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from confluent_kafka import Producer
@@ -16,19 +17,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def load_documents(sitemap: str):
-    """Load the sitemap and split text into smaller documents."""
+def load_document(url: str):
+    """Loads webpage and splits text into smaller documents."""
+
+    loader = WebBaseLoader(url)
+    loader.requests_kwargs = {"verify": False}
+    page = loader.load()
+    return _split(page)
+
+
+def load_sitemap(sitemap: str):
+    """Loads the sitemap and splits text into smaller documents."""
 
     nest_asyncio.apply()
     sitemap = SitemapLoader(web_path=sitemap)
     sitemap.requests_per_second = 4
     pages = sitemap.load()
+    return _split(pages)
+
+
+def _split(docs: List[Document]) -> List[Document]:
+    """Splits the documents into smaller chunks of text."""
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000, chunk_overlap=200)
-    docs = splitter.split_documents(pages)
-    print(f"Prepared {len(docs)} documents from the sitemap")
-    return docs
+    chunks = splitter.split_documents(docs)
+    print(f"Prepared {len(chunks)} documents")
+    return chunks
 
 
 def send_to_kafka(docs: List[Document]):
@@ -56,15 +71,15 @@ def main():
     """Generate documents and send them to Kafka."""
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-s",
-        "--sitemap",
-        type=str,
-        required=False,
-        default="https://www.bbc.com/sport/sitemap.xml",
-    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-s", "--sitemap", type=str)
+    group.add_argument("-u", "--url", type=str)
     args = parser.parse_args()
-    docs = load_documents(args.sitemap)
+
+    if args.sitemap is not None:
+        docs = load_sitemap(args.sitemap)
+    elif args.url is not None:
+        docs = load_document(args.url)
     send_to_kafka(docs)
 
 
