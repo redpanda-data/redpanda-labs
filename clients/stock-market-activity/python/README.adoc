@@ -98,7 +98,7 @@ pip3 install -r requirements.txt
 +
 [source,bash]
 ----
-python producer.py --brokers localhost:19092
+python3 producer.py --brokers localhost:19092
 ----
 +
 You should see that the producer is sending messages to Redpanda:
