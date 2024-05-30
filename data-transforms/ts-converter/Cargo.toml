@@ -10,6 +10,3 @@ chrono = "0.4.38"
 redpanda-transform-sdk = "1.0.2"
 redpanda-transform-sdk-sr = "1.0.2"
 
-[profile.release]
-lto = true
-
