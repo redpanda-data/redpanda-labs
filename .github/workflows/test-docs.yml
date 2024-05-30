@@ -110,6 +110,7 @@ jobs:
       - name: Test data-transforms/flatten
         if: needs.setup.outputs.data-transforms-flatten == 'true'
         run: cd data-transforms/flatten && node test.js
+
       - name: Test data-transforms/iss_demo
         if: needs.setup.outputs.data-transforms-iss == 'true'
         run: cd data-transforms/iss_demo && node test.js
@@ -125,3 +126,8 @@ jobs:
       - name: Test data-transforms/jq
         if: needs.setup.outputs.data-transforms-jq == 'true'
         run: cd data-transforms/jq && node test.js
+
+      - name: Test data-transforms/ts-converter
+        if: needs.setup.outputs.data-transforms-ts == 'true'
+        run: cd data-transforms/ts-converter && node test.js
+
