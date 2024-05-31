@@ -15,7 +15,7 @@ jobs:
       data-transforms-redaction: ${{ steps.filter.outputs.data-transforms-redaction }}
       data-transforms-regex: ${{ steps.filter.outputs.data-transforms-regex }}
       data-transforms-jq: ${{ steps.filter.outputs.data-transforms-jq }}
-      data-transforms-ts-converter: ${{ steps.filter.outputs.data-tramsforms-ts-converter }}
+      data-transforms-ts-converter: ${{ steps.filter.outputs.data-transforms-ts-converter }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
