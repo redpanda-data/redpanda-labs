@@ -1,0 +1,35 @@
+input:
+  kafka:
+    addresses: [ ${REDPANDA_SERVERS} ]
+    tls:
+      enabled: true
+    sasl:
+      mechanism: "SCRAM-SHA-256"
+      user: ${REDPANDA_USER}
+      password: ${REDPANDA_PASS}
+    consumer_group: benthos
+    start_from_oldest: false # consume from latest
+    topics: [ ${REDPANDA_TOPICS} ]
+
+pipeline:
+  processors:
+  - openai_embeddings:
+      api_key: ${OPENAI_API_KEY}
+      model: ${OPENAI_EMBEDDING_MODEL}
+
+output:
+  mongodb:
+    url: ${ATLAS_CONNECTION_STRING}
+    database: ${ATLAS_DB}
+    username: ""
+    password: ""
+    collection: ${ATLAS_COLLECTION}
+    operation: "insert-one"
+    write_concern:
+      w: 1
+      j: false
+      w_timeout: "10s"
+    document_map: |-
+      root.text = this.text
+      root.metadata = this.metadata
+      root.embedding = this.embedding
