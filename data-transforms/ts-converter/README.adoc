@@ -88,7 +88,7 @@ rpk profile create ts-converter --from-profile profile.yml
 . Create the required input topic:
 +
 ```bash
-rpk topic create src
+rpk topic create src sink
 ```
 // (step {"action":"runShell", "command": "rpk topic create src sink"})
 
