@@ -19,7 +19,7 @@ endif::[]
 
 // (test start {"id":"data-transform-ts-convert-rust", "description": "Convert timestamps from various forms, such as epochs to strings.", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
 
-This lab contains an example transform written in Rust and using the Redpanda Schema Registry. It allows for transforming keys or values with timestamps in a variety of formats to different formats. For example, converting numeric epoch values in milliseconds to string-based output (or vice-versa).
+This lab uses data transforms with the Redpanda Schema Registry to convert keys or values with timestamps across various formats. Written in Rust, the example shows how to transform numeric epoch values in milliseconds to string-based formats and vice versa.
 
 == Prerequisites
 
