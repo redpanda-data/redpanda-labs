@@ -98,7 +98,7 @@ rpk topic create src sink
 echo '{"type": "long", "name": "epoch"}' | tee epoch.avsc
 rpk registry schema create src-value --schema epoch.avsc
 ```
-// (step {"action":"runShell", "command": "echo '{"type": "long", "name": "epoch"}' | tee epoch.avsc"})
+// (step {"action":"runShell", "command": "echo '{\"type\": \"long\", \"name\": \"epoch\"}' | tee epoch.avsc"})
 // (step {"action":"runShell", "command": "rpk registry schema create src-value --schema epoch.avsc"})
 
 . Deploy the transforms function:
