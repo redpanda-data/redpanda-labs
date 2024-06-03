@@ -18,9 +18,24 @@ In this lab, you'll learn how to build a stream processing pipeline using the Re
 
 == Prerequisites
 
+=== Local environment
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `redpanda-labs/connect-plugins/processor/embeddings/openai/` directory:
++
+[,bash]
+----
+cd redpanda-labs/connect-plugins/processor/embeddings/openai
+----
+
 === Redpanda Serverless
 
-Log in to your Redpanda Cloud account (or sign up if you don't have one) and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless^] cluster. Make a note of the bootstrap server URL, and create a new user with permissions (ACLs) to access a topic named `documents` and a consumer group named `benthos`. Add the cluster connection information to a local `.env` file:
+Log in to your Redpanda Cloud account (or sign up if you don't have one) and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless^] cluster. Make a note of the bootstrap server URL, and create a new user with permissions (ACLs) to access a topic named `documents` and a consumer group named `connect`. Add the cluster connection information to a local `.env` file:
 
 [source,bash]
 ----
@@ -101,7 +116,7 @@ ATLAS_COLLECTION="Embeddings"
 ATLAS_INDEX="vector_index"
 ----
 
-The Python files in the `demo` directory will load these variables from the `.env` file, but you also need to set them in the environment for Benthos configuration interpolation:
+The Python files in the `demo` directory will load these variables from the `.env` file, but you also need to set them in the environment so that Redpanda Connect can read them:
 
 [source,bash]
 ----
@@ -137,7 +152,7 @@ In a new terminal window, start Redpanda Connect with the custom OpenAI processo
 go test
 go build
 export $(grep -v '^#' ./demo/.env | xargs)
-./benthos-embeddings -c demo/atlas_demo.yaml --log.level debug
+./redpanda-connect-embeddings -c demo/atlas_demo.yaml --log.level debug
 ----
 
 You should see the following in the output:
@@ -147,7 +162,7 @@ You should see the following in the output:
 INFO Running main config from specified file       @service=benthos benthos_version=v4.27.0 path=demo/atlas_demo.yaml
 INFO Listening for HTTP requests at: http://0.0.0.0:4195  @service=benthos
 DEBU url: https://api.openai.com/v1/embeddings, model: text-embedding-3-small  @service=benthos label="" path=root.pipeline.processors.0
-INFO Launching a benthos instance, use CTRL+C to close  @service=benthos
+INFO Launching a Redpanda Connect instance, use CTRL+C to close  @service=benthos
 INFO Input type kafka is now active                @service=benthos label="" path=root.input
 DEBU Starting consumer group                       @service=benthos label="" path=root.input
 INFO Output type mongodb is now active             @service=benthos label="" path=root.output

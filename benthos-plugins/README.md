@@ -1,1 +1,0 @@
-# Redpanda Benthos Plugins

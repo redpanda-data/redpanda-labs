@@ -7,7 +7,7 @@ input:
       mechanism: "SCRAM-SHA-256"
       user: ${REDPANDA_USER}
       password: ${REDPANDA_PASS}
-    consumer_group: benthos
+    consumer_group: connect
     start_from_oldest: false # consume from latest
     topics: [ ${REDPANDA_TOPICS} ]
 
