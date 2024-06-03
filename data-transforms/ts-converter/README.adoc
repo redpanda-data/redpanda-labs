@@ -17,7 +17,7 @@ endif::[]
 // ========================AUTOMATED TESTS===================================
 // The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
 
-// (test start {"id":"data-transform-ts-convert-rust", "description": "Convert timestamps from various forms, such as epochs to strings.", "setup": "doc-tests/fetch-versions-and-rpk.json", "cleanup": "doc-tests/cleanup.json"})
+// (test start {"id":"data-transform-ts-convert-rust", "description": "Convert timestamps from various forms, such as epochs to strings.", "setup": "./doc-tests/fetch-versions-and-rpk.json", "cleanup": "./doc-tests/cleanup.json"})
 
 This lab uses data transforms with the Redpanda Schema Registry to convert keys or values with timestamps across various formats. Written in Rust, the example shows how to transform numeric epoch values in milliseconds to string-based formats and vice versa.
 
@@ -158,5 +158,5 @@ To shut down and delete the containers along with all your cluster data:
 docker compose down -v
 ```
 
-// (step {"action":"runShell", "command": "rpk profile delete ts-convert"})
+// (step {"action":"runShell", "command": "rpk profile delete ts-converter"})
 // (test end)
