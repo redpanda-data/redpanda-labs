@@ -189,13 +189,15 @@ python retrieve_generate.py -q """
 
 *Augmented answer*: The provisional England national squad for the Euro 2024 tournament includes the following players:
 
-**Goalkeepers:**
+*Goalkeepers*:
+
 - Dean Henderson (Crystal Palace)
 - Jordan Pickford (Everton)
 - Aaron Ramsdale (Arsenal)
 - James Trafford (Burnley)
 
-**Defenders:**
+*Defenders*:
+
 - Jarrad Branthwaite (Everton)
 - Lewis Dunk (Brighton)
 - Joe Gomez (Liverpool)
@@ -208,7 +210,8 @@ python retrieve_generate.py -q """
 - Kieran Trippier (Newcastle)
 - Kyle Walker (Manchester City)
 
-**Midfielders:**
+*Midfielders*:
+
 - Trent Alexander-Arnold (Liverpool)
 - Conor Gallagher (Chelsea)
 - Curtis Jones (Liverpool)
@@ -216,7 +219,8 @@ python retrieve_generate.py -q """
 - Declan Rice (Arsenal)
 - Adam Wharton (Crystal Palace)
 
-**Forwards:**
+*Forwards*:
+
 - Jude Bellingham (Real Madrid)
 - Jarrod Bowen (West Ham)
 - Eberechi Eze (Crystal Palace)
