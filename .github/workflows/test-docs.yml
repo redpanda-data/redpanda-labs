@@ -15,6 +15,7 @@ jobs:
       data-transforms-redaction: ${{ steps.filter.outputs.data-transforms-redaction }}
       data-transforms-regex: ${{ steps.filter.outputs.data-transforms-regex }}
       data-transforms-jq: ${{ steps.filter.outputs.data-transforms-jq }}
+      data-transforms-ts-converter: ${{ steps.filter.outputs.data-transforms-ts-converter }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -34,6 +35,8 @@ jobs:
               - 'data-transforms/regex/**'
             data-transforms-jq:
               - 'data-transforms/jq/**'
+            data-transforms-ts-converter:
+              - 'data-transforms/ts-converter/**'
 
   run-tests:
     needs: setup
@@ -110,6 +113,7 @@ jobs:
       - name: Test data-transforms/flatten
         if: needs.setup.outputs.data-transforms-flatten == 'true'
         run: cd data-transforms/flatten && node test.js
+
       - name: Test data-transforms/iss_demo
         if: needs.setup.outputs.data-transforms-iss == 'true'
         run: cd data-transforms/iss_demo && node test.js
@@ -125,3 +129,7 @@ jobs:
       - name: Test data-transforms/jq
         if: needs.setup.outputs.data-transforms-jq == 'true'
         run: cd data-transforms/jq && node test.js
+
+      - name: Test data-transforms/ts-converter
+        if: needs.setup.outputs.data-transforms-ts-converter == 'true'
+        run: cd data-transforms/ts-converter && node test.js
