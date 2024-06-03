@@ -1,4 +1,4 @@
-= Streaming Text Embeddings with Redpanda, OpenAI, and MongoDB
+= Stream Text Embeddings with Redpanda, OpenAI, and MongoDB
 :page-layout: lab
 :env-linux: true
 :page-categories: Development, Stream Processing
