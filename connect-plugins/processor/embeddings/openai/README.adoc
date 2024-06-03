@@ -2,19 +2,19 @@
 :page-layout: lab
 :env-linux: true
 :page-categories: Development, Stream Processing
-:description: Building a streaming RAG pipeline with Redpanda, OpenAI, and MongoDB Atlas
+:description: Build a streaming RAG pipeline with Redpanda, OpenAI, and MongoDB Atlas
 
-Retrieval Augmented Generation (RAG) is best described by https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search-for-gpts[OpenAI^] as _"the process of retrieving relevant contextual information from a data source and passing that information to a large language model alongside the user's prompt. This information is used to improve the model's output by augmenting the model's base knowledge."_
+In this lab, you'll learn how to build a retrieval augmented generation (RAG) pipeline using the Redpanda Platform to add https://platform.openai.com/docs/guides/embeddings[OpenAI text embeddings^] to messages as they stream through Redpanda on their way to a MongoDB Atlas vector database. As part of the solution, you'll also use the https://www.langchain.com/[LangChain^] framework to acquire and send new information to Redpanda, and to build the prompt that retrieves relevant texts from the vector database and uses that context to query OpenAI's `gpt-4o` model.
 
-RAG comprises of two parts:
+RAG is best described by https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search-for-gpts[OpenAI^] as _"the process of retrieving relevant contextual information from a data source and passing that information to a large language model alongside the user's prompt. This information is used to improve the model's output by augmenting the model's base knowledge."_
+
+RAG has two parts:
 
 . The acquisition and persistence of new information that the model has no prior knowledge of. This new information, such as documents and webpages, is split into small chunks of text and stored in a vector database along with its vector embeddings. This is the step that Redpanda handles in near realtime.
 +
 NOTE: Vector embeddings are a mathematical representation of text that encode its semantic meaning in a vector space. Words with a similar meaning will be clustered closer together in this multidimensional space. Vector databases, such as https://www.mongodb.com/products/platform/atlas-vector-search[MongoDB Atlas^], have the ability to query vector embeddings to retrieve texts with a similar semantic meaning. A famous example of this being: `king - man + woman = queen`.
 
 . The retrieval of relevant contextual information from a vector database (semantic search), and the passing of that information alongside a user's question (prompt) to the large language model to improve the model's generated answer.
-
-In this lab, you'll learn how to build a stream processing pipeline using the Redpanda Platform to add https://platform.openai.com/docs/guides/embeddings[OpenAI text embeddings^] to messages as they stream through Redpanda on their way to a MongoDB Atlas vector database. As part of the solution, you'll also use the https://www.langchain.com/[LangChain^] framework to acquire and send new information to Redpanda, and to build the prompt that retrieves relevant texts from the vector database and uses that context to query OpenAI's `gpt-4o` model.
 
 == Prerequisites
 
