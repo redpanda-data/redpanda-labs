@@ -1,24 +1,36 @@
-= Streaming Text Embeddings with Redpanda, OpenAI, and MongoDB
+= Stream Text Embeddings with Redpanda, OpenAI, and MongoDB
 :page-layout: lab
 :env-linux: true
 :page-categories: Development, Stream Processing
-:description: Building a streaming RAG pipeline with Redpanda, OpenAI, and MongoDB Atlas
+:description: Build a streaming RAG pipeline with Redpanda, OpenAI, and MongoDB Atlas
 
-Retrieval Augmented Generation (RAG) is best described by https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search-for-gpts[OpenAI^] as _"the process of retrieving relevant contextual information from a data source and passing that information to a large language model alongside the user's prompt. This information is used to improve the model's output by augmenting the model's base knowledge."_
+In this lab, you'll build a https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search-for-gpts[retrieval augmented generation^] (RAG) pipeline to enhance natural language understanding and response generation using Redpanda, https://openai.com/[OpenAI^], https://www.mongodb.com/products/platform/atlas-vector-search[MongoDB Atlas^], and https://www.langchain.com/[LangChain^] .
 
-RAG comprises of two parts:
+This RAG pipeline comprises of two phases:
 
-. The acquisition and persistence of new information that the model has no prior knowledge of. This new information, such as documents and webpages, is split into small chunks of text and stored in a vector database along with its vector embeddings. This is the step that Redpanda handles in near realtime.
+- *Acquisition and persistence of new information*: In this initial phase, Langchain is used to facilitate the acquisition of new information and prepare it for ingestion into Redpanda. The Redpanda Platform adds https://platform.openai.com/docs/guides/embeddings[OpenAI text embeddings^] to messages as they stream through Redpanda on their way to a MongoDB Atlas vector database. Redpanda handles real-time data ingestion and storage, while Redpanda Connect ensures efficient communication with MongoDB Atlas.
 +
-NOTE: Vector embeddings are a mathematical representation of text that encode its semantic meaning in a vector space. Words with a similar meaning will be clustered closer together in this multidimensional space. Vector databases, such as https://www.mongodb.com/products/platform/atlas-vector-search[MongoDB Atlas^], have the ability to query vector embeddings to retrieve texts with a similar semantic meaning. A famous example of this being: `king - man + woman = queen`.
+The acquired information, such as documents and webpages, is split into smaller text chunks and stored in MongoDB Atlas along with their vector embeddings. These embeddings, which encode the semantic meaning of text in a multidimensional space, enable efficient semantic search. MongoDB Atlas enables queries based on vector embeddings to retrieve texts with similar semantic meaning.
 
-. The retrieval of relevant contextual information from a vector database (semantic search), and the passing of that information alongside a user's question (prompt) to the large language model to improve the model's generated answer.
-
-In this lab, you'll learn how to build a stream processing pipeline using the Redpanda Platform to add https://platform.openai.com/docs/guides/embeddings[OpenAI text embeddings^] to messages as they stream through Redpanda on their way to a MongoDB Atlas vector database. As part of the solution, you'll also use the https://www.langchain.com/[LangChain^] framework to acquire and send new information to Redpanda, and to build the prompt that retrieves relevant texts from the vector database and uses that context to query OpenAI's `gpt-4o` model.
+- *Retrieval of relevant contextual information*: In this phase, contextual information relevant to the user's question (prompt) is retrieved from MongoDB Atlas through semantic search. This contextual information is then passed alongside the user's question to OpenAI's large language model. OpenAI's language model leverages this additional context to improve the quality and relevance of its generated answers. This retrieval and augmentation of contextual information enhance the model's understanding and enable it to produce more accurate and contextually relevant responses.
 
 == Prerequisites
 
-=== Local environment
+You must have the following:
+
+- https://cloud.redpanda.com/sign-up[Redpanda Cloud account^]
+
+- https://platform.openai.com/signup/[OpenAI developer platform account^]
++
+NOTE: Make sure your account has https://help.openai.com/en/articles/9038407-how-can-i-set-up-billing-for-my-account[available credits].
+
+- https://account.mongodb.com/account/register[MongoDB Atlas account^]
+
+- https://www.python.org/downloads[Python 3^]
+
+- https://go.dev/doc/install[Golang^]
+
+== Set up a local environment
 
 . Clone this repository:
 +
@@ -33,14 +45,22 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/connect-plugins/processor/embeddings/openai
 ----
 
-=== Redpanda Serverless
+== Set up Redpanda Serverless
 
-Log in to your Redpanda Cloud account (or sign up if you don't have one) and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless^] cluster. Make a note of the bootstrap server URL, and create a new user with permissions (ACLs) to access a topic named `documents` and a consumer group named `connect`. Add the cluster connection information to a local `.env` file:
+. Log in to your Redpanda Cloud account and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless^] cluster.
 
+. Make a note of the bootstrap server URL.
+
+. Create a topic called `documents` with the default settings.
+
+. Create a new user with permissions (ACLs) to access a topic named `documents` and a consumer group named `connect`.
+
+. Add the cluster connection information to a local `.env` file:
++
 [source,bash]
 ----
 cat > demo/.env<< EOF
-REDPANDA_SERVERS="<bootstrap_server_url>"
+REDPANDA_SERVERS="<bootstrap-server-url>"
 REDPANDA_USER="<username>"
 REDPANDA_PASS="<password>"
 REDPANDA_TOPICS="documents"
@@ -48,10 +68,12 @@ REDPANDA_TOPICS="documents"
 EOF
 ----
 
-=== OpenAI API
+=== Set up OpenAI API
 
-Log in to your OpenAI developer platform account (or sign up if you don't have one) and create a new https://platform.openai.com/api-keys[Project API key^]. Add the secret key to the local `.env` file:
+. Log in to your OpenAI developer platform account and create a new https://platform.openai.com/api-keys[Project API key^].
 
+. Add the secret key to the local `.env` file:
++
 [source,bash]
 ----
 cat >> demo/.env<< EOF
@@ -62,16 +84,18 @@ OPENAI_MODEL="gpt-4o"
 EOF
 ----
 
-=== MongoDB Atlas
+== Set up MongoDB Atlas
 
-Log in to your MongoDB Atlas account (or sign up if you don't have one) and deploy a new https://www.mongodb.com/docs/atlas/getting-started[free cluster^] for development purposes. Create a new database named `VectorStore`, a new collection in that database named `Embeddings`, and an Atlas Vector Search index with the following JSON configuration:
+. Log in to your MongoDB Atlas account and deploy a new https://www.mongodb.com/docs/atlas/getting-started[free cluster^] for development purposes.
 
+. Create a new database named `VectorStore`, a new collection in that database named `Embeddings`, and an Atlas Vector Search index with the following JSON configuration:
++
 [source,json]
 ----
 {
   "fields": [
     {
-      "numDimensions": 1536, //text-embedding-3-small
+      "numDimensions": 1536,
       "path": "embedding",
       "similarity": "euclidean",
       "type": "vector"
@@ -80,13 +104,13 @@ Log in to your MongoDB Atlas account (or sign up if you don't have one) and depl
 }
 ----
 
-Add the Atlas connection information to the local `.env` file:
-
+. Add the Atlas connection information to the local `.env` file:
++
 [source,bash]
 ----
 cat >> demo/.env<< EOF
 # Connection string for MongoDB Driver for Go:
-ATLAS_CONNECTION_STRING="mongodb+srv://<username>:<password>@vectorstore.ozmdcxv.mongodb.net/?retryWrites=false"
+ATLAS_CONNECTION_STRING="<connection-string>"
 ATLAS_DB="VectorStore"
 ATLAS_COLLECTION="Embeddings"
 ATLAS_INDEX="vector_index"
@@ -94,14 +118,13 @@ ATLAS_INDEX="vector_index"
 EOF
 ----
 
-=== Set environment variables
+== Set the environment variables
 
 If you've completed all the prerequisites, your `.env` file should look like this:
 
 [source,bash]
 ----
-cat demo/.env
-REDPANDA_SERVERS="<bootstrap_server_url>"
+REDPANDA_SERVERS="<bootstrap-server-url>"
 REDPANDA_USER="<username>"
 REDPANDA_PASS="<password>"
 REDPANDA_TOPICS="documents"
@@ -110,20 +133,20 @@ OPENAI_API_KEY="<secret_key>"
 OPENAI_EMBEDDING_MODEL="text-embedding-3-small"
 OPENAI_MODEL="gpt-4o"
 
-ATLAS_CONNECTION_STRING="mongodb+srv://<username>:<password>@vectorstore.ozmdcxv.mongodb.net/?retryWrites=false"
+ATLAS_CONNECTION_STRING="<connection-string>"
 ATLAS_DB="VectorStore"
 ATLAS_COLLECTION="Embeddings"
 ATLAS_INDEX="vector_index"
 ----
 
-The Python files in the `demo` directory will load these variables from the `.env` file, but you also need to set them in the environment so that Redpanda Connect can read them:
+To check your `.env` file:
 
 [source,bash]
 ----
-export $(grep -v '^#' ./demo/.env | xargs)
+cat demo/.env
 ----
 
-=== Create Python virtual environment
+=== Python virtual environment
 
 Create the Python virtual environment in the `demo` directory:
 
@@ -133,6 +156,7 @@ cd demo
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt
+exit
 ----
 
 == Run the lab
@@ -145,13 +169,14 @@ This lab has three parts:
 
 === Start Redpanda Connect
 
-In a new terminal window, start Redpanda Connect with the custom OpenAI processor:
+Start Redpanda Connect with the custom OpenAI processor:
 
 [source,bash]
 ----
+cd ..
+export $(grep -v '^#' ./demo/.env | xargs)
 go test
 go build
-export $(grep -v '^#' ./demo/.env | xargs)
 ./redpanda-connect-embeddings -c demo/atlas_demo.yaml --log.level debug
 ----
 
@@ -186,7 +211,7 @@ You can view the text and embeddings in the https://cloud.mongodb.com[Atlas cons
 
 === Run the retrieval and generation chain
 
-In a third terminal window, run the retrieval chain and ask OpenAI a question:
+Run the retrieval chain and ask OpenAI a question:
 
 [source,bash]
 ----
@@ -197,6 +222,8 @@ python retrieve_generate.py -q """
   and on what date was this announced?
   """
 ----
+
+It takes a few seconds for the following response to appear in the output:
 
 *Question*: Which football players made the provisional England national squad for the Euro 2024 tournament, and on what date was this announced?
 
@@ -250,3 +277,7 @@ python retrieve_generate.py -q """
 - Ollie Watkins (Aston Villa)
 
 This announcement was made on May 21, 2024.
+
+== Next steps
+
+Learn more about xref:redpanda-connect:ROOT:about.adoc[Redpanda Connect] and explore the other xref:redpanda-connect:components:catalog.adoc[available connectors].
