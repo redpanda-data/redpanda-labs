@@ -68,7 +68,7 @@ REDPANDA_TOPICS="documents"
 EOF
 ----
 
-=== Set up OpenAI API
+== Set up OpenAI API
 
 . Log in to your OpenAI developer platform account and create a new https://platform.openai.com/api-keys[Project API key^].
 
@@ -120,7 +120,7 @@ EOF
 
 == Set the environment variables
 
-If you've completed all the prerequisites, your `.env` file should look like this:
+Your `.env` file should now look like this:
 
 [source,bash]
 ----
@@ -146,7 +146,7 @@ To check your `.env` file:
 cat demo/.env
 ----
 
-=== Python virtual environment
+== Create a Python virtual environment
 
 Create the Python virtual environment in the `demo` directory:
 
