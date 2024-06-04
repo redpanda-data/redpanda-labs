@@ -1,8 +1,13 @@
-module benthos-embeddings
+module redpanda-connect-embeddings
 
-go 1.20
+go 1.21
 
-require github.com/benthosdev/benthos/v4 v4.27.0
+toolchain go1.22.3
+
+require (
+	github.com/redpanda-data/benthos/v4 v4.28.1
+	github.com/redpanda-data/connect/v4 v4.28.0
+)
 
 require (
 	github.com/IBM/sarama v1.42.2 // indirect
@@ -13,7 +18,7 @@ require (
 	github.com/eapache/go-resiliency v1.5.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
@@ -58,7 +63,6 @@ require (
 	github.com/Jeffail/gabs/v2 v2.7.0 // indirect
 	github.com/Jeffail/shutdown v1.0.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
@@ -68,13 +72,11 @@ require (
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
-	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gorilla/handlers v1.5.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/mpvl/unique v0.0.0-20150818121801-cbe035fff7de // indirect
 	github.com/nsf/jsondiff v0.0.0-20210926074059-1e845ec5d249 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect

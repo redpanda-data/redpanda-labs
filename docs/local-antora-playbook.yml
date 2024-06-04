@@ -14,6 +14,8 @@ content:
   sources:
   - url: https://github.com/redpanda-data/documentation
     branches: [main, v/*, api, site-search, shared]
+  - url: https://github.com/redpanda-data/rp-connect-docs
+    branches: [main]
   - url: ~+
     branches: HEAD
     start_paths: [docs,'*/docs']
@@ -29,9 +31,11 @@ asciidoc:
   - '@redpanda-data/docs-extensions-and-macros/macros/config-ref'
   - '@redpanda-data/docs-extensions-and-macros/macros/helm-ref'
   - '@redpanda-data/docs-extensions-and-macros/asciidoc-extensions/add-line-numbers-highlights'
+  - '@redpanda-data/docs-extensions-and-macros/macros/rp-connect-components'
 antora:
   extensions:
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-categories'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
