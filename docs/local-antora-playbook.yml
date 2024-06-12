@@ -16,6 +16,7 @@ content:
     branches: [main, v/*, api, site-search, shared]
   - url: https://github.com/redpanda-data/rp-connect-docs
     branches: [main]
+  # https://docs.antora.org/antora/latest/playbook/content-source-url/#local-urls
   - url: ~+
     branches: HEAD
     start_paths: [docs,'*/docs']
@@ -36,6 +37,7 @@ antora:
   extensions:
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-categories'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/unpublish-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
