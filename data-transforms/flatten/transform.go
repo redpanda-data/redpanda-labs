@@ -60,14 +60,17 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 		fmt.Fprintln(w, "{")
 		for index, kv := range kvs {
 			isLastElement := len(kvs) - 1 == index
-			descend(w, kv, 0, kv.Key, delim, isLastElement, false)
+			descend(w, kv, 0, kv.Key, delim, false)
+			if ! isLastElement {
+				fmt.Fprint(w, ",\n")
+			}
 		}
-		fmt.Fprintln(w, "}")
+		fmt.Fprintln(w, "\n}")
 	}
 	return nil
 }
 
-func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, isLastElement bool, isLastSubElement bool) {
+func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, isLastSubElement bool) {
 
 	switch kv.Value.(type) {
 	case string:
@@ -77,13 +80,17 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, is
 		// Somehow, this case doesn't match the jstream.KVS case.
 		// If it did, this would all break :D
 		fmt.Fprintf(w, "  \"%s\": [", key)
-		for _, v := range kv.Value.([]interface{}) {
+		for index, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
 			case string:
 				fmt.Fprintf(w, "\"%s\"", v)
 				break
 			default:
 				fmt.Fprintf(w, "%v", v)
+			}
+			var isLastElementList = len(kv.Value.([]interface{})) - 1 == index
+			if ! isLastElementList {
+				fmt.Fprint(w, ", ")
 			}
 		}
 		fmt.Fprintf(w, "]")
@@ -92,8 +99,11 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, is
 		kvs := kv.Value.(jstream.KVS)
 		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
-			isLastSubElement = len(kvs) - 1 == index
-			descend(w, kv, depth+1, new_key, delim, isLastElement, len(kvs) - 1 == index)
+			var isLastSubElementLocal = len(kvs) - 1 == index
+			descend(w, kv, depth+1, new_key, delim, isLastSubElementLocal)
+			if ! isLastSubElementLocal {
+				fmt.Fprint(w, ",\n")
+			}
 		}
 		// fallthrough
 	default:
@@ -103,11 +113,5 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, is
 			fmt.Fprintf(w, "  \"%s\": null", key)
 		}
 
-	}
-
-	if isLastElement && isLastSubElement {
-		fmt.Fprint(w, "\n")
-	} else {
-		fmt.Fprint(w, ",\n")
 	}
 }
