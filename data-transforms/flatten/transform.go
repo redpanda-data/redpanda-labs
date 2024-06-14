@@ -60,7 +60,7 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 		fmt.Fprintln(w, "{")
 		for index, kv := range kvs {
 			isLastElement := len(kvs) - 1 == index
-			descend(w, kv, 0, kv.Key, delim, false)
+			descend(w, kv, 0, kv.Key, delim)
 			if ! isLastElement {
 				fmt.Fprint(w, ",\n")
 			}
@@ -70,7 +70,7 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 	return nil
 }
 
-func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, isLastSubElement bool) {
+func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 	switch kv.Value.(type) {
 	case string:
@@ -97,10 +97,15 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, is
 		break
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
+		if len(kvs) == 0 {
+			fmt.Fprintf(w, "  \"%s\": {}", key)
+			return
+		}
+
 		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
 			var isLastSubElementLocal = len(kvs) - 1 == index
-			descend(w, kv, depth+1, new_key, delim, isLastSubElementLocal)
+			descend(w, kv, depth+1, new_key, delim)
 			if ! isLastSubElementLocal {
 				fmt.Fprint(w, ",\n")
 			}
@@ -112,6 +117,5 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, is
 		} else {
 			fmt.Fprintf(w, "  \"%s\": null", key)
 		}
-
 	}
 }
