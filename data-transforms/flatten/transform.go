@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/bcicen/jstream"
-	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 	"io"
 	"os"
+
+	"github.com/bcicen/jstream"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 )
 
 const DELIM_KEY = "RP_FLATTEN_DELIM"
@@ -58,30 +59,24 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 		kvs := mv.Value.(jstream.KVS)
 		fmt.Fprintln(w, "{")
 		for _, kv := range kvs {
-			descend(w, kv, 0, kv.Key, delim, true)
+			descend(w, kv, 0, kv.Key, delim)
 		}
 		fmt.Fprintln(w, "\n}")
 	}
 	return nil
 }
 
-func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, first bool) {
-	if !first {
-		fmt.Fprintln(w, ",")
-	}
+func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 	switch kv.Value.(type) {
 	case string:
-		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
-		break
+		fmt.Fprintf(w, "  \"%s\": \"%s\",\n", key, kv.Value)
+		return
 	case []interface{}:
 		// Somehow, this case doesn't match the jstream.KVS case.
 		// If it did, this would all break :D
 		fmt.Fprintf(w, "  \"%s\": [", key)
-		for i, v := range kv.Value.([]interface{}) {
-			if i > 0 {
-				fmt.Fprintf(w, ", ")
-			}
+		for _, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
 			case string:
 				fmt.Fprintf(w, "\"%s\"", v)
@@ -91,21 +86,19 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, fi
 			}
 		}
 		fmt.Fprintf(w, "]")
-		break
+		return
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
-		nextFirst := true
 		for _, kv := range kvs {
 			new_key := key + delim + kv.Key
-			descend(w, kv, depth+1, new_key, delim, nextFirst)
-			nextFirst = false
+			descend(w, kv, depth+1, new_key, delim)
 		}
 		// fallthrough
 	default:
 		if kv.Value != nil {
-			fmt.Fprintf(w, "  \"%s\": %v", key, kv.Value)
+			fmt.Fprintf(w, "  \"%s\": %v,\n", key, kv.Value)
 		} else {
-			fmt.Fprintf(w, "  \"%s\": null", key)
+			fmt.Fprintf(w, "  \"%s\": null,\n", key)
 		}
 	}
 }
