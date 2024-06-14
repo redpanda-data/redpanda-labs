@@ -33,6 +33,27 @@ var sampleJsonWithRootElements = `{
 }
 `
 
+var complexJson = `{
+  "id": 1234,
+  "content": {
+    "id": 123,
+    "name": {
+      "first": "Dave",
+      "middle": null
+    }
+  },
+  "data": [1, "fish", 2, "fish"],
+  "more_data": {
+    "id": 123,
+    "name": {
+      "first": "Bob",
+      "middle": "Jr"
+    }
+  },
+  "content": "test"
+}
+`
+
 var newFlattenedJson = `{
   "some_content": "test",
   "id:": 1234,
@@ -49,6 +70,19 @@ var flattenedJson = `{
   "content.name.middle": null,
   "content.name.last": "Voutila",
   "content.data": [1, "fish", 2, "fish"]
+}
+`
+
+var flattenedComplexJson = `{
+  "id": 1234,
+  "content.id": 123,
+  "content.name.first": "Dave",
+  "content.name.middle": null,
+  "data": [1, "fish", 2, "fish"],
+  "more_data.id": 123,
+  "more_data.name.first": "Bob",
+  "more_data.name.middle": "Jr",
+  "content": "test"
 }
 `
 
@@ -80,5 +114,22 @@ func TestJsonStreamWithRootElements(t *testing.T) {
 
   if strings.Compare(newFlattenedJson, result) != 0 {
     t.Errorf("expected:\n%sgot:\n%s", newFlattenedJson, result)
+  }
+}
+
+
+func TestComplexJsonStream(t *testing.T) {
+  bufIn := bytes.NewBufferString(complexJson)
+  bufOut := bytes.NewBuffer([]byte{})
+
+  err := Flatten(bufIn, bufOut, ".")
+  if err != nil {
+    t.Fatal(err)
+  }
+
+  result := bufOut.String()
+
+  if strings.Compare(flattenedComplexJson, result) != 0 {
+    t.Errorf("expected:\n%sgot:\n%s", flattenedComplexJson, result)
   }
 }
