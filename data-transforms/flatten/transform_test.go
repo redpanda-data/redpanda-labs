@@ -33,7 +33,7 @@ var sampleJsonWithRootElements = `{
 }
 `
 
-var complexJson = `{
+var sampleComplexJson = `{
   "id": 1234,
   "content": {
     "id": 123,
@@ -45,14 +45,18 @@ var complexJson = `{
   "data": [1, "fish", 2, "fish"],
   "more_data": {
     "id": 123,
+    "empty": {},
     "name": {
       "first": "Bob",
       "middle": "Jr"
     }
   },
-  "content": "test"
+  "content": "test",
+  "empty_again": {}
 }
 `
+
+
 
 var newFlattenedJson = `{
   "some_content": "test",
@@ -80,9 +84,11 @@ var flattenedComplexJson = `{
   "content.name.middle": null,
   "data": [1, "fish", 2, "fish"],
   "more_data.id": 123,
+  "more_data.empty": {},
   "more_data.name.first": "Bob",
   "more_data.name.middle": "Jr",
-  "content": "test"
+  "content": "test",
+  "empty_again": {}
 }
 `
 
@@ -119,7 +125,7 @@ func TestJsonStreamWithRootElements(t *testing.T) {
 
 
 func TestComplexJsonStream(t *testing.T) {
-  bufIn := bytes.NewBufferString(complexJson)
+  bufIn := bytes.NewBufferString(sampleComplexJson)
   bufOut := bytes.NewBuffer([]byte{})
 
   err := Flatten(bufIn, bufOut, ".")
