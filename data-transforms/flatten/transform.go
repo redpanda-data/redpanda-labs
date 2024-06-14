@@ -58,20 +58,21 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 	for mv := range decoder.ObjectAsKVS().Stream() {
 		kvs := mv.Value.(jstream.KVS)
 		fmt.Fprintln(w, "{")
-		for _, kv := range kvs {
-			descend(w, kv, 0, kv.Key, delim)
+		for index, kv := range kvs {
+			isLastElement := len(kvs) - 1 == index
+			descend(w, kv, 0, kv.Key, delim, isLastElement, false)
 		}
-		fmt.Fprintln(w, "\n}")
+		fmt.Fprintln(w, "}")
 	}
 	return nil
 }
 
-func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
+func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, isLastElement bool, isLastSubElement bool) {
 
 	switch kv.Value.(type) {
 	case string:
-		fmt.Fprintf(w, "  \"%s\": \"%s\",\n", key, kv.Value)
-		return
+		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
+		break
 	case []interface{}:
 		// Somehow, this case doesn't match the jstream.KVS case.
 		// If it did, this would all break :D
@@ -86,19 +87,27 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 			}
 		}
 		fmt.Fprintf(w, "]")
-		return
+		break
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
-		for _, kv := range kvs {
+		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
-			descend(w, kv, depth+1, new_key, delim)
+			isLastSubElement = len(kvs) - 1 == index
+			descend(w, kv, depth+1, new_key, delim, isLastElement, len(kvs) - 1 == index)
 		}
 		// fallthrough
 	default:
 		if kv.Value != nil {
-			fmt.Fprintf(w, "  \"%s\": %v,\n", key, kv.Value)
+			fmt.Fprintf(w, "  \"%s\": %v", key, kv.Value)
 		} else {
-			fmt.Fprintf(w, "  \"%s\": null,\n", key)
+			fmt.Fprintf(w, "  \"%s\": null", key)
 		}
+
+	}
+
+	if isLastElement && isLastSubElement {
+		fmt.Fprint(w, "\n")
+	} else {
+		fmt.Fprint(w, ",\n")
 	}
 }
