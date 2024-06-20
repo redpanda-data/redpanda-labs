@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/bcicen/jstream"
-	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 	"io"
 	"os"
+
+	"github.com/bcicen/jstream"
+	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
 )
 
 const DELIM_KEY = "RP_FLATTEN_DELIM"
@@ -57,18 +58,19 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 	for mv := range decoder.ObjectAsKVS().Stream() {
 		kvs := mv.Value.(jstream.KVS)
 		fmt.Fprintln(w, "{")
-		for _, kv := range kvs {
-			descend(w, kv, 0, kv.Key, delim, true)
+		for index, kv := range kvs {
+			isLastElement := len(kvs) - 1 == index
+			descend(w, kv, 0, kv.Key, delim)
+			if ! isLastElement {
+				fmt.Fprint(w, ",\n")
+			}
 		}
 		fmt.Fprintln(w, "\n}")
 	}
 	return nil
 }
 
-func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, first bool) {
-	if !first {
-		fmt.Fprintln(w, ",")
-	}
+func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 	switch kv.Value.(type) {
 	case string:
@@ -78,10 +80,7 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, fi
 		// Somehow, this case doesn't match the jstream.KVS case.
 		// If it did, this would all break :D
 		fmt.Fprintf(w, "  \"%s\": [", key)
-		for i, v := range kv.Value.([]interface{}) {
-			if i > 0 {
-				fmt.Fprintf(w, ", ")
-			}
+		for index, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
 			case string:
 				fmt.Fprintf(w, "\"%s\"", v)
@@ -89,16 +88,27 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string, fi
 			default:
 				fmt.Fprintf(w, "%v", v)
 			}
+			var isLastElementList = len(kv.Value.([]interface{})) - 1 == index
+			if ! isLastElementList {
+				fmt.Fprint(w, ", ")
+			}
 		}
 		fmt.Fprintf(w, "]")
 		break
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
-		nextFirst := true
-		for _, kv := range kvs {
+		if len(kvs) == 0 {
+			fmt.Fprintf(w, "  \"%s\": {}", key)
+			return
+		}
+
+		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
-			descend(w, kv, depth+1, new_key, delim, nextFirst)
-			nextFirst = false
+			var isLastSubElementLocal = len(kvs) - 1 == index
+			descend(w, kv, depth+1, new_key, delim)
+			if ! isLastSubElementLocal {
+				fmt.Fprint(w, ",\n")
+			}
 		}
 		// fallthrough
 	default:
