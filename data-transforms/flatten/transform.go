@@ -72,7 +72,7 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 	switch kv.Value.(type) {
 	case string:
 		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
-		break
+		return
 	case []interface{}:
 		isNodeFlattened := flattenListOfJsonObjects(w, kv, depth, key, delim)
 		// If it did, this would all break :D
@@ -81,14 +81,12 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 			switch v.(type) {
 			case string:
 				fmt.Fprintf(w, "\"%s\"", v)
-				break
 			default:
 				fmt.Fprintf(w, "%v", v)
 			}
 			handleLastElement(w, len(kv.Value.([]interface{})), index, ", ")
 		}
 		fmt.Fprintf(w, "]")
-		break
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
 		if len(kvs) == 0 {
