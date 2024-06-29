@@ -75,7 +75,9 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 		return
 	case []interface{}:
 		isNodeFlattened := flattenListOfJsonObjects(w, kv, depth, key, delim)
-		// If it did, this would all break :D
+		if isNodeFlattened {
+			return
+		}
 		fmt.Fprintf(w, "  \"%s\": [", key)
 		for index, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
