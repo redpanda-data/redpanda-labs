@@ -115,3 +115,26 @@ func handleLastElement(w io.Writer, listSize int, index int, endingString string
 		fmt.Fprintf(w, "%s", endingString)
 	}
 }
+
+
+func flattenListOfJsonObjects(w io.Writer, kv jstream.KV, depth int, key string, delim string) bool {
+	isNodeFlattened := false
+	for parent_index, v := range kv.Value.([]interface{}) {
+		switch v.(type) {
+		case jstream.KVS:
+			isNodeFlattened = true
+			kvs := v.(jstream.KVS)
+
+			for index, kv := range kvs {
+				new_key := key + delim + fmt.Sprint(parent_index) + delim + kv.Key
+				descend(w, kv, depth+1, new_key, delim)
+				handleLastElement(w, len(kvs), index, ",\n")
+			}
+			handleLastElement(w, len(kv.Value.([]interface{})), parent_index, ",\n")
+
+		default:
+			return isNodeFlattened
+		}
+	}
+	return isNodeFlattened
+}
