@@ -119,3 +119,11 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 		}
 	}
 }
+
+
+func handleLastElement(w io.Writer, listSize int, index int, endingString string){
+	var isLastSubElementLocal = listSize - 1 == index
+	if ! isLastSubElementLocal {
+		fmt.Fprintf(w, "%s", endingString)
+	}
+}
