@@ -59,11 +59,8 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 		kvs := mv.Value.(jstream.KVS)
 		fmt.Fprintln(w, "{")
 		for index, kv := range kvs {
-			isLastElement := len(kvs) - 1 == index
 			descend(w, kv, 0, kv.Key, delim)
-			if ! isLastElement {
-				fmt.Fprint(w, ",\n")
-			}
+			handleLastElement(w, len(kvs), index, ",\n")
 		}
 		fmt.Fprintln(w, "\n}")
 	}
@@ -77,7 +74,7 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
 		break
 	case []interface{}:
-		// Somehow, this case doesn't match the jstream.KVS case.
+		isNodeFlattened := flattenListOfJsonObjects(w, kv, depth, key, delim)
 		// If it did, this would all break :D
 		fmt.Fprintf(w, "  \"%s\": [", key)
 		for index, v := range kv.Value.([]interface{}) {
@@ -88,10 +85,7 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 			default:
 				fmt.Fprintf(w, "%v", v)
 			}
-			var isLastElementList = len(kv.Value.([]interface{})) - 1 == index
-			if ! isLastElementList {
-				fmt.Fprint(w, ", ")
-			}
+			handleLastElement(w, len(kv.Value.([]interface{})), index, ", ")
 		}
 		fmt.Fprintf(w, "]")
 		break
@@ -104,13 +98,9 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
-			var isLastSubElementLocal = len(kvs) - 1 == index
 			descend(w, kv, depth+1, new_key, delim)
-			if ! isLastSubElementLocal {
-				fmt.Fprint(w, ",\n")
-			}
+			handleLastElement(w, len(kvs), index, ",\n")
 		}
-		// fallthrough
 	default:
 		if kv.Value != nil {
 			fmt.Fprintf(w, "  \"%s\": %v", key, kv.Value)
