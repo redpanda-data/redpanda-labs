@@ -35,6 +35,7 @@ var sampleJsonWithRootElements = `{
 
 var sampleComplexJson = `{
   "id": 1234,
+  "this": "is\na\nstring",
   "content": {
     "id": 123,
     "name": {
@@ -89,6 +90,7 @@ var flattenedJson = `{
 
 var flattenedComplexJson = `{
   "id": 1234,
+  "this": "is a string",
   "content.id": 123,
   "content.name.first": "Dave",
   "content.name.middle": null,

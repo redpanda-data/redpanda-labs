@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/bcicen/jstream"
 	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
@@ -71,7 +72,9 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 	switch kv.Value.(type) {
 	case string:
-		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
+		stringValue := kv.Value.(string)
+		stringValue = strings.Replace(stringValue, "\n", " ", -1)
+		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, stringValue)
 		return
 	case []interface{}:
 		isNodeFlattened := flattenListOfJsonObjects(w, kv, depth, key, delim)
@@ -82,7 +85,9 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 		for index, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
 			case string:
-				fmt.Fprintf(w, "\"%s\"", v)
+				stringValue := v.(string)
+				stringValue = strings.Replace(stringValue, "\n", " ", -1)
+				fmt.Fprintf(w, "\"%s\"", stringValue)
 			default:
 				fmt.Fprintf(w, "%v", v)
 			}
