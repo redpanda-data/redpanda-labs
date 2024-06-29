@@ -40,7 +40,17 @@ var sampleComplexJson = `{
     "name": {
       "first": "Dave",
       "middle": null
-    }
+    },
+    "addresses": [
+      {
+        "street":"someStreet",
+        "appartments":[]
+      },
+      {
+        "street":"someOtherStreet",
+        "appartments":[ 1, 2, 3, 4 ]
+      }
+    ]
   },
   "data": [1, "fish", 2, "fish"],
   "more_data": {
@@ -82,6 +92,10 @@ var flattenedComplexJson = `{
   "content.id": 123,
   "content.name.first": "Dave",
   "content.name.middle": null,
+  "content.addresses.0.street": "someStreet",
+  "content.addresses.0.appartments": [],
+  "content.addresses.1.street": "someOtherStreet",
+  "content.addresses.1.appartments": [1, 2, 3, 4],
   "data": [1, "fish", 2, "fish"],
   "more_data.id": 123,
   "more_data.empty": {},
