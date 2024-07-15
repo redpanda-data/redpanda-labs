@@ -1,8 +1,11 @@
 name: redpanda-labs
-title: Redpanda Labs
+title: Labs
 version: ~
 asciidoc:
   attributes:
+    page-header-data:
+      order: 4
+      color: '#065986'
     full-version: 24.1.1
 
 
