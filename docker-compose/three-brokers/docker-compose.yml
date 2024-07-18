@@ -1,4 +1,3 @@
-version: "3.7"
 networks:
   redpanda_network:
     driver: bridge
