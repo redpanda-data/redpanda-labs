@@ -1,5 +1,4 @@
 ---
-version: "3.7"
 name: redpanda-enterprise
 networks:
   redpanda_network:
