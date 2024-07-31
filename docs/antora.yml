@@ -5,7 +5,7 @@ asciidoc:
   attributes:
     page-header-data:
       order: 4
-      color: '#0E9384'
+      color: '#227093'
     full-version: 24.1.1
 
 
