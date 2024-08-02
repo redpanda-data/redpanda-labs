@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/bcicen/jstream"
 	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
@@ -59,11 +60,8 @@ func Flatten(r io.Reader, w io.Writer, delim string) error {
 		kvs := mv.Value.(jstream.KVS)
 		fmt.Fprintln(w, "{")
 		for index, kv := range kvs {
-			isLastElement := len(kvs) - 1 == index
 			descend(w, kv, 0, kv.Key, delim)
-			if ! isLastElement {
-				fmt.Fprint(w, ",\n")
-			}
+			handleLastElement(w, len(kvs), index, ",\n")
 		}
 		fmt.Fprintln(w, "\n}")
 	}
@@ -74,27 +72,28 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 	switch kv.Value.(type) {
 	case string:
-		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, kv.Value)
-		break
+		stringValue := kv.Value.(string)
+		stringValue = strings.Replace(stringValue, "\n", " ", -1)
+		fmt.Fprintf(w, "  \"%s\": \"%s\"", key, stringValue)
+		return
 	case []interface{}:
-		// Somehow, this case doesn't match the jstream.KVS case.
-		// If it did, this would all break :D
+		isNodeFlattened := flattenListOfJsonObjects(w, kv, depth, key, delim)
+		if isNodeFlattened {
+			return
+		}
 		fmt.Fprintf(w, "  \"%s\": [", key)
 		for index, v := range kv.Value.([]interface{}) {
 			switch v.(type) {
 			case string:
-				fmt.Fprintf(w, "\"%s\"", v)
-				break
+				stringValue := v.(string)
+				stringValue = strings.Replace(stringValue, "\n", " ", -1)
+				fmt.Fprintf(w, "\"%s\"", stringValue)
 			default:
 				fmt.Fprintf(w, "%v", v)
 			}
-			var isLastElementList = len(kv.Value.([]interface{})) - 1 == index
-			if ! isLastElementList {
-				fmt.Fprint(w, ", ")
-			}
+			handleLastElement(w, len(kv.Value.([]interface{})), index, ", ")
 		}
 		fmt.Fprintf(w, "]")
-		break
 	case jstream.KVS:
 		kvs := kv.Value.(jstream.KVS)
 		if len(kvs) == 0 {
@@ -104,13 +103,9 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 
 		for index, kv := range kvs {
 			new_key := key + delim + kv.Key
-			var isLastSubElementLocal = len(kvs) - 1 == index
 			descend(w, kv, depth+1, new_key, delim)
-			if ! isLastSubElementLocal {
-				fmt.Fprint(w, ",\n")
-			}
+			handleLastElement(w, len(kvs), index, ",\n")
 		}
-		// fallthrough
 	default:
 		if kv.Value != nil {
 			fmt.Fprintf(w, "  \"%s\": %v", key, kv.Value)
@@ -118,4 +113,35 @@ func descend(w io.Writer, kv jstream.KV, depth int, key string, delim string) {
 			fmt.Fprintf(w, "  \"%s\": null", key)
 		}
 	}
+}
+
+
+func handleLastElement(w io.Writer, listSize int, index int, endingString string){
+	var isLastSubElementLocal = listSize - 1 == index
+	if ! isLastSubElementLocal {
+		fmt.Fprintf(w, "%s", endingString)
+	}
+}
+
+
+func flattenListOfJsonObjects(w io.Writer, kv jstream.KV, depth int, key string, delim string) bool {
+	isNodeFlattened := false
+	for parent_index, v := range kv.Value.([]interface{}) {
+		switch v.(type) {
+		case jstream.KVS:
+			isNodeFlattened = true
+			kvs := v.(jstream.KVS)
+
+			for index, kv := range kvs {
+				new_key := key + delim + fmt.Sprint(parent_index) + delim + kv.Key
+				descend(w, kv, depth+1, new_key, delim)
+				handleLastElement(w, len(kvs), index, ",\n")
+			}
+			handleLastElement(w, len(kv.Value.([]interface{})), parent_index, ",\n")
+
+		default:
+			return isNodeFlattened
+		}
+	}
+	return isNodeFlattened
 }
