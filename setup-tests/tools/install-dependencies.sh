@@ -31,7 +31,6 @@ install_rust() {
 
 # Function to check if expect and jq are installed and install them if they're not
 ensure_dependencies_installed() {
-    local missing_deps=0
 
     if ! command -v expect &> /dev/null; then
         echo "Expect is not installed. Trying to install..."
@@ -61,7 +60,6 @@ ensure_dependencies_installed() {
 
     if ! command -v jq &> /dev/null; then
         echo "jq is not installed. Trying to install..."
-        missing_deps=1
 
         # Install jq based on OS
         case "$(uname -s)" in
@@ -80,11 +78,6 @@ ensure_dependencies_installed() {
 
     install_node
     install_rust
-
-    if [ "$missing_deps" -ne 0 ]; then
-        echo "Installation of missing dependencies failed. Exiting."
-        exit 1
-    fi
 }
 
 # Ensure expect and jq are installed
