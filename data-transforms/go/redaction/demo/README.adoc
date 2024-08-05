@@ -1,0 +1,105 @@
+= Redact Information in JSON Messages
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing, Data Transforms
+:description: Redact personally identifiable information (PII) in topics using data transforms.
+ifndef::env-site[]
+:imagesdir: ../../docs/modules/data-transforms/images/
+endif::[]
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 24.2.1
+:latest-console-version: 2.7.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-redaction-go", "description": "Redact Information in JSON Messages", "cleanup": "../../../../setup-tests/cleanup.json"})
+
+This example shows you how to use Redpanda data transforms to redact information in JSON messages.
+
+The demo runs using Docker Compose, with the following containers:
+
+* `redpanda`: Includes a single Redpanda broker.
+* `console`: Includes Redpanda Console.
+* `owl-shop`: Includes the Owlshop demo application that produces e-commerce data to the Redpanda broker.
+* `transform`: Includes all the requirements for deploying the transforms function to the Redpanda broker, including `rpk`, Go, and the redaction transform code. The source code for the redaction transform is available in the `redaction` directory.
+
+== Prerequisites
+
+You must have https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
+
+== Run the lab
+
+. Clone the repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `data-transforms/redaction/demo/` directory:
++
+[,bash]
+----
+cd redpanda-labs/data-transforms/go/redaction/demo
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
+
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/console/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
+
+. Build the data transforms container:
++
+```bash
+docker compose build
+```
+// (step {"action":"runShell", "command": "docker compose build", "workingDirectory": "."})
+
+. If you are running on an ARM-based device such as the Apple M1 chip, open the `docker-compose.yml` file and uncomment the `platform: 'linux/amd64'` line.
+
+. Start the containers:
++
+```bash
+docker compose up --detach --wait
+```
+// (step {"action":"runShell", "command": "docker compose up --detach --wait", "workingDirectory": "."})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 5000})
+
+. Navigate to http://localhost:8080 to see the Redpanda Console.
+
+. Go to *Topics* and select *owlshop-orders-redacted* and see the redacted orders.
+
+// (step {"action":"checkLink", "url": "http://localhost:8080/topics/owlshop-orders-redacted?p=-1&s=50&o=-1#messages"})
+
+== Clean up
+
+To stop the containers:
+
+```shell
+docker compose down
+```
+
+// (test end)

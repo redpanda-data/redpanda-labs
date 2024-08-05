@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "id": "install-rpk",
+      "description": "Install the latest version of rpk",
+      "steps": [
+        {
+          "action": "runShell",
+          "command": "bash ./tools/install-dependencies.sh"
+        }
+      ]
+    }
+  ]
+}

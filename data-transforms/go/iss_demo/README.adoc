@@ -1,0 +1,210 @@
+= Convert JSON Messages into Avro
+:page-layout: lab
+:env-docker: true
+:page-categories: Development, Stream Processing, Data Transforms
+:description: Query live tracking data from the International Space Station and convert it from JSON to Avro using data transforms.
+// Set the path to content in this lab for both the docs site and the local GitHub README
+:content-url: ./
+ifdef::env-site[]
+:content-url: https://github.com/redpanda-data/redpanda-labs/blob/main/data-transforms/iss_demo/
+endif::[]
+ifndef::env-site[]
+:imagesdir: ../docs/modules/data-transforms/images/
+endif::[]
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 24.2.1
+:latest-console-version: 2.7.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+// ========================AUTOMATED TESTS===================================
+// The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
+
+// (test start {"id":"data-transform-iss-demo-go", "description": "Convert JSON Messages into Avro", "cleanup": "../../../setup-tests/cleanup.json"})
+
+This example shows you how to query live tracking data from the International Space Station and convert it from JSON to Avro using Redpanda data transforms.
+
+This example uses cURL to query data from `api.open-notify.org` which is then piped through to Redpanda using the `rpk` command-line client. When the data is in Redpanda, it's converted from JSON to Avro using the transforms function. Then, you can see the converted data in Redpanda Console.
+
+image::iss_overview.png[Architectural Overview]
+
+== Prerequisites
+
+You must have the following:
+
+- At least version 1.20 of https://go.dev/doc/install[Go^] installed on your host machine.
+- link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
+- https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
+
+== Run the lab
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `data-transforms/iss_demo/` directory:
++
+[,bash]
+----
+cd redpanda-labs/data-transforms/go/iss_demo
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
+
+. Start Redpanda in Docker by running the following command:
++
+```bash
+docker compose up -d --wait
+```
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "."})
+// Wait for the containers to finish getting up and running
+// (step {"action":"wait", "duration": 5000})
+
+. Post the Avro schema to the Schema Registry using a cURL command:
++
+```bash
+./post-schema.sh
+```
+// (step {"action":"runShell", "command": "./post-schema.sh", "workingDirectory": "."})
+
++
+Take a note of the schema ID that is returned from this command. In a clean environment this will be `1`.
+
+. Set up your rpk profile:
++
+```bash
+rpk profile create iss_demo --from-profile profile.yml
+```
+// (step {"action":"runShell", "command": "rpk profile create iss_demo --from-profile profile.yml", "workingDirectory": "."})
++
+[.no-copy]
+----
+Created and switched to new profile "iss_demo".
+----
+
+. Create the required topics `iss_json` and `iss_avro`:
++
+```bash
+rpk topic create iss_json iss_avro
+```
+// (step {"action":"runShell", "command": "rpk topic create iss_json iss_avro"})
+
+. Deploy the transforms function:
++
+```bash
+rpk transform build
+rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
+```
+// (step {"action":"runShell", "command": "rpk transform build", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro", "workingDirectory": "."})
+// Wait for the transform to be processed by Redpanda
+// (step {"action":"wait", "duration": 10000})
++
+This example accepts the following environment variables:
++
+- `SCHEMA_ID` (*required*): The ID of the Avro schema stored in the Redpanda schema registry.
+
+Now, you can test that the data can be converted from JSON to Avro.
+
+. Get a single record representing the location of the ISS:
++
+```bash
+curl http://api.open-notify.org/iss-now.json
+```
+// (step {"action":"checkLink", "url": "http://api.open-notify.org/iss-now.json"})
++
+Example output:
++
+```json
+{"message": "success", "timestamp": 1695753164, "iss_position": {"latitude": "-12.8784", "longitude": "92.2935"}}
+```
+
+. Run `rpk topic produce`:
++
+```bash
+rpk topic produce iss_json
+```
+// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["iss_json", "{\"message\": \"success\", \"timestamp\": 1695753164, \"iss_position\": {\"latitude\": \"-12.8784\", \"longitude\": \"92.2935\"}}"], "workingDirectory": "."})
+
+. Paste the output of the cURL command into the prompt and press kbd:[Ctrl + C] to exit the prompt.
+
+. Consume the Avro topic using `rpk topic consume` and observe that the transforms function has converted it to Avro:
++
+```bash
+rpk topic consume iss_avro --num 1
+```
+// (step {"action":"runShell", "command": "rpk topic consume iss_avro --num 1", "timeout": 10000})
++
+Example output:
++
+```json
+{
+  "topic": "iss_avro",
+  "value": "\u0000\u0000\u0000\u0000\u0001\ufffd\ufffd\u0011\ufffd\ufffd\ufffd)\ufffd\u0010X9\ufffd\ufffd\u0012W@\ufffd\ufffd\ufffd\ufffd\u000c",
+  "timestamp": 1695753212929,
+  "partition": 0,
+  "offset": 0
+}
+```
+
+. Open http://localhost:8080/topics/iss_avro?p=-1&s=50&o=-1#messages[Redpanda Console] to view the decoded data.
++
+image::iss_console.png[Redpanda Console showing the decoded message]
+
+== Files in the example
+
+- link:{content-url}iss.avsc[`iss.avsc`]: Avro schema used for conversion.
+- link:{content-url}profile.yml[`profile.yml`]: Used to configure `rpk` with the `rpk profile` command.
+- link:{content-url}transform.go[`transform.go`]: This is the Golang code that will be compiled to WebAssembly. This code:
+** Initializes the transform, including getting the schema from the Schema Registry and creating the `goavro` codec object (both stored in global variables).
+** Registers the callback `toAvro`.
+** `toAvro` parses the JSON into a struct `iss_now`, converts the struct into a map and then converts the map to Avro binary using the `goavro` codec.
+** Prepends the schema ID using the magic five bytes `0x0` followed by a BigEndian `uint32`.
+** This is all appended to the output slice.
+
+== Clean up
+
+To shut down and delete the containers along with all your cluster data:
+
+```bash
+docker compose down -v
+```
+// (step {"action":"runShell", "command": "rpk profile delete iss_demo"})
+// (test end)
+
+== Next steps
+
+You could set up a loop to poll the location of the ISS and produce it to the `iss_json` topic. For example:
+
+```bash
+while true
+do
+line=`curl http://api.open-notify.org/iss-now.json -s`
+echo $line | rpk topic produce iss_json
+sleep 1
+done
+```
