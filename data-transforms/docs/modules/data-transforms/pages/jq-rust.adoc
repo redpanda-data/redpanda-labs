@@ -1,1 +1,1 @@
-../../../../jq/README.adoc
+../../../../rust/jq/README.adoc

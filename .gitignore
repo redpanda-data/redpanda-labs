@@ -26,4 +26,4 @@ venv/
 .venv
 
 # Redaction docker .env exception
-!data-transforms/redaction/demo/.env
+!data-transforms/go/redaction/demo/.env

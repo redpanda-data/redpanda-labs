@@ -1,1 +1,1 @@
-../../../../ts-converter/README.adoc
+../../../../rust/ts-converter/README.adoc

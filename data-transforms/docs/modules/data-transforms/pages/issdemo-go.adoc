@@ -1,1 +1,1 @@
-../../../../iss_demo/README.adoc
+../../../../go/iss_demo/README.adoc
