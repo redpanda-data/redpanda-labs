@@ -6,6 +6,10 @@
       "steps": [
         {
           "action": "runShell",
+          "command": "npm install"
+        },
+        {
+          "action": "runShell",
           "command": "node ./redpanda-versions/fetch-console.js",
           "setVariables": [
             {
