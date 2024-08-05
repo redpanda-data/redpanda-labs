@@ -1,1 +1,1 @@
-../../../../redaction/demo/README.adoc
+../../../../go/redaction/demo/README.adoc

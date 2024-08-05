@@ -37,14 +37,20 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test data-transforms/flatten
+      - name: Test Go transforms
         if: needs.setup.outputs.data-transforms-go == 'true'
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/go
+          working-directory: ../../
+          config: data-transforms/doc-tests/config.json
+          exit_on_fail: true
 
-      - name: Test data-transforms/flatten
+      - name: Test Rust transforms
         if: needs.setup.outputs.data-transforms-rust == 'true'
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/rust
+          working-directory: ../../
+          config: data-transforms/doc-tests/config.json
+          exit_on_fail: true
