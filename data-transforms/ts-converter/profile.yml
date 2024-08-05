@@ -1,5 +1,3 @@
----
-name: ts-converter
 description: For use with the docker compose file
 kafka_api:
   brokers:

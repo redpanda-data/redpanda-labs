@@ -1,0 +1,15 @@
+{
+  "name": "data-transforms-tutorial",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.js"
+  },
+  "dependencies": {
+    "@redpanda-data/transform-sdk": "1.x"
+  },
+  "devDependencies": {
+    "esbuild": "0.20.x",
+    "esbuild-plugin-polyfill-node": "0.3.x"
+  }
+}

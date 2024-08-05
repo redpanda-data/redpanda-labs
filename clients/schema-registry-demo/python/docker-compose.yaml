@@ -1,4 +1,3 @@
-version: '3.7'
 name: redpanda-sr-demo
 networks:
   redpanda_network:

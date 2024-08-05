@@ -1,4 +1,3 @@
-version: '3.7'
 services:
   redpanda:
     container_name: redpanda

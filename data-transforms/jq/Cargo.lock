@@ -284,9 +284,9 @@ dependencies = [
 
 [[package]]
 name = "redpanda-transform-sdk"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0d6928ffddfd4564aa2d195074d1c5520112551067179f3b7110895999230e"
+checksum = "79bdc61d89cdc71257d19cb043f7e41445c2d7145e5670d6d04f2f9b153396d5"
 dependencies = [
  "redpanda-transform-sdk-sys",
  "redpanda-transform-sdk-types",
@@ -294,9 +294,9 @@ dependencies = [
 
 [[package]]
 name = "redpanda-transform-sdk-sys"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2ce6a5a54f70d55c92e2f271461f270e4850cdde39e7c02b18bafa6c3858cd5"
+checksum = "71f612fde3e45816e987495c6a323b2db6eb418eac16aa5688ed77150179cc76"
 dependencies = [
  "redpanda-transform-sdk-types",
  "redpanda-transform-sdk-varint",
@@ -304,15 +304,15 @@ dependencies = [
 
 [[package]]
 name = "redpanda-transform-sdk-types"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3afd5dd251d3ccc61fa1c143fd19bd262cd200f6e5efad4fcde751c3135ffebf"
+checksum = "822195cad447e1831256853f4f3d64e3a56a4e25a658b2db3ea59622e5f196db"
 
 [[package]]
 name = "redpanda-transform-sdk-varint"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eef3be3d02a9c5e7bae77d7284935ac05b2fc7fdb06cc4a9cb2d9041986aeb08"
+checksum = "75d65c62350c48986db1d6b55e2d67ab3ada020c0646615cca6e3f80361308a4"
 
 [[package]]
 name = "regex"
