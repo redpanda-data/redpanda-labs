@@ -15,7 +15,7 @@
     "@asciidoctor/tabs": "^1.0.0-beta.5",
     "@octokit/rest": "^20.0.2",
     "@redpanda-data/docs-extensions-and-macros": "latest",
-    "doc-detective-core": "^2.12.0",
+    "doc-detective": "^2.16.4",
     "semver": "^7.6.0"
   },
   "devDependencies": {

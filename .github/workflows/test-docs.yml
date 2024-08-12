@@ -10,34 +10,21 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      data-transforms-flatten: ${{ steps.filter.outputs.data-transforms-flatten }}
-      data-transforms-iss: ${{ steps.filter.outputs.data-transforms-iss }}
-      data-transforms-redaction: ${{ steps.filter.outputs.data-transforms-redaction }}
-      data-transforms-regex: ${{ steps.filter.outputs.data-transforms-regex }}
-      data-transforms-jq: ${{ steps.filter.outputs.data-transforms-jq }}
-      data-transforms-ts-converter: ${{ steps.filter.outputs.data-transforms-ts-converter }}
+      data-transforms-go: ${{ steps.filter.outputs.data-transforms-go }}
+      data-transforms-rust: ${{ steps.filter.outputs.data-transforms-rust }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Determine changed paths
         id: filter
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            data-transforms-flatten:
-              - 'data-transforms/flatten/**'
-            data-transforms-iss:
-              - 'data-transforms/iss_demo/**'
-            data-transforms-redaction:
-              - 'data-transforms/redaction/**'
-            data-transforms-regex:
-              - 'data-transforms/regex/**'
-            data-transforms-jq:
-              - 'data-transforms/jq/**'
-            data-transforms-ts-converter:
-              - 'data-transforms/ts-converter/**'
-
+            data-transforms-go:
+              - 'data-transforms/go/**'
+            data-transforms-rust:
+              - 'data-transforms/rust/**'
   run-tests:
     needs: setup
     strategy:
@@ -46,90 +33,24 @@ jobs:
         os: [ubuntu-latest] # Only using Linux for now since macOS takes a long time
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@v4
+      - name: Test Go transforms
+        if: needs.setup.outputs.data-transforms-go == 'true'
+        uses: doc-detective/github-action@v1
         with:
-          node-version: '21'
+          input: data-transforms/go
+          working-directory: ../../
+          config: data-transforms/doc-tests/config.json
+          exit_on_fail: true
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install tools on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          #!/bin/bash
-          set -e
-
-          FILENAME="rpk-linux-amd64.zip"
-          URL_BASE="https://github.com/redpanda-data/redpanda/releases"
-
-          # Download the latest version of rpk
-          echo "Downloading ${FILENAME}..."
-          curl -LO "${URL_BASE}/latest/download/${FILENAME}"
-
-          # Ensure the unzip command is available
-          sudo apt-get update && sudo apt-get install -y unzip expect jq
-
-          # Unzip the rpk binary to the target directory
-          unzip -o "${FILENAME}" -d $HOME/.local/bin
-
-          # Remove the downloaded archive
-          rm "${FILENAME}"
-
-          # Add the target directory to PATH
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-          # Verify installation
-          echo "rpk has been installed. Version information:"
-          rpk version
-
-      - name: Install tools on macOS
-        if: matrix.os == 'macos-13'
-        run: |
-          #!/bin/bash
-          set -e
-
-          # Install rpk using brew
-          brew install redpanda-data/tap/redpanda
-
-          # Verify installation
-          echo "rpk has been installed. Version information:"
-          rpk version
-
-      - name: Setup Docker on macOS
-        if: matrix.os == 'macos-13'
-        uses: douglascamata/setup-docker-macos-action@v1-alpha
-
-      - name: Setup | Rust
-        uses: hecrj/setup-rust-action@v2
+      - name: Test Rust transforms
+        if: needs.setup.outputs.data-transforms-rust == 'true'
+        uses: doc-detective/github-action@v1
         with:
-          rust-version: stable
-          components: clippy
-
-      - name: Test data-transforms/flatten
-        if: needs.setup.outputs.data-transforms-flatten == 'true'
-        run: cd data-transforms/flatten && node test.js
-
-      - name: Test data-transforms/iss_demo
-        if: needs.setup.outputs.data-transforms-iss == 'true'
-        run: cd data-transforms/iss_demo && node test.js
-
-      - name: Test data-transforms/redaction
-        if: needs.setup.outputs.data-transforms-redaction == 'true'
-        run: cd data-transforms/redaction/demo && node test.js
-
-      - name: Test data-transforms/regex
-        if: needs.setup.outputs.data-transforms-regex == 'true'
-        run: cd data-transforms/regex && node test.js
-
-      - name: Test data-transforms/jq
-        if: needs.setup.outputs.data-transforms-jq == 'true'
-        run: cd data-transforms/jq && node test.js
-
-      - name: Test data-transforms/ts-converter
-        if: needs.setup.outputs.data-transforms-ts-converter == 'true'
-        run: cd data-transforms/ts-converter && node test.js
+          input: data-transforms/rust
+          working-directory: ../../
+          config: data-transforms/doc-tests/config.json
+          exit_on_fail: true

@@ -1,1 +1,1 @@
-../../../../flatten/README.adoc
+../../../../go/flatten/README.adoc
