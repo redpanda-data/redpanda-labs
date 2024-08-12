@@ -30,7 +30,7 @@ jobs:
         id: depup
         with:
           file: ${{ matrix.file }}
-          version_name: REDPANDA_VERSION
+          version_name: latest-redpanda-version
           repo: redpanda-data/redpanda
       - name: Create pull request
         uses: peter-evans/create-pull-request@v3
@@ -57,7 +57,7 @@ jobs:
         id: depup
         with:
           file: ${{ matrix.file }}
-          version_name: REDPANDA_CONSOLE_VERSION
+          version_name: latest-console-version
           repo: redpanda-data/console
       - name: Create pull request
         uses: peter-evans/create-pull-request@v3
