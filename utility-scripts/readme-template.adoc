@@ -5,7 +5,7 @@
 //:env-docker: true // Docker
 //:env-kubernetes: true // Kubernetes
 //:env-linux: true // Linux
-//:page-cloud: true // Redpanda Cloud
+//:env-cloud: true // Redpanda Cloud
 // Required: For more details about categories, see https://github.com/redpanda-data/redpanda-labs/blob/main/docs/CONTRIBUTING.md
 :page-categories:
 // Required: Add a short description of what the lab does.

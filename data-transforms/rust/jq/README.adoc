@@ -116,7 +116,7 @@ This example accepts the following environment variable:
 ----
 rpk topic produce src
 ----
-// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["src", "{\"foo\":42,\"email\":\"help@example.com\"}"], "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo '{\"foo\":42,\"email\":\"help@example.com\"}' | rpk topic produce src", "workingDirectory": "."})
 // (step {"action":"wait", "duration": 5000})
 
 . Paste the following into the prompt and press kbd:[Ctrl + D] to exit:
