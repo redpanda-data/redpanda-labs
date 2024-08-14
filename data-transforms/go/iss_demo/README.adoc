@@ -148,7 +148,7 @@ Example output:
 ```bash
 rpk topic produce iss_json
 ```
-// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce src", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce iss_avro", "workingDirectory": "."})
 
 . Paste the output of the cURL command into the prompt and press kbd:[Ctrl + C] to exit the prompt.
 
