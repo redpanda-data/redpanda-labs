@@ -2,6 +2,7 @@
 :page-layout: lab
 :env-linux: true
 :page-categories: Development, Stream Processing
+:page-aliases: benthos-plugins:openai.adoc
 :description: Build a streaming RAG pipeline with Redpanda, OpenAI, and MongoDB Atlas
 
 In this lab, you'll build a https://help.openai.com/en/articles/8868588-retrieval-augmented-generation-rag-and-semantic-search-for-gpts[retrieval augmented generation^] (RAG) pipeline to enhance natural language understanding and response generation using Redpanda, https://openai.com/[OpenAI^], https://www.mongodb.com/products/platform/atlas-vector-search[MongoDB Atlas^], and https://www.langchain.com/[LangChain^] .
