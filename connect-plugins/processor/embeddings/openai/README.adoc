@@ -28,7 +28,7 @@ NOTE: Make sure your account has https://help.openai.com/en/articles/9038407-how
 
 - https://www.python.org/downloads[Python 3^]
 
-- https://go.dev/doc/install[Golang^]
+- https://docs.redpanda.com/current/get-started/rpk-install/[rpk^]
 
 == Set up a local environment
 
@@ -59,7 +59,7 @@ cd redpanda-labs/connect-plugins/processor/embeddings/openai
 +
 [source,bash]
 ----
-cat > demo/.env<< EOF
+cat > .env<< EOF
 REDPANDA_SERVERS="<bootstrap-server-url>"
 REDPANDA_USER="<username>"
 REDPANDA_PASS="<password>"
@@ -76,7 +76,7 @@ EOF
 +
 [source,bash]
 ----
-cat >> demo/.env<< EOF
+cat >> .env<< EOF
 OPENAI_API_KEY="<secret_key>"
 OPENAI_EMBEDDING_MODEL="text-embedding-3-small"
 OPENAI_MODEL="gpt-4o"
@@ -108,7 +108,7 @@ EOF
 +
 [source,bash]
 ----
-cat >> demo/.env<< EOF
+cat >> .env<< EOF
 # Connection string for MongoDB Driver for Go:
 ATLAS_CONNECTION_STRING="<connection-string>"
 ATLAS_DB="VectorStore"
@@ -143,16 +143,15 @@ To check your `.env` file:
 
 [source,bash]
 ----
-cat demo/.env
+cat .env
 ----
 
 == Create a Python virtual environment
 
-Create the Python virtual environment in the `demo` directory:
+Create the Python virtual environment in the current directory:
 
 [source,bash]
 ----
-cd demo
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt
@@ -164,7 +163,7 @@ exit
 This lab has three parts:
 
 . Use *LangChain's* `WebBaseLoader` and `RecursiveCharacterTextSplitter` to generate chunks of text from the BBC Sport website and send each chunk to a Redpanda topic named `documents`.
-. Use *Redpanda Connect* to consume the messages from the `documents` topic and pass each message through a custom processor that calls *OpenAI's embeddings API* to retrieve the vector embeddings for the text. The enriched messages are then inserted into a *MongoDB Atlas* database collection that has a vector search index.
+. Use *Redpanda Connect* to consume the messages from the `documents` topic and pass each message through a processor that calls *OpenAI's embeddings API* to retrieve the vector embeddings for the text. The enriched messages are then inserted into a *MongoDB Atlas* database collection that has a vector search index.
 . Complete the RAG pipeline by using *LangChain* to retrieve similar texts from the *MongoDB Atlas* database and add that context alongside a user question to a prompt that is sent to OpenAI's new `gpt-4o` model.
 
 === Start Redpanda Connect
@@ -173,24 +172,20 @@ Start Redpanda Connect with the custom OpenAI processor:
 
 [source,bash]
 ----
-cd ..
-export $(grep -v '^#' ./demo/.env | xargs)
-go test
-go build
-./redpanda-connect-embeddings -c demo/atlas_demo.yaml --log.level debug
+rpk connect run --env-file .env --log.level debug atlas_demo.yaml 
 ----
 
 You should see the following in the output:
 
 [source,bash,role="no-copy"]
 ----
-INFO Running main config from specified file       @service=benthos benthos_version=v4.27.0 path=demo/atlas_demo.yaml
-INFO Listening for HTTP requests at: http://0.0.0.0:4195  @service=benthos
-DEBU url: https://api.openai.com/v1/embeddings, model: text-embedding-3-small  @service=benthos label="" path=root.pipeline.processors.0
-INFO Launching a Redpanda Connect instance, use CTRL+C to close  @service=benthos
-INFO Input type kafka is now active                @service=benthos label="" path=root.input
-DEBU Starting consumer group                       @service=benthos label="" path=root.input
-INFO Output type mongodb is now active             @service=benthos label="" path=root.output
+INFO Running main config from specified file       @service=redpanda-connect redpanda_connect_version=v4.33.0 path=atlas_demo.yaml
+INFO Listening for HTTP requests at: http://0.0.0.0:4195  @service=redpanda-connect
+DEBU url: https://api.openai.com/v1/embeddings, model: text-embedding-3-small  @service=redpanda-connect label="" path=root.pipeline.processors.0
+INFO Launching a Redpanda Connect instance, use CTRL+C to close  @service=redpanda-connect
+INFO Input type kafka is now active                @service=redpanda-connect label="" path=root.input
+DEBU Starting consumer group                       @service=redpanda-connect label="" path=root.input
+INFO Output type mongodb is now active             @service=redpanda-connect label="" path=root.output
 ----
 
 === Generate new text documents
@@ -199,7 +194,6 @@ In another terminal window, generate new text documents and send them to Atlas t
 
 [source,bash]
 ----
-cd demo
 source env/bin/activate
 # Single webpage:
 python produce_documents.py -u "https://www.bbc.co.uk/sport/football/articles/c3gglr8mpzdo"
@@ -215,7 +209,6 @@ Run the retrieval chain and ask OpenAI a question:
 
 [source,bash]
 ----
-cd demo
 source env/bin/activate
 python retrieve_generate.py -q """
   Which football players made the provisional England national squad for the Euro 2024 tournament,
