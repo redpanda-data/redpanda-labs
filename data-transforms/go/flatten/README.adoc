@@ -145,7 +145,7 @@ rpk transform deploy --var "RP_FLATTEN_DELIM=<delimiter>"
 ```bash
 rpk topic produce src
 ```
-// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["src", "{\"message\": \"success\", \"timestamp\": 1707743943,\"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}"], "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce src", "workingDirectory": "."})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +

@@ -120,9 +120,9 @@ This example accepts the following environment variables:
 ----
 rpk topic produce src
 ----
-// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at help@example.com."], "workingDirectory": "."})
-// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at support.example.com."], "workingDirectory": "."})
-// (step {"action":"runShell", "command": "bash ../../../setup-tests/tools/rpk-produce.sh", "args": ["src", "Hello, please contact us at help@example.edu."], "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo 'Hello, please contact us at help@example.com.' | rpk topic produce src", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo 'Hello, please contact us at support.example.com.' | rpk topic produce src", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo 'Hello, please contact us at help@example.edu.' | rpk topic produce src", "workingDirectory": "."})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +
