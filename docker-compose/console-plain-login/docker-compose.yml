@@ -47,7 +47,7 @@ services:
       # if you mount the license key file to a different location, update this path.
       - /etc/redpanda/redpanda.license
       # rpk connects to the admin API of one broker to set the license key for the whole cluster.
-      - --api-urls redpanda:9644
+      - -X admin.hosts=redpanda:9644
     image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     # mount the local directory that contains your license key to the container.
     # give Redpanda read and write access to the license.
