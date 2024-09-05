@@ -40,7 +40,7 @@ jobs:
           # Trim the path to keep it within a reasonable length
           sanitized_file=$(echo "${sanitized_file}" | tail -c 50)
           # Combine with version and timestamp for uniqueness
-          branch_name="depup/${sanitized_file}/${{ steps.depup.outputs.latest }}-$(date +%s)"
+          branch_name="depup/${sanitized_file}/${{ steps.depup.outputs.latest }}"
           echo "branch_name=${branch_name}" >> "$GITHUB_ENV"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v6
