@@ -41,7 +41,6 @@ jobs:
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/go
-          working-directory: ../../
           config: data-transforms/doc-tests/config.json
           exit_on_fail: true
 
@@ -50,6 +49,5 @@ jobs:
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/rust
-          working-directory: ../../
           config: data-transforms/doc-tests/config.json
           exit_on_fail: true
