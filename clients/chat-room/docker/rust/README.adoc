@@ -114,11 +114,11 @@ Bob: Hi Alice, I'm Bob, nice to meet you
 
 This example includes the following files:
 
-- link:{content-url}admin.rs[`admin.rs`]: Checks whether the `chat-room` topic exists and creates it if not.
-- link:{content-url}producer.rs[`producer.rs`]: A producer that sends strings entered by the user of the terminal to the `chat-room` topic. Messages are sent as JSON encoded strings.
-- link:{content-url}consumer.rs[`consumer.rs`]: A consumer that reads all messages from the `chat-room`
+- link:{content-url}src/admin.rs[`admin.rs`]: Checks whether the `chat-room` topic exists and creates it if not.
+- link:{content-url}src/producer.rs[`producer.rs`]: A producer that sends strings entered by the user of the terminal to the `chat-room` topic. Messages are sent as JSON encoded strings.
+- link:{content-url}src/consumer.rs[`consumer.rs`]: A consumer that reads all messages from the `chat-room`
 topic and prints them to the console. You can start as many consumer groups as you like, but each group reads a message only once, which is why the example is using a generated timestamp appended to the group ID. This way, each time you run the application, you see all previous messages.
-- link:{content-url}main.rs[`main.rs`]: The client application that creates the topic, producer, and consumer and implements the chat logic.
+- link:{content-url}src/main.rs[`main.rs`]: The client application that creates the topic, producer, and consumer and implements the chat logic.
 +
 NOTE: The broker settings in this code are from the Redpanda Quickstart, where the external port for broker `redpanda` is set to port 19092.
 
