@@ -1,0 +1,161 @@
+name: redpanda-iceberg-lab
+networks:
+  redpanda_network:
+    driver: bridge
+volumes:
+  redpanda-0: null
+  minio: null
+services:
+  redpanda-0:
+    container_name: redpanda-0
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:-24.3.1}
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # Address the broker advertises to clients that connect to the Kafka API.
+      # Use the internal addresses to connect to the Redpanda brokers'
+      # from inside the same Docker network.
+      # Use the external addresses to connect to the Redpanda brokers'
+      # from outside the Docker network.
+      - --advertise-kafka-addr internal://redpanda-0:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      # Address the broker advertises to clients that connect to the HTTP Proxy.
+      - --advertise-pandaproxy-addr internal://redpanda-0:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      # Redpanda brokers use the RPC API to communicate with each other internally.
+      - --rpc-addr redpanda-0:33145
+      - --advertise-rpc-addr redpanda-0:33145
+      # Mode dev-container uses well-known configuration properties for development in containers.
+      - --mode dev-container
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
+      - --default-log-level=info
+      # Enable Tiered Storage (TS)
+      - --set redpanda.cloud_storage_enabled=true
+      - --set redpanda.cloud_storage_region=local
+      - --set redpanda.cloud_storage_access_key=minio
+      - --set redpanda.cloud_storage_secret_key=minio123
+      - --set redpanda.cloud_storage_api_endpoint=minio
+      - --set redpanda.cloud_storage_api_endpoint_port=9000
+      - --set redpanda.cloud_storage_disable_tls=true
+      - --set redpanda.cloud_storage_bucket=redpanda
+      - --set redpanda.cloud_storage_segment_max_upload_interval_sec=30
+      # Enable TS by default for topics
+      - --set redpanda.cloud_storage_enable_remote_write=true
+      - --set redpanda.cloud_storage_enable_remote_read=true
+      # Set up Iceberg REST catalog configuration
+      - --set redpanda.iceberg_enabled=true
+      - --set redpanda.iceberg_catalog_type=rest
+      - --set redpanda.iceberg_rest_catalog_endpoint=http://catalog:8181
+      # Credentials are required, but the catalog ignores them
+      - --set redpanda.iceberg_rest_catalog_client_id=catalog
+      - --set redpanda.iceberg_rest_catalog_client_secret=catalog123
+      # Too low for production, but makes the lab fast
+      - --set redpanda.iceberg_catalog_commit_interval_ms=5000
+    volumes:
+      - redpanda-0:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+    ports:
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    depends_on:
+      - minio
+      - catalog
+  minio:
+    container_name: minio
+    image: minio/minio
+    command: server --console-address ":9001" /data
+    ports:
+      - 9000:9000
+      - 9001:9001
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+      MINIO_SERVER_URL: "http://minio:9000"
+      MINIO_REGION_NAME: local
+      MINIO_DOMAIN: minio
+    volumes:
+      - minio:/data
+    networks:
+      redpanda_network:
+        aliases:
+          - redpanda.minio
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    container_name: mc
+    networks:
+      - redpanda_network
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=local
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 minio minio123) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb minio/redpanda;
+      /usr/bin/mc policy set public minio/redpanda;
+      tail -f /dev/null
+      "
+  console:
+    container_name: redpanda-console
+    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:-2.8.0}
+    networks:
+      - redpanda_network
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda-0:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda-0:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda-0:9644"]
+    ports:
+      - 8081:8080
+    depends_on:
+      - redpanda-0
+  catalog:
+    image: tabulario/iceberg-rest
+    container_name: iceberg-rest
+    networks:
+      - redpanda_network
+    depends_on:
+      - minio
+    ports:
+      - 8181:8181
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=local
+      - CATALOG_WAREHOUSE=s3://redpanda/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+  spark-iceberg:
+    image: tabulario/spark-iceberg
+    container_name: spark-iceberg
+    build: spark/
+    networks:
+      - redpanda_network
+    depends_on:
+      - minio
+      - catalog
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=local
+    ports:
+      - 8888:8888
+      - 8080:8080
+      - 10000:10000
+      - 10001:10001

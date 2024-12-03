@@ -1,0 +1,156 @@
+////
+Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+////
+= Redpanda Iceberg Docker Compose Example
+:env-docker: true
+:page-categories: Iceberg, Tiered Storage, Integration
+:description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
+:page-layout: lab
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 24.3.1
+:latest-console-version: 2.8.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+This lab provides a Docker Compose environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like MinIO, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
+
+In this setup, you will:
+
+- Produce data to Redpanda topics that are Iceberg-enabled.
+- Observe how Redpanda writes this data in Iceberg format to MinIO as the Tiered Storage backend.
+- Use Spark to query the Iceberg tables, demonstrating a complete pipeline from data production to querying.
+
+This environment is ideal for experimenting with Redpanda's Iceberg and Tiered Storage capabilities, enabling you to test end-to-end workflows for analytics and data lake architectures.
+
+== Prerequisites
+
+You must have the following installed on your machine:
+
+- https://docs.docker.com/compose/install/[Docker and Docker Compose]
+
+- https://docs.redpanda.com/current/get-started/rpk-install/[`rpk`]
+
+== Run the lab
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/iceberg/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/iceberg
+----
+
+. Set the `REDPANDA_VERSION` environment variable to at least version 24.3.1. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
+
+. Start the Docker Compose environment, which includes Redpanda, MinIO, Spark, and Jupyter Notebook:
++
+```bash
+docker compose build && docker compose up
+```
+
+. Create and switch to a new `rpk` profile that connects to your Redpanda broker:
++
+```bash
+rpk profile create docker-compose-iceberg --set=admin_api.addresses=localhost:19644 --set=brokers=localhost:19092 --set=schema_registry.addresses=localhost:18081
+```
+
+. Create two topics with Iceberg enabled:
++
+```bash
+rpk topic create key_value --topic-config=redpanda.iceberg.mode=key_value
+rpk topic create value_schema_id_prefix --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
+```
+
+. Produce data to the `key_value` topic and see data show up.
++
+```bash
+echo "hello world" | rpk topic produce key_value --format='%k %v\n'
+```
+
+. Open Redpanda Console at http://localhost:8081/topics to see that the topics exist in Redpanda.
+
+. Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying Iceberg tables created from Redpanda topics.
+
+. Create a schema in the Schema Registry:
++
+```bash
+rpk registry schema create value_schema_id_prefix-value --schema schema.avsc
+```
+
+. Produce data to the `value_schema_id_prefix` topic:
++
+```bash
+echo '{"user_id":2324,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:23:59.380Z"}\n{"user_id":3333,"event_type":"SCROLL","ts":"2024-11-25T20:24:14.774Z"}\n{"user_id":7272,"event_type":"BUTTON_CLICK","ts":"2024-11-25T20:24:34.552Z"}' | rpk topic produce value_schema_id_prefix --format='%v\n' --schema-id=topic
+```
+
+When the data is committed, it should be available in Iceberg format and you can query the table `lab.redpanda.value_schema_id_prefix` in the http://localhost:8888[Jupyter Notebook].
+
+== Alternative query interfaces
+
+While the notebook server is running, you can query Iceberg tables directly using Spark's CLI tools, Instead of Jupyter Notebook:
+
+.Spark Shell
+```bash
+docker exec -it spark-iceberg spark-shell
+```
+
+.Spark SQL
+```bash
+docker exec -it spark-iceberg spark-sql
+```
+
+.PySpark
+```bash
+docker exec -it spark-iceberg pyspark
+```
+
+== Clean up
+
+To shut down and delete the containers along with all your cluster data:
+
+[,bash]
+----
+docker compose down -v
+----
