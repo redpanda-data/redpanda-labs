@@ -18,7 +18,7 @@ Licensed to the Apache Software Foundation (ASF) under one
 ////
 = Redpanda Iceberg Docker Compose Example
 :env-docker: true
-:page-categories: Iceberg, Tiered Storage, Integration
+:page-categories: Iceberg, Tiered Storage, Management, High Availability, Data Replication, Integration
 :description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
 :page-layout: lab
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
@@ -110,6 +110,13 @@ echo "hello world" | rpk topic produce key_value --format='%k %v\n'
 ```
 
 . Open Redpanda Console at http://localhost:8081/topics to see that the topics exist in Redpanda.
+
+. Open MinIO at http://localhost:9001/browser to view your data stored in the S3-compatible object store.
++
+Login credentials:
++
+- Username: `minio`
+- Password: `minio123`
 
 . Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying Iceberg tables created from Redpanda topics.
 
