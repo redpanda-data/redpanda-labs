@@ -48,7 +48,7 @@ cd redpanda-labs/connect-plugins/processor/embeddings/openai
 
 == Set up Redpanda Serverless
 
-. Log in to your Redpanda Cloud account and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless^] cluster.
+. Log in to your Redpanda Cloud account and create a new https://redpanda.com/redpanda-cloud/serverless[Serverless Standard^] cluster.
 
 . Make a note of the bootstrap server URL.
 
