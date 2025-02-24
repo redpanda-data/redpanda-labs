@@ -14,7 +14,7 @@ jobs:
       - name: Find matching README.adoc files
         id: set-matrix
         run: |
-          files=$(find ./docker-compose ./data-transforms -type f -name 'README.adoc' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          files=$(find ./data-transforms -type f -name 'README.adoc' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "files=${files}" >> "$GITHUB_OUTPUT"
 
   reviewdog-redpanda:
