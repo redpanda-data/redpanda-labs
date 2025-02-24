@@ -35,12 +35,12 @@ jobs:
       - name: Sanitize and generate branch name
         id: sanitize
         run: |
-          # Sanitize the file path by removing invalid characters and replacing slashes and dots
+          # Sanitize the file path by replacing slashes and dots with hyphens and removing other invalid characters
           sanitized_file=$(echo "${{ matrix.file }}" | sed 's/[\/\.]/-/g' | sed 's/[^a-zA-Z0-9\-]//g')
-          # Trim the path to keep it within a reasonable length
+          # Optionally trim the file name if it's too long
           sanitized_file=$(echo "${sanitized_file}" | tail -c 50)
-          # Combine with version and timestamp for uniqueness
-          branch_name="depup/${sanitized_file}"
+          # Create a branch name with a hyphen instead of a slash
+          branch_name="depup-${sanitized_file}"
           echo "branch_name=${branch_name}" >> "$GITHUB_ENV"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v6
@@ -73,12 +73,9 @@ jobs:
       - name: Sanitize and generate branch name
         id: sanitize
         run: |
-          # Sanitize the file path by removing invalid characters and replacing slashes and dots
           sanitized_file=$(echo "${{ matrix.file }}" | sed 's/[\/\.]/-/g' | sed 's/[^a-zA-Z0-9\-]//g')
-          # Trim the path to keep it within a reasonable length
           sanitized_file=$(echo "${sanitized_file}" | tail -c 50)
-          # Combine with version and timestamp for uniqueness
-          branch_name="depup/${sanitized_file}"
+          branch_name="depup-${sanitized_file}"
           echo "branch_name=${branch_name}" >> "$GITHUB_ENV"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v6
