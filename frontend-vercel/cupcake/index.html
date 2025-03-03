@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-time Cupcake Store Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <style>
+        .toast-warning {
+            font-family: 'Arial', Arial, monospace;
+            font-size: 16px;
+        }
+         /* ... */
+        h1 {
+            font-family: Verdana, Geneva, sans-serif;
+        }
+         #container {
+            display: flex;
+        }
+        #map {
+            flex: 3;
+            height: 1200px;
+        }
+        table{
+            font-family: Verdana, Geneva, sans-serif;
+            border: 1px solid #FFFFFF;
+            width: 350px;
+            height: 200px;
+            text-align: center;
+            border-collapse: collapse;
+        }
+        table td, table th {
+            border: 1px solid #FFFFFF;
+            padding: 3px 2px;
+        }
+        tbody td {
+            font-size: 13px;
+        }
+        table tr:nth-child(even) {
+            background: #D0E4F5;
+          }
+        table thead {
+            background: #0B6FA4;
+            border-bottom: 5px solid #FFFFFF;
+        }
+        table thead th {
+            font-size: 13px;
+            font-weight: bold;
+            color: #FFFFFF;
+            text-align: center;
+            border-left: 2px solid #FFFFFF;
+        }
+        table thead th:first-child {
+            border-left: none;
+        }
+
+        .inventory-zero {
+            color: red;
+        }
+
+
+        #toast-container {
+            top: auto !important;
+            right: 12px !important;
+            bottom: 12px !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>The Ultimate Crumb Quest for Cupcakes!!</h1>
+    <div id="container">
+        <div id="map"></div>
+        <table id="table">
+            <thead>
+                <tr>
+                    <th>Store</th>
+                    <th>Blueberry</th>
+                    <th>Strawberry</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Rows will be added here dynamically -->
+            </tbody>
+        </table>
+    </div>
+    <script>
+        var map = L.map('map').setView([40.774389, -73.952049], 12);
+        var blueIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          });
+
+        var redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          });
+
+        // Create an gold icon
+        var goldIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        var markers = {};
+
+        var socket = new WebSocket('ws://localhost:8080');
+
+        socket.onmessage = function(event) {
+            console.log(event.data)
+            var inventory = JSON.parse(event.data);
+            tableBody.innerHTML = '';
+
+            // Update markers on the map
+            for (var store in inventory) {
+                var storeData = inventory[store];
+
+                // Check if inventory is zero
+                
+                //console.log("storeData.lat->"+storeData.lat)
+                //console.log("storeData.lng->"+storeData.lng)
+                if (markers[store]) {
+                    // Update existing marker
+                    markers[store].setLatLng([storeData.lat, storeData.lng])
+                        .setPopupContent(`<b>${storeData.store}</b><br>Blueberry: ${storeData.blueberry}<br>Strawberry: ${storeData.strawberry}`);
+                } else {
+                    // Create new marker
+                    markers[store] = L.marker([storeData.lat, storeData.lng]).addTo(map)
+                        .bindPopup(`<b>${storeData.store}</b><br>Blueberry: ${storeData.blueberry}<br>Strawberry: ${storeData.strawberry}`);
+                }
+              
+                markers[store].setIcon(blueIcon);
+
+                var row = tableBody.insertRow();
+                row.insertCell().textContent = storeData.store;
+                row.insertCell().textContent = storeData.blueberry;
+                row.insertCell().textContent = storeData.strawberry;
+
+                var isInventoryZero = storeData.blueberry === 0 || storeData.strawberry === 0;
+                if (isInventoryZero) {
+                    // Change marker color to red
+                    markers[store].setIcon(redIcon);
+                    // Change row color to red
+                    row.classList.add('inventory-zero');
+                }
+
+                if (storeData.latest) {
+                    markers[store].setIcon(goldIcon);
+                    // Warning only if inventory is zero and it is the latest data
+                    if (isInventoryZero) 
+                        toastr.warning(`Inventory is zero for store: ${storeData.store}`, null);
+                    
+                }
+
+                
+            }
+        };
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+    </script>
+</body>
+</html>
