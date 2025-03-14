@@ -6,7 +6,7 @@ on:
       - '**/docs/**'
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       data-transforms-go: ${{ steps.filter.outputs.data-transforms-go }}
       data-transforms-rust: ${{ steps.filter.outputs.data-transforms-rust }}
@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false  # Ensure all matrix jobs run to completion even if one fails
       matrix:
-        os: [ubuntu-latest]  # Only using Linux for now since macOS takes a long time
+        os: [ubuntu-24.04]  # Only using Linux for now since macOS takes a long time
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
