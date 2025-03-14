@@ -1,5 +1,5 @@
 ---
-name: Run doc tests
+name: test-docs
 on:
   pull_request:
     paths-ignore:
@@ -11,11 +11,9 @@ jobs:
       data-transforms-go: ${{ steps.filter.outputs.data-transforms-go }}
       data-transforms-rust: ${{ steps.filter.outputs.data-transforms-rust }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Determine changed paths
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
         id: filter
-        uses: dorny/paths-filter@v3
         with:
           filters: |
             data-transforms-go:
