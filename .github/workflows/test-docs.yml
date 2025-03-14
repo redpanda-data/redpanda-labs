@@ -1,10 +1,9 @@
+---
 name: Run doc tests
-
 on:
   pull_request:
     paths-ignore:
       - '**/docs/**'
-
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -14,7 +13,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Determine changed paths
         id: filter
         uses: dorny/paths-filter@v3
@@ -27,15 +25,14 @@ jobs:
   run-tests:
     needs: setup
     strategy:
-      fail-fast: false # Ensure all matrix jobs run to completion even if one fails
+      fail-fast: false  # Ensure all matrix jobs run to completion even if one fails
       matrix:
-        os: [ubuntu-latest] # Only using Linux for now since macOS takes a long time
+        os: [ubuntu-latest]  # Only using Linux for now since macOS takes a long time
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Test Go transforms
         if: needs.setup.outputs.data-transforms-go == 'true'
         uses: doc-detective/github-action@v1
@@ -43,7 +40,6 @@ jobs:
           input: data-transforms/go
           config: data-transforms/doc-tests/config.json
           exit_on_fail: true
-
       - name: Test Rust transforms
         if: needs.setup.outputs.data-transforms-rust == 'true'
         uses: doc-detective/github-action@v1
