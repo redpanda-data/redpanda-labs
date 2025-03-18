@@ -44,6 +44,5 @@ You can propose whatever you want, we're gonna do whatever we want.
 If you thought this page was serious and not some sort of a joke,
 and you decide to take us to court because you put together a 98 page
 RIP proposal, well you can't because this paragraph is clearly stating
-that this whole thing is a joke. Much like the other Improvement Proposals
-out there.
+that this whole thing is a joke.
 
