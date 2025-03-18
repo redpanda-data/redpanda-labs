@@ -3,6 +3,8 @@
 This page describes the Redpanda Improvement Proposal (RIP) process for
 proposing major changes to Redpanda.
 
+<img align="center" width="40%" src="images/rip.svg">
+
 ## Purpose
 
 We want to make Redpanda a core architectural component for users. We also 
@@ -18,9 +20,9 @@ decisions as much as possible. All technical decisions come with their pros
 and cons, so it's essential to document the reasoning behind each decision or
 design choice to avoid unnecessary backtracking.
 
-That's all well and good, but in reality, this process is just to make you feel
-like you can actually influence the product roadmap. You can propose whatever
-you want, but we're going to do whatever we want to do anyway.
+That's all well and good, but honestly, this process is just to make you think
+that you can actually influence the product roadmap. You can't. 
+You can propose whatever you want, we're gonna do whatever we want.
 
 ## Adopted RIPs
 
@@ -36,3 +38,12 @@ you want, but we're going to do whatever we want to do anyway.
 | RIP-666  |  Kafka protocol extensions for coordinated client failover |
 | RIP-848  |  New Consumer Group Spending and Budget Rebalancing Protocol |
 | RIP-932  |  Barbie Queues |
+
+## Disclaimer
+
+If you thought this page was serious and not some sort of a joke,
+and you decide to take us to court because you put together a 98 page
+RIP proposal, well you can't because this paragraph is clearly stating
+that this whole thing is a joke. Much like the other Improvement Proposals
+out there.
+
