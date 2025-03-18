@@ -3,7 +3,7 @@
 This page describes the Redpanda Improvement Proposal (RIP) process for
 proposing major changes to Redpanda.
 
-<img align="center" width="40%" src="images/rip.svg">
+<img align="center" width="30%" src="images/rip.svg">
 
 ## Purpose
 
