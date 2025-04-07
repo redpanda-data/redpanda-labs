@@ -51,14 +51,14 @@ services:
       CONSOLE_CONFIG_FILE: |
         kafka:
           brokers: ["redpanda:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda:8081"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
         redpanda:
           adminApi:
             enabled: true
             urls: ["http://redpanda:9644"]
-        connect:
+        kafkaConnect:
           enabled: true
           clusters:
             - name: local-connect-cluster

@@ -6,8 +6,8 @@
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
-:latest-console-version: 2.7.2
-:latest-redpanda-version: 24.2.7
+:latest-console-version: 3.0.0
+:latest-redpanda-version: 24.3.9
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
@@ -65,6 +65,8 @@ export REDPANDA_VERSION={latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+NOTE: You must use at least version 3.0.0 of Redpanda Console to deploy this lab.
 +
 For example:
 +
