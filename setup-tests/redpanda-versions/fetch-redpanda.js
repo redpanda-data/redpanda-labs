@@ -19,7 +19,6 @@ const github = new Octokit(githubOptions);
     // Fetch the latest release
     const release = await github.rest.repos.getLatestRelease({ owner, repo });
     const tag = release.data.tag_name;
-    latestRedpandaReleaseVersion = tag.replace('v', '');
 
     // Get reference of the tag
     const tagRef = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });

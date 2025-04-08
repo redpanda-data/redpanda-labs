@@ -25,7 +25,7 @@ const github = new Octokit(githubOptions);
 
     // Filter valid semver tags and sort them
     const sortedReleases = releases.data
-      .map(release => release.tag_name.replace(/^v/, ''))
+      .map(release => release.tag_name)
       .filter(tag => semver.valid(tag))
       // Sort in descending order to get the highest version first
       .sort(semver.rcompare);
