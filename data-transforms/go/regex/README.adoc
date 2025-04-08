@@ -7,7 +7,7 @@
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
 :latest-console-version: 3.0.0
-:latest-redpanda-version: 24.3.9
+:latest-redpanda-version: 25.1.1
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
