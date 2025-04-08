@@ -1,6 +1,6 @@
 services:
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     command:
     - redpanda
     - start
@@ -19,7 +19,7 @@ services:
       - ./conf/.bootstrap.yaml:/etc/redpanda/.bootstrap.yaml
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:?Set a Redpanda Console version}
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
     entrypoint: /bin/sh
     command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
     environment:
@@ -27,9 +27,9 @@ services:
       CONSOLE_CONFIG_FILE: |
         kafka:
           brokers: ["redpanda:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda:8081"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
         redpanda:
           adminApi:
             enabled: true

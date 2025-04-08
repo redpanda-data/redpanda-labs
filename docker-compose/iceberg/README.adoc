@@ -25,7 +25,7 @@ Licensed to the Apache Software Foundation (ASF) under one
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
 :latest-redpanda-version: 24.3.5
-:latest-console-version: 2.8.2
+:latest-console-version: 3.0.0
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
@@ -72,16 +72,18 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+NOTE: You must use at least version v3.0.0 of Redpanda Console to deploy this lab.
 +
 For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start the Docker Compose environment, which includes Redpanda, MinIO, Spark, and Jupyter Notebook:

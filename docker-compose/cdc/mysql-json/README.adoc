@@ -55,7 +55,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Run the following in the directory where you saved the Docker Compose file:
@@ -157,7 +157,7 @@ docker compose exec redpanda rpk topic consume dbz.pandashop.orders
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 docker compose exec mysql mysql -u mysqluser -p
 ----
 +

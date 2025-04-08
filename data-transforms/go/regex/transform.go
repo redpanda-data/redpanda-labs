@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -9,8 +10,8 @@ import (
 )
 
 var (
-	re         *regexp.Regexp = nil
-	checkValue bool           = false
+	re         *regexp.Regexp
+	checkValue bool
 )
 
 func isTrueVar(v string) bool {
@@ -23,32 +24,49 @@ func isTrueVar(v string) bool {
 }
 
 func main() {
-	// setup the configuration
+	// Optionally configure log format, prefix, or flags
+	log.SetPrefix("[regex-transform] ")
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC | log.Lmicroseconds)
+
+	log.Println("Starting transform...")
+
 	pattern, ok := os.LookupEnv("PATTERN")
 	if !ok {
-		panic("Missing PATTERN variable")
+		log.Fatal("Missing PATTERN environment variable")
 	}
+	log.Printf("Using PATTERN: %q\n", pattern)
 	re = regexp.MustCompile(pattern)
+
 	mk, ok := os.LookupEnv("MATCH_VALUE")
 	checkValue = ok && isTrueVar(mk)
+	log.Printf("MATCH_VALUE set to: %t\n", checkValue)
+
+	log.Println("Initialization complete, waiting for records...")
 
 	transform.OnRecordWritten(doRegexFilter)
 }
 
 func doRegexFilter(e transform.WriteEvent, w transform.RecordWriter) error {
-	var b []byte
+	var dataToCheck []byte
 	if checkValue {
-		b = e.Record().Value
+		dataToCheck = e.Record().Value
+		log.Printf("Checking record value: %s\n", string(dataToCheck))
 	} else {
-		b = e.Record().Key
+		dataToCheck = e.Record().Key
+		log.Printf("Checking record key: %s\n", string(dataToCheck))
 	}
-	if b == nil {
+
+	if dataToCheck == nil {
+		log.Println("Record has no key/value to check, skipping.")
 		return nil
 	}
-	pass := re.Match(b)
+
+	pass := re.Match(dataToCheck)
 	if pass {
+		log.Printf("Record matched pattern, passing through. Key: %s, Value: %s\n", string(e.Record().Key), string(e.Record().Value))
 		return w.Write(e.Record())
 	} else {
+		log.Printf("Record did not match pattern, dropping. Key: %s, Value: %s\n", string(e.Record().Key), string(e.Record().Value))
 		return nil
 	}
 }
