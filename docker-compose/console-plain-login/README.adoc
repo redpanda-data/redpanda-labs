@@ -63,7 +63,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Save your license key to `license/redpanda.license` in the same location as your Docker Compose file. Or, to use another location, update the license paths in the Docker Compose file to another directory that contains your license key.

@@ -7,7 +7,7 @@
 // For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
 :latest-console-version: 2.8.4
-:latest-redpanda-version: 24.3.9
+:latest-redpanda-version: 25.1.1
 endif::[]
 // For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
 ifdef::env-site[]
@@ -57,7 +57,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases^].
@@ -66,7 +66,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start Redpanda in Docker by running the following command:
