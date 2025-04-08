@@ -34,7 +34,7 @@ services:
     volumes:
       - ./conf/.bootstrap.yaml:/etc/redpanda/.bootstrap.yaml
   console:
-    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:latest}
+    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:-latest}
     restart: on-failure
     entrypoint: /bin/sh
     command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"

@@ -20,7 +20,7 @@ services:
     volumes:
       - ./data:/docker-entrypoint-initdb.d
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:latest}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:-latest}
     container_name: redpanda
     command:
       - redpanda start
