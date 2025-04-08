@@ -7,7 +7,7 @@ volumes:
   redpanda: null
 services:
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:latest}
     command:
       - redpanda start
       # Mode dev-container uses well-known configuration properties for development in containers.
@@ -48,7 +48,7 @@ services:
       - /etc/redpanda/redpanda.license
       # rpk connects to the admin API of one broker to set the license key for the whole cluster.
       - -X admin.hosts=redpanda:9644
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:latest}
     # mount the local directory that contains your license key to the container.
     # give Redpanda read and write access to the license.
     volumes:

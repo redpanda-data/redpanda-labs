@@ -16,7 +16,7 @@ services:
         - ./data/mysql.cnf:/etc/mysql/conf.d
         - ./data/mysql_bootstrap.sql:/docker-entrypoint-initdb.d/mysql_bootstrap.sql
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:latest}
     container_name: redpanda
     command:
       - redpanda start
