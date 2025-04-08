@@ -50,24 +50,24 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/data-transforms/regex
 ----
 
-. Set the `REDPANDA_VERSION` environment variable to at least version 23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
+. Set the `REDPANDA_VERSION` environment variable to at least version v23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-NOTE: You must use at least version 3.0.0 of Redpanda Console to deploy this lab.
+NOTE: You must use at least version v3.0.0 of Redpanda Console to deploy this lab.
 +
 For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start Redpanda in Docker by running the following command:
