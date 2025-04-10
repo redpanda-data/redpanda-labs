@@ -57,7 +57,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION=v{latest-redpanda-version}
+export REDPANDA_VERSION={latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases^].
@@ -66,7 +66,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ----
 
 . Start Redpanda in Docker by running the following command:
