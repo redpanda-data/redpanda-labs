@@ -1,7 +1,7 @@
 services:
   redpanda:
     container_name: redpanda
-    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    image: docker.redpanda.com/redpandadata/redpanda:v${REDPANDA_VERSION:?Set a Redpanda version}
     command:
     - redpanda
     - start
@@ -20,7 +20,7 @@ services:
       - ./conf/.bootstrap.yaml:/etc/redpanda/.bootstrap.yaml
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    image: docker.redpanda.com/redpandadata/console:v${REDPANDA_CONSOLE_VERSION:?Set a Redpanda Console version}
     entrypoint: /bin/sh
     command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
     environment:

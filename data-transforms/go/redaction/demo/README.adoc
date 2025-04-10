@@ -57,7 +57,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION=v{latest-redpanda-version}
+export REDPANDA_VERSION={latest-redpanda-version}
 ----
 
 
@@ -69,7 +69,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ----
 
 . Build the data transforms container:
