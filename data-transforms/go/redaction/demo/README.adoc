@@ -21,7 +21,7 @@ endif::[]
 // ========================AUTOMATED TESTS===================================
 // The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
 
-// (test start {"id":"data-transform-redaction-go", "description": "Redact Information in JSON Messages", "cleanup": "../../../../setup-tests/cleanup.json"})
+// (test start {"id":"data-transform-redaction-go", "description": "Redact Information in JSON Messages"})
 
 This example shows you how to use Redpanda data transforms to redact information in JSON messages.
 
@@ -57,7 +57,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 
@@ -69,7 +69,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Build the data transforms container:
@@ -77,7 +77,7 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose build
 ```
-// (step {"action":"runShell", "command": "docker compose build", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "docker compose build", "workingDirectory": "../data-transforms/go/redaction/demo"})
 
 . If you are running on an ARM-based device such as the Apple M1 chip, open the `docker-compose.yml` file and uncomment the `platform: 'linux/amd64'` line.
 
@@ -86,7 +86,7 @@ docker compose build
 ```bash
 docker compose up --detach --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up --detach --wait", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "docker compose up --detach --wait", "workingDirectory": "../data-transforms/go/redaction/demo"})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 5000})
 
@@ -104,4 +104,5 @@ To stop the containers:
 docker compose down
 ```
 
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../data-transforms/go/redaction/demo"})
 // (test end)

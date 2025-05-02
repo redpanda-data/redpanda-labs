@@ -1,1 +1,0 @@
-../../../../go/iss_demo/README.adoc

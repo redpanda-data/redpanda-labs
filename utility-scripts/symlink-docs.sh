@@ -26,7 +26,7 @@ fi
 MODULE_NAME="$LAB_PROJECT_ROOT_DIR"
 
 # Define Antora directory paths based on the lab project root
-DOCS_DIR="$TARGET_DIR/docs"
+DOCS_DIR="docs"
 MODULES_DIR="$DOCS_DIR/modules/$MODULE_NAME"
 PAGES_DIR="$MODULES_DIR/pages"
 

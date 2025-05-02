@@ -30,20 +30,56 @@ asciidoc:
   attributes:
   extensions:
   - '@asciidoctor/tabs'
+  - '@redpanda-data/docs-extensions-and-macros/macros/rp-connect-components'
   - '@redpanda-data/docs-extensions-and-macros/macros/glossary'
   - '@redpanda-data/docs-extensions-and-macros/macros/config-ref'
   - '@redpanda-data/docs-extensions-and-macros/macros/helm-ref'
   - '@redpanda-data/docs-extensions-and-macros/asciidoc-extensions/add-line-numbers-highlights'
-  - '@redpanda-data/docs-extensions-and-macros/macros/rp-connect-components'
 antora:
   extensions:
-  - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
-  - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-categories'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-info'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unpublish-pages'
-  - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/version-fetcher/set-latest-version'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/validate-attributes'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-index-data'
+    data:
+      sets:
+        docker_labs:
+          component: redpanda-labs
+          family: page
+          filter: docker-compose
+          env_type: Docker
+          attribute_name: docker-labs-index
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/archive-attachments'
+    data:
+      archives:
+        - component: 'ROOT'
+          output_archive: 'redpanda-quickstart.tar.gz'
+          file_patterns:
+            - '**/test-resources/**/docker-compose/**'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/replace-attributes-in-attachments'
+    data:
+      replacements:
+        - components:
+            - 'ROOT'
+            - 'redpanda-labs'
+          file_patterns:
+            - '**/docker-compose.yaml'
+            - '**/docker-compose.yml'
+  - require: '@sntke/antora-mermaid-extension'
+    mermaid_library_url: https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs
+    script_stem: mermaid-scripts
+    mermaid_initialize_options:
+      start_on_load: true
+      theme: base
+      theme_variables:
+        line_color: '#e2401b'
+        font_family: Inter, sans-serif
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/collect-bloblang-samples'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-categories'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/modify-redirects'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/unlisted-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-docs'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/find-related-labs'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/aggregate-terms'

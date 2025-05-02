@@ -41,7 +41,7 @@ jobs:
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/go
-          config: data-transforms/doc-tests/config.json
+          working_directory: setup-tests
           exit_on_fail: true
 
       - name: Test Rust transforms
@@ -49,5 +49,12 @@ jobs:
         uses: doc-detective/github-action@v1
         with:
           input: data-transforms/rust
-          config: data-transforms/doc-tests/config.json
+          working_directory: setup-tests
           exit_on_fail: true
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-detective-output
+          path: /home/runner/work/_temp/doc-detective-output.json

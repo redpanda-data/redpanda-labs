@@ -1,0 +1,4 @@
+name: owlshop-orders-redacted-transform
+input-topic: "owlshop-orders"
+output-topic: "owlshop-orders-redacted"
+language: tinygo-no-goroutines

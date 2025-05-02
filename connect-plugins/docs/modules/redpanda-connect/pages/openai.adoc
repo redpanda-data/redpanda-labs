@@ -1,1 +1,0 @@
-../../../../processor/embeddings/openai/README.adoc
