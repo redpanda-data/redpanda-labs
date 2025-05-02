@@ -40,7 +40,7 @@ jobs:
         if: needs.setup.outputs.data-transforms-go == 'true'
         uses: doc-detective/github-action@v1
         with:
-          input: data-transforms/go
+          input: ../data-transforms/go
           working_directory: setup-tests
           exit_on_fail: true
 
@@ -48,7 +48,7 @@ jobs:
         if: needs.setup.outputs.data-transforms-rust == 'true'
         uses: doc-detective/github-action@v1
         with:
-          input: data-transforms/rust
+          input: ../data-transforms/rust
           working_directory: setup-tests
           exit_on_fail: true
 

@@ -86,7 +86,7 @@ docker compose build
 ```bash
 docker compose up --detach --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up --detach --wait", "workingDirectory": "../data-transforms/go/redaction/demo"})
+// (step {"action":"runShell", "command": "docker compose up --detach --wait", "workingDirectory": "../data-transforms/go/redaction/demo", "timeout": 70000})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 5000})
 
