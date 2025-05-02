@@ -40,8 +40,7 @@ jobs:
         if: needs.setup.outputs.data-transforms-go == 'true'
         uses: doc-detective/github-action@v1
         with:
-          input: ../data-transforms/go
-          version: 2.19.1
+            input: '[ "../data-transforms/go/flatten/README.adoc", "../data-transforms/go/redaction/demo/README.adoc", "../data-transforms/go/iss_demo/README.adoc", "../data-transforms/go/regex/README.adoc", "../data-transforms/go/to_avro/README.adoc"]'
           working_directory: setup-tests
           exit_on_fail: true
 
@@ -49,8 +48,7 @@ jobs:
         if: needs.setup.outputs.data-transforms-rust == 'true'
         uses: doc-detective/github-action@v1
         with:
-          input: ../data-transforms/rust
-          version: 2.19.1
+          input: ../data-transforms/rust/ts-converter/README.adoc
           working_directory: setup-tests
           exit_on_fail: true
 
