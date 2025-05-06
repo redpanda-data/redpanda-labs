@@ -60,8 +60,8 @@ Your lab's documentation should be placed within the `docs/` directory.
 <4> (Optional) The `attachments/` directory stores files to be uploaded as attachments.
 <5> (Optional) The `examples/` directory stores code files to be included in the documentation.
 <6> (Optional) The `images/` directory stores images to be included in the documentation.
-<7> (Required) The `pages/` directory stores your Asciidoc documentation pages.
-<8> (Optional) The `partials/` directory is where you can store reusable snippets of Asciidoc content to be included in the documentation.
+<7> (Required) The `pages/` directory stores your AsciiDoc documentation pages.
+<8> (Optional) The `partials/` directory is where you can store reusable snippets of AsciiDoc content to be included in the documentation.
 
 === Avoid duplication in the README
 
