@@ -69,12 +69,12 @@ To avoid duplicating content in both the README and the Antora docs you can syml
 
 Symlinks are a powerful tool for managing documentation efficiently, allowing you to maintain a single source of truth while ensuring your content is accessible both on GitHub and within the Redpanda docs site. You can symlink not only README files but also example code, images, and attachments so that all relevant documentation components are seamlessly integrated and accessible.
 
-To create a symlink for your README, execute the following script from the `utility-scripts/` directory of this repository.
+To create a symlink for your README, execute the following CLI command:
 
-NOTE: This script is not supported on Windows. If you're using Windows, create the symlinks manually. See the https://docs.antora.org/antora/latest/symlinks/#windows[Antora documentation] for instructions.
+NOTE: This command is not supported on Windows. If you're using Windows, create the symlinks manually. See the https://docs.antora.org/antora/latest/symlinks/#windows[Antora documentation] for instructions.
 
 ```bash
-sh utility-scripts/symlink-docs.sh <path-to-readme> <target-asciidoc-filename>
+npx doc-tools <path-to-readme> <target-asciidoc-filename>
 ```
 
 Replace `<path-to-readme>` with the name of the directory where your README is saved. Replace `<target-asciidoc-filename>` with the Asciidoc filename that you want to generate.
