@@ -1,0 +1,1 @@
+../../../../docker-compose/single-broker/README.adoc

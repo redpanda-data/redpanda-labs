@@ -26,7 +26,7 @@ endif::[]
 // ========================AUTOMATED TESTS===================================
 // The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
 
-// (test start {"id":"data-transform-iss-demo-go", "description": "Convert JSON Messages into Avro", "cleanup": "../../../setup-tests/cleanup.json"})
+// (test start {"id":"data-transform-iss-demo-go", "description": "Convert JSON Messages into Avro"})
 
 This example shows you how to query live tracking data from the International Space Station and convert it from JSON to Avro using Redpanda data transforms.
 
@@ -63,7 +63,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
@@ -74,7 +74,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start Redpanda in Docker by running the following command:
@@ -82,7 +82,7 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose up -d --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../data-transforms/go/iss_demo"})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 5000})
 
@@ -91,7 +91,7 @@ docker compose up -d --wait
 ```bash
 ./post-schema.sh
 ```
-// (step {"action":"runShell", "command": "./post-schema.sh", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "./post-schema.sh", "workingDirectory": "../data-transforms/go/iss_demo"})
 
 +
 Take a note of the schema ID that is returned from this command. In a clean environment this will be `1`.
@@ -101,7 +101,7 @@ Take a note of the schema ID that is returned from this command. In a clean envi
 ```bash
 rpk profile create iss_demo --from-profile profile.yml
 ```
-// (step {"action":"runShell", "command": "rpk profile create iss_demo --from-profile profile.yml", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "rpk profile create iss_demo --from-profile profile.yml", "workingDirectory": "../data-transforms/go/iss_demo"})
 +
 [.no-copy]
 ----
@@ -121,8 +121,8 @@ rpk topic create iss_json iss_avro
 rpk transform build
 rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro
 ```
-// (step {"action":"runShell", "command": "rpk transform build", "workingDirectory": "."})
-// (step {"action":"runShell", "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "rpk transform build", "workingDirectory": "../data-transforms/go/iss_demo"})
+// (step {"action":"runShell", "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro", "workingDirectory": "../data-transforms/go/iss_demo"})
 // Wait for the transform to be processed by Redpanda
 // (step {"action":"wait", "duration": 10000})
 +
@@ -150,7 +150,7 @@ Example output:
 ```bash
 rpk topic produce iss_json
 ```
-// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce iss_avro", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce iss_avro", "workingDirectory": "../data-transforms/go/iss_demo"})
 
 . Paste the output of the cURL command into the prompt and press kbd:[Ctrl + C] to exit the prompt.
 
@@ -196,6 +196,7 @@ To shut down and delete the containers along with all your cluster data:
 docker compose down -v
 ```
 // (step {"action":"runShell", "command": "rpk profile delete iss_demo"})
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../data-transforms/go/iss_demo"})
 // (test end)
 
 == Next steps

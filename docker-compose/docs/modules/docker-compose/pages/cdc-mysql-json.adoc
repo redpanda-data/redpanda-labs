@@ -1,1 +1,0 @@
-../../../../cdc/mysql-json/README.adoc

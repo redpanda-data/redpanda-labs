@@ -18,7 +18,7 @@ endif::[]
 // ========================AUTOMATED TESTS===================================
 // The comments in this file are used to run automated tests of all the documented steps. Tests are run on each pull request to the upstream repository using GitHub Actions. For more details about the testing tool we use, see https://doc-detective.com/.
 
-// (test start {"id":"data-transform-flatten-go", "description": "Flatten JSON messages", "cleanup": "../../../setup-tests/cleanup.json"})
+// (test start {"id":"data-transform-flatten-go", "description": "Flatten JSON messages"})
 
 This example uses Redpanda data transforms to take JSON messages in an input topic and flatten them using a customizable delimiter.
 
@@ -84,7 +84,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_VERSION={latest-redpanda-version}
+export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
@@ -95,7 +95,7 @@ For example:
 +
 [,bash,subs="attributes+"]
 ----
-export REDPANDA_CONSOLE_VERSION={latest-console-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start Redpanda in Docker by running the following command:
@@ -103,7 +103,7 @@ export REDPANDA_CONSOLE_VERSION={latest-console-version}
 ```bash
 docker compose up -d --wait
 ```
-// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../data-transforms/go/flatten"})
 // Wait for the containers to finish getting up and running
 // (step {"action":"wait", "duration": 10000})
 
@@ -112,7 +112,7 @@ docker compose up -d --wait
 ```bash
 rpk profile create flatten --from-profile profile.yml
 ```
-// (step {"action":"runShell", "command": "rpk profile create flatten --from-profile profile.yml", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "rpk profile create flatten --from-profile profile.yml", "workingDirectory": "../data-transforms/go/flatten"})
 
 . Create the required topics `iss_json` and `iss_avro`:
 +
@@ -127,8 +127,8 @@ rpk topic create src sink
 rpk transform build
 rpk transform deploy --input-topic=src --output-topic=sink
 ```
-// (step {"action":"runShell", "command": "rpk transform build", "workingDirectory": "."})
-// (step {"action":"runShell", "command": "rpk transform deploy --input-topic=src --output-topic=sink --var 'RP_FLATTEN_DELIM=.'", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "rpk transform build", "workingDirectory": "../data-transforms/go/flatten"})
+// (step {"action":"runShell", "command": "rpk transform deploy --input-topic=src --output-topic=sink --var 'RP_FLATTEN_DELIM=.'", "workingDirectory": "../data-transforms/go/flatten"})
 // Wait for the transform to be processed by Redpanda
 // (step {"action":"wait", "duration": 10000})
 +
@@ -147,7 +147,7 @@ rpk transform deploy --var "RP_FLATTEN_DELIM=<delimiter>"
 ```bash
 rpk topic produce src
 ```
-// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce src", "workingDirectory": "."})
+// (step {"action":"runShell", "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce src", "workingDirectory": "../data-transforms/go/flatten"})
 
 . Paste the following into the prompt and press kbd:[Ctrl + C] to exit:
 +
@@ -184,5 +184,7 @@ To shut down and delete the containers along with all your cluster data:
 ```bash
 docker compose down -v
 ```
+
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../data-transforms/go/flatten"})
 // (test end)
 

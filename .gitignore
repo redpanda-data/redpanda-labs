@@ -12,6 +12,9 @@ node_modules/
 # Docs
 local-docs/
 
+# Tests
+testresults-*.json
+
 # Go
 go.work*
 

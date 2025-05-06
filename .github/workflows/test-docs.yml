@@ -9,8 +9,7 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
-      data-transforms-go: ${{ steps.filter.outputs.data-transforms-go }}
-      data-transforms-rust: ${{ steps.filter.outputs.data-transforms-rust }}
+      data-transforms: ${{ steps.filter.outputs.data-transforms }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,10 +19,8 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            data-transforms-go:
-              - 'data-transforms/go/**'
-            data-transforms-rust:
-              - 'data-transforms/rust/**'
+            data-transforms:
+              - 'data-transforms/**'
   run-tests:
     needs: setup
     strategy:
@@ -36,18 +33,23 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test Go transforms
-        if: needs.setup.outputs.data-transforms-go == 'true'
-        uses: doc-detective/github-action@v1
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          input: data-transforms/go
-          config: data-transforms/doc-tests/config.json
-          exit_on_fail: true
+          node-version: '18'
+  
+      - name: Install dependencies
+        run: npm install
 
-      - name: Test Rust transforms
-        if: needs.setup.outputs.data-transforms-rust == 'true'
-        uses: doc-detective/github-action@v1
+      - name: Test data transforms
+        if: needs.setup.outputs.data-transforms == 'true'
+        run: |
+          # Run the tests for the data transforms
+          npm run test-transforms
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          input: data-transforms/rust
-          config: data-transforms/doc-tests/config.json
-          exit_on_fail: true
+          name: doc-detective-output
+          path: /home/runner/work/_temp/doc-detective-output.json

@@ -1,0 +1,1 @@
+../../../../connect-plugins/processor/embeddings/openai/README.adoc

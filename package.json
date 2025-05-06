@@ -7,23 +7,26 @@
     "build": "antora --to-dir local-docs --fetch docs/local-antora-playbook.yml",
     "serve": "wds --node-resolve --open / --watch --root-dir local-docs --port 5002",
     "start": "cross-env-shell LIVERELOAD=true npx gulp",
-    "test": "cd data-transforms/flatten && node test.js"
+    "test-transforms": "cd setup-tests && npx doc-detective runTests --input ../data-transforms/go -l debug"
   },
   "dependencies": {
     "@antora/cli": "3.1.2",
     "@antora/site-generator": "3.1.2",
     "@asciidoctor/tabs": "^1.0.0-beta.5",
-    "@octokit/rest": "^20.0.2",
-    "@redpanda-data/docs-extensions-and-macros": "latest",
-    "doc-detective": "^2.16.4",
-    "semver": "^7.6.0"
+    "@redpanda-data/docs-extensions-and-macros": "^4.0.0",
+    "@sntke/antora-mermaid-extension": "^0.0.6"
   },
   "devDependencies": {
+    "@octokit/core": "^6.1.2",
+    "@octokit/plugin-retry": "^7.1.1",
+    "@octokit/rest": "^21.0.1",
     "@web/dev-server": "^0.2.1",
     "cross-env": "^7.0.3",
+    "doc-detective": "^2.17.0",
     "gulp": "^4.0.2",
     "gulp-connect": "^5.7.0",
-    "open": "^9.1.0"
+    "open": "^9.1.0",
+    "semver": "^7.6.3"
   },
   "overrides": {
     "vinyl-fs": {

@@ -1,0 +1,1 @@
+../../../../data-transforms/go/redaction/demo/README.adoc

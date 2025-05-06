@@ -10,27 +10,35 @@
         },
         {
           "action": "runShell",
-          "command": "node ./redpanda-versions/fetch-console.js",
+          "command": "npx doc-tools get-console-version --from-antora",
           "setVariables": [
             {
               "name": "REDPANDA_CONSOLE_VERSION",
-              "regex": ".*"
+              "regex": "(?<=CONSOLE_VERSION=)(.*)"
+            },
+            {
+              "name": "CONSOLE_DOCKER_REPO",
+              "regex": "(?<=CONSOLE_DOCKER_REPO=)(.*)"
             }
           ]
         },
         {
           "action": "runShell",
-          "command": "node ./redpanda-versions/fetch-redpanda.js",
+          "command": "npx doc-tools get-redpanda-version --from-antora",
           "setVariables": [
             {
               "name": "REDPANDA_VERSION",
-              "regex": ".*"
+              "regex": "(?<=REDPANDA_VERSION=)(.*)"
+            },
+            {
+              "name": "REDPANDA_DOCKER_REPO",
+              "regex": "(?<=REDPANDA_DOCKER_REPO=)(.*)"
             }
           ]
         },
         {
           "action": "runShell",
-          "command": "bash ./tools/install-dependencies.sh"
+          "command": "npx doc-tools install-test-dependencies"
         },
         {
           "action": "runShell",
