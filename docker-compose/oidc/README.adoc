@@ -175,7 +175,7 @@ export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 
 . Create a `.env` file and add the following environment variables:
 +
-`.env`
+.`.env`
 [,bash,role="no-wrap"]
 ----
 TENANT_ID=<tenant-id>
@@ -271,7 +271,7 @@ Look for the `sub` field, which will look like a UUID:
 ----
 
 . Use `rpk` to assign a role to the application's sub value:
-
++
 [,bash]
 ----
 rpk security acl create \
