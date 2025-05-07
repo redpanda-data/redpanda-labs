@@ -53,8 +53,13 @@ This example uses Redpanda data transforms to take JSON messages in an input top
 You must have the following:
 
 - At least version 1.20 of https://go.dev/doc/install[Go^] installed on your host machine.
+ifndef::env-site[]
 - link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
-- https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
+endif::[]
+ifdef::env-site[]
+- xref:get-started:rpk-install.adoc[Install `rpk`] on your host machine.
+endif::[]
+- https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine.
 
 == Limitations
 
