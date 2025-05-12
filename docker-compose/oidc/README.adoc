@@ -15,7 +15,9 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
-This lab walks you through integrating Azure Entra ID (formerly Azure AD) with Redpanda and Redpanda Console for unified identity using OpenID Connect (OIDC). This integration allows you to use Azure Entra ID for authentication and authorization in Redpanda and Redpanda Console.
+This lab walks you through integrating Azure Entra ID (formerly Azure AD) with Redpanda and Redpanda Console for unified identity using OpenID Connect (OIDC). This integration allows you to use Azure Entra ID for authentication in Redpanda and Redpanda Console.
+
+Redpanda does not support mapping Entra ID groups or other token claims to Redpanda roles. As a result, authorization decisions (who can do what) are not made by Entra ID but must be configured directly in Redpanda using ACLs or role bindings. Azure Entra ID authenticates the user, but Redpanda enforces access.
 
 == Prerequisites
 
@@ -50,21 +52,26 @@ See also: https://learn.microsoft.com/en-us/azure/active-directory/develop/quick
 
 === Set access token version to v2
 
-Redpanda and Redpanda Console require OAuth 2.0-compliant JWT tokens for user authentication. When using OIDC, your IdP must issue JWTs. Redpanda Console uses these tokens to authenticate to Redpanda APIs through SASL/OAUTHBEARER or Bearer headers.
+Redpanda and Redpanda Console require that your identity provider (IdP) issues **JWT-encoded access tokens** that can be cryptographically verified. To ensure this, the IdP must support OpenID Connect (OIDC), not just OAuth 2.0.
 
-. In the App Registration page, go to *Manage* > *Manifest*
-. Find `accessTokenAcceptedVersion` and set it to `2`:
+By default, OAuth 2.0 allows for opaque tokens, which Redpanda does not support. OIDC extends OAuth 2.0 by specifying how tokens should be structured, signed, and validated using a discovery document and public keys.
+
+In Azure Entra ID, you must configure the app to issue v2.0 **JWT access tokens**:
+
+. In the App Registration page, go to *Manage* > *Manifest*.
+. Set `accessTokenAcceptedVersion` to `2`:
 +
 [,json]
 ----
 "accessTokenAcceptedVersion": 2
 ----
+. Click *Save*.
 
-. Click *Save*
+TIP: Azure Entra ID does not include claims like `email` in access tokens by default. You can add them by going to *Token Configuration* > *+ Add optional claim*, then selecting *email* for *Access token* type.
 
 === Define a custom scope
 
-Scopes are required to explicitly request OAuth 2.0-compliant access tokens.
+Scopes are required to explicitly request JWT access tokens.
 
 . Go to *Expose an API* > *Set* Application ID URI (accept the default if prompted).
 . Click *Add a scope* and enter:
@@ -75,19 +82,6 @@ Scopes are required to explicitly request OAuth 2.0-compliant access tokens.
 . Click *Add scope*.
 
 See also: https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-expose-web-apis[Expose an API^].
-
-=== Add the email claim to ID token
-
-To allow Redpanda to use the `email` claim in the ID token for user mapping, ensure the claim is included:
-
-. In the App Registration, go to *Token configuration*.
-. Click *+ Add optional claim*.
-. Choose:
-** *Token type*: `ID`
-** *Claim*: `email`
-. Click *Add*.
-
-See also: https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims#optional-claims[Add optional claims to ID tokens^].
 
 === Create a client secret
 
@@ -110,6 +104,7 @@ Collect these values to configure Redpanda and Redpanda Console later.
 | Issuer URL | Manual: use Tenant ID | `https://login.microsoftonline.com/<tenant-id>/v2.0`
 |===
 
+[[verify-token-configuration]]
 === Verify the token configuration
 
 This step confirms you receive a token with expected claims.
@@ -132,11 +127,12 @@ curl -X POST "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token" \
 * `ver`: is `2.0`
 * `sub`: is present
 
+. Save the `sub` claim value for later use.
+
 === App registration final checklist
 
 * [x] `accessTokenAcceptedVersion` set to `2`
 * [x] Custom scope `entraid.v2-access-tokens` created
-* [x] `email` claim added to the ID token in *Token configuration*
 
 == Run the lab
 
@@ -198,7 +194,7 @@ Redpanda does not support environment variables for cluster-level properties. To
 ----
 superusers:
   - superuser
-  - <oidc-user>
+  - <oidc-user> # Sub value from Azure Entra ID
 oidc_discovery_url: "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration"
 oidc_token_audience: "<client-id>"
 ----
@@ -233,28 +229,13 @@ The provided `client.js` script demonstrates this by:
 
 - Using that token to produce a message to Redpanda.
 
-[IMPORTANT]
-====
 When using the *client credentials flow*, Azure Entra ID issues tokens for *applications*, not users. These tokens do not include user-specific claims like `email` or `preferred_username`. Instead, the token includes the `sub` claim (subject), which uniquely identifies the app.
-
-As a result:
-
-- Redpanda must be configured to extract identities using the `sub` claim.
-- You must grant ACLs using that `sub` value as the principal.
-====
 
 . Set up your rpk profile:
 +
 ```bash
 rpk profile create oidc-lab --from-profile profile.yaml
 ```
-
-. Change the `oidc_principal_mapping` property in your Redpanda configuration to use the `sub` claim:
-+
-[,bash]
-----
-rpk cluster config set oidc_principal_mapping "$.sub"
-----
 
 . Find the sub value by running the client script:
 +

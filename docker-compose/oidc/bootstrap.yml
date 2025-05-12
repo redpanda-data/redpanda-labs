@@ -25,9 +25,8 @@ http_authentication:
   - 'OIDC'
 oidc_clock_skew_tolerance: 600
 oidc_discovery_url: "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration"
-oidc_principal_mapping: "$.preferred_username"
+oidc_principal_mapping: "$.sub"
 oidc_token_audience: "<client-id>"
-admin_api_require_auth: true
 # Allow topics to be created on first access.
 # https://docs.redpanda.com/current/reference/properties/cluster-properties/#auto_create_topics_enabled
 auto_create_topics_enabled: true
