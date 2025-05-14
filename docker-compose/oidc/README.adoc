@@ -1,0 +1,445 @@
+= Enable Unified Identity with Azure Entra ID for Redpanda and Redpanda Console
+:env-docker: true
+:page-categories: Security, Management, Redpanda Console
+:description: Integrate Azure Entra ID with Redpanda and Redpanda Console for unified identity using OpenID Connect (OIDC).
+:page-layout: lab
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 25.1.1
+:latest-console-version: 3.1.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+This lab walks you through integrating Azure Entra ID (formerly Azure AD) with Redpanda and Redpanda Console for unified identity using OpenID Connect (OIDC). This integration allows you to use Azure Entra ID for authentication in Redpanda and Redpanda Console.
+
+Redpanda does not support mapping Entra ID groups or other token claims to Redpanda roles. As a result, authorization decisions (who can do what) are not made by Entra ID but must be configured directly in Redpanda using ACLs or role bindings. Azure Entra ID authenticates the user, but Redpanda enforces access.
+
+== Prerequisites
+
+- Access to https://portal.azure.com[Azure Portal^]
+- https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-create-new-tenant[Azure Entra ID tenant^]
+ifndef::env-site[]
+- link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
+endif::[]
+ifdef::env-site[]
+- xref:ROOT:get-started:rpk-install.adoc[Install `rpk`] on your host machine.
+endif::[]
+- https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine.
+
+== Set up Azure Entra ID
+
+This section guides you through creating an Azure Entra ID application registration and configuring it for use with Redpanda.
+You'll set up the necessary permissions, scopes, and claims to ensure proper authentication and authorization.
+
+=== Create an application registration
+
+In this section, you'll register a new application in Entra ID that Redpanda will use to authenticate.
+
+. Sign in to https://portal.azure.com[Azure Portal^].
+. Navigate to *Azure Active Directory* > *App registrations* > *New registration*.
+. Configure:
+** *Name*: `RedpandaUnifiedIdentity`
+** *Supported account types*: Choose *Accounts in this organizational directory only*
+** *Redirect URI*: `http://localhost:8080/auth/callbacks/oidc`
+. Click *Register*.
+
+See also: https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app[Register an application^].
+
+=== Set access token version to v2
+
+Redpanda and Redpanda Console require that your identity provider (IdP) issues **JWT-encoded access tokens** that can be cryptographically verified. To ensure this, the IdP must support OpenID Connect (OIDC), not just OAuth 2.0.
+
+By default, OAuth 2.0 allows for opaque tokens, which Redpanda does not support. OIDC extends OAuth 2.0 by specifying how tokens should be structured, signed, and validated using a discovery document and public keys.
+
+In Azure Entra ID, you must configure the application to issue v2.0 **JWT access tokens**:
+
+. In the App Registration page, go to *Manage* > *Manifest*.
+. Set `accessTokenAcceptedVersion` to `2`:
++
+[,json]
+----
+"accessTokenAcceptedVersion": 2
+----
+. Click *Save*.
+
+TIP: Azure Entra ID does not include claims like `email` in access tokens by default. You can add them by going to *Token Configuration* > *+ Add optional claim*, then selecting *email* for *Access token* type.
+
+=== Define a custom scope
+
+Scopes are required to explicitly request JWT access tokens.
+
+. Go to *Expose an API* > *Set Application ID URI* (accept the default if prompted).
+. Click *Add a scope* and enter:
+** *Scope name*: `entraid.v2-access-tokens`
+** *Who can consent*: Admins and users
+** *Display name*: `Entra ID v2 access tokens`
+** *Description*: `Allows Redpanda to request v2 access tokens`
+. Click *Add scope*.
+
+See also: https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-expose-web-apis[Expose an API^].
+
+=== Create a client secret
+
+This secret is used by Redpanda Console to authenticate with Entra ID.
+
+. Go to *Certificates & secrets* > *New client secret*.
+. Add a description and choose an expiration (12-24 months recommended).
+. Save the generated secret securely.
+
+=== Gather configuration values
+
+Collect these values to configure Redpanda and Redpanda Console later.
+
+|===
+| Key | Location | Example
+
+| Client ID | App Registration Overview | `ecc74380-7c64-4283-9fa1-03a37b9054b7`
+| Tenant ID | App Registration Overview | `9a95fd9e-005d-487a-9a01-d08c1eab2757`
+| Client Secret | Certificates & Secrets | `GENERATED_SECRET_VALUE`
+| Issuer URL | Manual: use Tenant ID | `https://login.microsoftonline.com/<tenant-id>/v2.0`
+|===
+
+[[verify-token-configuration]]
+=== Verify the token configuration
+
+This step confirms you receive a token with expected claims.
+
+. Run a test OAuth client credentials flow:
++
+[,bash]
+----
+curl -X POST "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token" \
+  -d "client_id=<client-id>" \
+  -d "scope=api://<client-id>/.default" \
+  -d "client_secret=<client-secret>" \
+  -d "grant_type=client_credentials"
+----
+
+. Decode the returned token at https://jwt.io[jwt.io^] and verify:
++
+* `iss`: matches the issuer URL
+* `aud`: matches your client ID
+* `ver`: is `2.0`
+* `sub`: is present
+
+. Save the `sub` claim value for later use.
+
+=== Application registration final checklist
+
+* [x] `accessTokenAcceptedVersion` set to `2`
+* [x] Custom scope `entraid.v2-access-tokens` created
+
+== Run the lab
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/oidc/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/oidc
+----
+
+. Set the `REDPANDA_VERSION` environment variable to a supported version of Redpanda. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION=v{latest-redpanda-version}
+----
+
+. Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
++
+NOTE: You must use Redpanda Console version v3.1.0 or later to deploy this lab.
++
+For example:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
+----
+
+. Create a `.env` file and add the following environment variables:
++
+.`.env`
+[,bash,role="no-wrap"]
+----
+TENANT_ID=<tenant-id>
+OIDC_CLIENT_ID=<client-id>
+OIDC_CLIENT_SECRET=<client-secret>
+JWT_SIGNING_KEY=<jwt-signing-key>
+----
++
+Redpanda Console expects configuration to be passed as environment variables, where each YAML key is converted to uppercase and underscores are added for each level of nesting. For example, `authentication.oidc.clientSecret` becomes `AUTHENTICATION_OIDC_CLIENTSECRET`.
++
+To simplify this, user-friendly environment variables, such as `OIDC_CLIENT_SECRET`, are set here and then mapped to the required format in the `docker-compose.yml` file.
++
+This pattern helps separate sensitive or dynamic values from implementation-specific keys. See xref:ROOT:console:config/configure-console.adoc#environment-variables[Configure Redpanda Console] for details.
+
+. Start Redpanda and Redpanda Console in Docker by running the following command:
++
+[,bash]
+----
+docker compose up --detach --wait
+----
+
+. Set up your `rpk` profile on your local machine:
++
+```bash
+rpk profile create oidc-lab --from-profile profile.yaml
+```
+
+. Update the Redpanda cluster configuration.
++
+Redpanda does not support environment variables for cluster-level properties. To configure OIDC authentication, use the following `rpk` CLI commands:
++
+[source,bash]
+----
+# Define at least one superuser. This is required for managing ACLs and cluster config.
+# Add your OIDC user’s `sub` claim here to grant superuser privileges.
+rpk cluster config set superusers '["superuser", "<oidc-sub>"]'
+
+# Enable SASL-based authentication on the Kafka API.
+rpk cluster config set enable_sasl true
+
+# Require authentication on the Admin API. Without this, the Admin API remains open.
+rpk cluster config set admin_api_require_auth true
+
+# Enable supported SASL mechanisms for the Kafka API.
+# SCRAM is for password-based users. OAUTHBEARER is for OIDC tokens.
+rpk cluster config set sasl_mechanisms '["SCRAM", "OAUTHBEARER"]'
+
+# Allow both BASIC (SCRAM) and OIDC authentication for HTTP APIs.
+rpk cluster config set http_authentication '["BASIC", "OIDC"]'
+
+# Set the expected audience (aud claim) for validating OIDC tokens.
+rpk cluster config set oidc_token_audience "<client-id>"
+
+# Configure the OIDC discovery URL (typically ends in /.well-known/openid-configuration).
+rpk cluster config set oidc_discovery_url "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration"
+
+# Map the OIDC user identity from the token’s `sub` claim (default).
+rpk cluster config set oidc_principal_mapping "$.sub"
+
+# Allow for some clock drift between Redpanda and the IdP.
+rpk cluster config set oidc_clock_skew_tolerance 600
+
+# Optional: Enable automatic topic creation on first access.
+rpk cluster config set auto_create_topics_enabled true
+----
++
+Replace all placeholder values with the values you gathered from the Azure Entra ID app registration:
++
+- `<tenant-id>`: Tenant ID
+- `<client-id>`: Client ID
+- `<oidc-user>`: Sub value from the token
+
+. Enable authentication on HTTP Proxy and Schema Registry.
++
+To ensure secure access to the HTTP-based APIs (HTTP Proxy and Schema Registry), you must enable authentication on those listeners by setting `authentication_method: http_basic`.
+
+.. Open a terminal and run:
++
+[,bash]
+----
+docker exec -it redpanda-0 bash
+----
+
+.. Open the redpanda.yaml config file:
++
+[,bash]
+----
+nano /etc/redpanda/redpanda.yaml
+----
+
+.. Add `authentication_method: http_basic` to the HTTP Proxy (`pandaproxy`) and Schema Registry listeners to enable authentication for those API endpoints. For example:
++
+[,yaml]
+----
+pandaproxy:
+    pandaproxy_api:
+        - address: 0.0.0.0
+          port: 8082
+          name: internal
+          authentication_method: http_basic
+        - address: 0.0.0.0
+          port: 18082
+          name: external
+          authentication_method: http_basic
+    advertised_pandaproxy_api:
+        - address: redpanda-0
+          port: 8082
+          name: internal
+          authentication_method: http_basic
+        - address: localhost
+          port: 18082
+          name: external
+          authentication_method: http_basic
+schema_registry:
+    schema_registry_api:
+        - address: 0.0.0.0
+          port: 8081
+          name: internal
+          authentication_method: http_basic
+        - address: 0.0.0.0
+          port: 18081
+          name: external
+          authentication_method: http_basic
+----
+
+.. Save the file and exit the editor.
+
+.. Exit the container:
++
+[,bash]
+----
+exit
+----
+
+.. Restart the Redpanda broker:
++
+[,bash]
+----
+docker restart redpanda-0
+----
+
+.. Repeat this process for each broker (`redpanda-1` and `redpanda-2`).
+
+. Open Redpanda Console in your browser at http://localhost:8080/login.
+
+. Click *Log in with OIDC* and enter the login details of your OIDC user.
++
+You should be redirected to the Redpanda Console dashboard.
+
+You are now logged in to Redpanda Console using OIDC authentication with Azure Entra ID.
+You can now use Redpanda Console to manage your Redpanda cluster and monitor its performance.
+
+== Connect a Kafka client with OIDC
+
+You can test OIDC client authentication by connecting a Kafka client, such as KafkaJS, to Redpanda.
+
+KafkaJS supports OIDC through the `oauthBearerProvider` configuration. This function must return a valid access token that the client uses to authenticate with Redpanda through the SASL/OAUTHBEARER mechanism.
+
+The provided `client.js` script demonstrates this by:
+
+- Authenticating to Azure Entra ID using the *client credentials flow*.
+
+- Retrieving a JWT access token.
+
+- Using that token to produce a message to Redpanda.
+
+When using the *client credentials flow*, Azure Entra ID issues tokens for *applications*, not users. These tokens do not include user-specific claims like `email` or `preferred_username`. Instead, the token includes the `sub` claim (subject), which uniquely identifies the application.
+
+. Find the sub value by running the client script:
++
+[,bash]
+----
+npm install && node client.js get-sub-value
+----
++
+Look for the `sub` field, which will look like a UUID:
++
+[,json]
+----
+"sub": "ae775e64-5853-42cb-b62a-e092c7c5288b"
+----
+
+. Use `rpk` to assign a role to the application's `sub` value:
++
+[,bash]
+----
+rpk security acl create \
+  --allow-principal User:<sub-claim> \
+  --operation write,read,describe,create \
+  --topic test-topic
+----
+
+. Run the client script again to start producing messages to the `test` topic:
++
+[,bash]
+----
+node client.js
+----
++
+Output:
++
+[.no-copy]
+----
+[Kafka] Connecting producer...
+[OIDC] Fetching new access token...
+[Kafka] Sending message...
+[Kafka] Message sent successfully.
+[Kafka] Producer disconnected.
+----
++
+You should now see the message produced to the `test` topic in your Redpanda cluster.
+
+. Consume the message from the `test` topic:
++
+[,bash]
+----
+rpk topic consume test-topic --num 1
+----
++
+Example output:
++
+[,json, role="no-copy"]
+----
+{
+  "topic": "test-topic",
+  "value": "Hello from OIDC client!",
+  "timestamp": 1746623458222,
+  "partition": 0,
+  "offset": 0
+}
+----
+
+== Token refresh
+
+The `client.js` script implements automatic token refreshing using `simple-oauth2`. When the token is about to expire, it fetches a new one in the background, keeping the Kafka client authenticated seamlessly.
+
+For long-running apps, this pattern avoids token expiry errors and ensures smooth reconnections.
+
+== Clean up
+
+To shut down and delete the containers along with all your cluster data:
+
+```bash
+docker compose down -v
+```
+
+== Troubleshoot OIDC login
+
+If you encounter issues logging in to Redpanda Console, check the following in your Redpanda Console configuration:
+
+* Ensure the `issuerUrl` matches the issuer URL from the application registration.
+* Verify the `clientId` and `clientSecret` match those from the application registration.
+* Check the `redirectUrl` matches the redirect URI set in the application registration.
+* Ensure the `additionalScopes` includes the custom scope you created in the application registration.
+* Verify the `oidc_principal_mapping`  matches the claim you want to use for user mapping.
+* Check the `oidc_token_audience` in your Redpanda configuration matches the client ID from the application registration.
+
+include::ROOT:manage:partial$security/oidc/limitations.adoc[]
+
+== Suggested reading
+
+ifndef::env-site[]
+- link:https://docs.redpanda.com/current/console/config/security/authentication/[Redpanda Console Authentication^].
+endif::[]
+ifdef::env-site[]
+* xref:ROOT:console:config/security/authentication.adoc[]
+endif::[]
+* link:https://kafka.js.org/docs/configuration#oauthbearer-example[KafkaJS OIDC example^]
+* https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims#optional-claims[Microsoft: ID Tokens^]
+* https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-expose-web-apis[Microsoft: Expose an API^]
+* https://auth0.com/docs/get-started/authentication-and-authorization-flow/client-credentials-flow[Auth0: Client Credentials Flow^]
