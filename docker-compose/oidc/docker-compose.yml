@@ -33,7 +33,7 @@ services:
       # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
       - --smp 1
       - --default-log-level=info
-    image: docker.redpanda.com/redpandadata/redpanda:v25.1.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: redpanda-0
     # Sets the username and password of the bootstrap SCRAM superuser
     # See https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/manual/production/production-deployment/#bootstrap-a-user-account
@@ -41,7 +41,6 @@ services:
       RP_BOOTSTRAP_USER: "superuser:secretpassword"
     volumes:
       - redpanda-0:/var/lib/redpanda/data
-      - ./bootstrap.yml:/etc/redpanda/.bootstrap.yaml
     networks:
       - redpanda_network
     ports:
@@ -50,7 +49,7 @@ services:
       - 19092:19092
       - 19644:9644
     healthcheck:
-      test: ["CMD", "rpk", "cluster", "info", "-X", "user=superuser", "-X", "pass=secretpassword"]
+      test: ["CMD", "rpk", "cluster", "info"]
       interval: 10s
       timeout: 15s
       retries: 10
@@ -69,13 +68,12 @@ services:
       - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
-    image: docker.redpanda.com/redpandadata/redpanda:v25.1.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: redpanda-1
     environment:
       RP_BOOTSTRAP_USER: "superuser:secretpassword"
     volumes:
       - redpanda-1:/var/lib/redpanda/data
-      - ./bootstrap.yml:/etc/redpanda/.bootstrap.yaml
     networks:
       - redpanda_network
     ports:
@@ -100,13 +98,12 @@ services:
       - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
-    image: docker.redpanda.com/redpandadata/redpanda:v25.1.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: redpanda-2
     environment:
       RP_BOOTSTRAP_USER: "superuser:secretpassword"
     volumes:
       - redpanda-2:/var/lib/redpanda/data
-      - ./bootstrap.yml:/etc/redpanda/.bootstrap.yaml
     networks:
       - redpanda_network
     ports:
@@ -121,7 +118,7 @@ services:
   ####################
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v3.1.0
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
     networks:
       - redpanda_network
     volumes:
