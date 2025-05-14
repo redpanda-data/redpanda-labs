@@ -33,10 +33,10 @@ endif::[]
 
 == Set up Azure Entra ID
 
-This section guides you through creating an Azure Entra ID app registration and configuring it for use with Redpanda.
+This section guides you through creating an Azure Entra ID application registration and configuring it for use with Redpanda.
 You'll set up the necessary permissions, scopes, and claims to ensure proper authentication and authorization.
 
-=== Create an app registration
+=== Create an application registration
 
 In this section, you'll register a new application in Entra ID that Redpanda will use to authenticate.
 
@@ -56,7 +56,7 @@ Redpanda and Redpanda Console require that your identity provider (IdP) issues *
 
 By default, OAuth 2.0 allows for opaque tokens, which Redpanda does not support. OIDC extends OAuth 2.0 by specifying how tokens should be structured, signed, and validated using a discovery document and public keys.
 
-In Azure Entra ID, you must configure the app to issue v2.0 **JWT access tokens**:
+In Azure Entra ID, you must configure the application to issue v2.0 **JWT access tokens**:
 
 . In the App Registration page, go to *Manage* > *Manifest*.
 . Set `accessTokenAcceptedVersion` to `2`:
@@ -85,7 +85,7 @@ See also: https://learn.microsoft.com/en-us/azure/active-directory/develop/quick
 
 === Create a client secret
 
-This secret will be used by Redpanda Console to authenticate with Entra ID.
+This secret is used by Redpanda Console to authenticate with Entra ID.
 
 . Go to *Certificates & secrets* > *New client secret*.
 . Add a description and choose an expiration (12-24 months recommended).
@@ -129,7 +129,7 @@ curl -X POST "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token" \
 
 . Save the `sub` claim value for later use.
 
-=== App registration final checklist
+=== Application registration final checklist
 
 * [x] `accessTokenAcceptedVersion` set to `2`
 * [x] Custom scope `entraid.v2-access-tokens` created
@@ -149,7 +149,7 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/docker-compose/oidc
 ----
 
-. Set the `REDPANDA_VERSION` environment variable to a version of Redpanda. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
+. Set the `REDPANDA_VERSION` environment variable to a supported version of Redpanda. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 For example:
 +
@@ -160,7 +160,7 @@ export REDPANDA_VERSION=v{latest-redpanda-version}
 
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-NOTE: You must use at least version v3.1.0 of Redpanda Console to deploy this lab.
+NOTE: You must use Redpanda Console version v3.1.0 or later to deploy this lab.
 +
 For example:
 +
@@ -248,7 +248,7 @@ Replace all placeholder values with the values you gathered from the Azure Entra
 +
 To ensure secure access to the HTTP-based APIs (HTTP Proxy and Schema Registry), you must enable authentication on those listeners by setting `authentication_method: http_basic`.
 
-.. Open a terminal and exec into the Redpanda container:
+.. Open a terminal and run:
 +
 [,bash]
 ----
@@ -338,7 +338,7 @@ The provided `client.js` script demonstrates this by:
 
 - Using that token to produce a message to Redpanda.
 
-When using the *client credentials flow*, Azure Entra ID issues tokens for *applications*, not users. These tokens do not include user-specific claims like `email` or `preferred_username`. Instead, the token includes the `sub` claim (subject), which uniquely identifies the app.
+When using the *client credentials flow*, Azure Entra ID issues tokens for *applications*, not users. These tokens do not include user-specific claims like `email` or `preferred_username`. Instead, the token includes the `sub` claim (subject), which uniquely identifies the application.
 
 . Find the sub value by running the client script:
 +
@@ -420,14 +420,14 @@ docker compose down -v
 
 == Troubleshoot OIDC login
 
-If you encounter issues logging in to Redpanda Console, check the following:
+If you encounter issues logging in to Redpanda Console, check the following in your Redpanda Console configuration:
 
-* Ensure the `issuerUrl` in your Redpanda Console configuration matches the issuer URL from the app registration.
-* Verify the `clientId` and `clientSecret` in your Redpanda Console configuration match those from the app registration.
-* Check the `redirectUrl` in your Redpanda Console configuration matches the redirect URI set in the app registration.
-* Ensure the `additionalScopes` in your Redpanda Console configuration include the custom scope you created in the app registration.
-* Verify the `oidc_principal_mapping` in your Redpanda configuration matches the claim you want to use for user mapping.
-* Check the `oidc_token_audience` in your Redpanda configuration matches the client ID from the app registration.
+* Ensure the `issuerUrl` matches the issuer URL from the application registration.
+* Verify the `clientId` and `clientSecret` match those from the application registration.
+* Check the `redirectUrl` matches the redirect URI set in the application registration.
+* Ensure the `additionalScopes` includes the custom scope you created in the application registration.
+* Verify the `oidc_principal_mapping`  matches the claim you want to use for user mapping.
+* Check the `oidc_token_audience` in your Redpanda configuration matches the client ID from the application registration.
 
 include::ROOT:manage:partial$security/oidc/limitations.adoc[]
 
