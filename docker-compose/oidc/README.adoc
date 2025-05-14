@@ -73,7 +73,7 @@ TIP: Azure Entra ID does not include claims like `email` in access tokens by def
 
 Scopes are required to explicitly request JWT access tokens.
 
-. Go to *Expose an API* > *Set* Application ID URI (accept the default if prompted).
+. Go to *Expose an API* > *Set Application ID URI* (accept the default if prompted).
 . Click *Add a scope* and enter:
 ** *Scope name*: `entraid.v2-access-tokens`
 ** *Who can consent*: Admins and users
@@ -364,7 +364,7 @@ rpk security acl create \
   --topic test-topic
 ----
 
-Run the client script again to start producing messages to the `test` topic:
+. Run the client script again to start producing messages to the `test` topic:
 +
 [,bash]
 ----
