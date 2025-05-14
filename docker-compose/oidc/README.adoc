@@ -27,7 +27,7 @@ ifndef::env-site[]
 - link:https://docs.redpanda.com/current/get-started/rpk-install/[Install `rpk`] on your host machine.
 endif::[]
 ifdef::env-site[]
-- xref:get-started:rpk-install.adoc[Install `rpk`] on your host machine.
+- xref:ROOT:get-started:rpk-install.adoc[Install `rpk`] on your host machine.
 endif::[]
 - https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine.
 
@@ -184,7 +184,7 @@ Redpanda Console expects configuration to be passed as environment variables, wh
 +
 To simplify this, user-friendly environment variables, such as `OIDC_CLIENT_SECRET`, are set here and then mapped to the required format in the `docker-compose.yml` file.
 +
-This pattern helps separate sensitive or dynamic values from implementation-specific keys. See xref:console:config/configure-console.adoc#environment-variables[Configure Redpanda Console] for details.
+This pattern helps separate sensitive or dynamic values from implementation-specific keys. See xref:ROOT:console:config/configure-console.adoc#environment-variables[Configure Redpanda Console] for details.
 
 . Start Redpanda and Redpanda Console in Docker by running the following command:
 +
@@ -437,7 +437,7 @@ ifndef::env-site[]
 - link:https://docs.redpanda.com/current/console/config/security/authentication/[Redpanda Console Authentication^].
 endif::[]
 ifdef::env-site[]
-* xref:console:config/security/authentication.adoc[]
+* xref:ROOT:console:config/security/authentication.adoc[]
 endif::[]
 * link:https://kafka.js.org/docs/configuration#oauthbearer-example[KafkaJS OIDC example^]
 * https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims#optional-claims[Microsoft: ID Tokens^]
