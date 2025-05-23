@@ -1,0 +1,208 @@
+name: redpanda-oidc-lab
+networks:
+  redpanda_network:
+    driver: bridge
+volumes:
+  redpanda-0: null
+  redpanda-1: null
+  redpanda-2: null
+services:
+  ##################
+  # Redpanda Brokers #
+  ##################
+  redpanda-0:
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # Address the broker advertises to clients that connect to the Kafka API.
+      # Use the internal addresses to connect to the Redpanda brokers
+      # from inside the same Docker network.
+      # Use the external addresses to connect to the Redpanda brokers
+      # from outside the Docker network.
+      - --advertise-kafka-addr internal://redpanda-0:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      # Address the broker advertises to clients that connect to the HTTP Proxy.
+      - --advertise-pandaproxy-addr internal://redpanda-0:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      # Redpanda brokers use the RPC API to communicate with each other internally.
+      - --rpc-addr redpanda-0:33145
+      - --advertise-rpc-addr redpanda-0:33145
+      # Mode dev-container uses well-known configuration properties for development in containers.
+      - --mode dev-container
+      # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
+      - --smp 1
+      - --default-log-level=info
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: redpanda-0
+    # Sets the username and password of the bootstrap SCRAM superuser
+    # See https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/manual/production/production-deployment/#bootstrap-a-user-account
+    environment:
+      RP_BOOTSTRAP_USER: "superuser:secretpassword"
+    volumes:
+      - redpanda-0:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+    ports:
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+  redpanda-1:
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-1:9092,external://localhost:29092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr internal://redpanda-1:8082,external://localhost:28082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-1:33145
+      - --advertise-rpc-addr redpanda-1:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --seeds redpanda-0:33145
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: redpanda-1
+    environment:
+      RP_BOOTSTRAP_USER: "superuser:secretpassword"
+    volumes:
+      - redpanda-1:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+    ports:
+      - 28081:28081
+      - 28082:28082
+      - 29092:29092
+      - 29644:9644
+    depends_on:
+      - redpanda-0
+  redpanda-2:
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:39092
+      - --advertise-kafka-addr internal://redpanda-2:9092,external://localhost:39092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:38082
+      - --advertise-pandaproxy-addr internal://redpanda-2:8082,external://localhost:38082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:38081
+      - --rpc-addr redpanda-2:33145
+      - --advertise-rpc-addr redpanda-2:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --seeds redpanda-0:33145
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: redpanda-2
+    environment:
+      RP_BOOTSTRAP_USER: "superuser:secretpassword"
+    volumes:
+      - redpanda-2:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+    ports:
+      - 38081:38081
+      - 38082:38082
+      - 39092:39092
+      - 39644:9644
+    depends_on:
+      - redpanda-0
+  ####################
+  # Redpanda Console #
+  ####################
+  console:
+    container_name: redpanda-console
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    networks:
+      - redpanda_network
+    volumes:
+      - ./console-config.yaml:/etc/redpanda/console-config.yaml:ro
+    environment:
+      CONFIG_FILEPATH: /etc/redpanda/console-config.yaml
+      # Redpanda Console expects config keys as uppercased, dot-separated env vars.
+      # These are translated from more readable user-defined variables
+      AUTHENTICATION_OIDC_CLIENTSECRET: "${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET}"
+      AUTHENTICATION_JWTSIGNINGKEY: "${JWT_SIGNING_KEY:? Set JWT_SIGNING_KEY}"
+      AUTHENTICATION_OIDC_ISSUERURL: "https://login.microsoftonline.com/${TENANT_ID:?Set TENANT_ID}/v2.0"
+      AUTHENTICATION_OIDC_CLIENTID: "${OIDC_CLIENT_ID:?Set OIDC_CLIENT_ID}"
+      AUTHENTICATION_OIDC_ADDITIONALSCOPES: "api://${OIDC_CLIENT_ID}/entraid.v2-access-tokens"
+    ports:
+      - 8080:8080
+    depends_on:
+      redpanda-0:
+        condition: service_healthy
+  ####################
+  # Redpanda Connect #
+  ####################
+  connect:
+    container_name: redpanda-connect
+    image: docker.redpanda.com/redpandadata/connect
+    networks:
+      - redpanda_network
+    entrypoint: /bin/sh
+    depends_on:
+      redpanda-0:
+        condition: service_healthy
+    command: -c 'echo "$$CONNECT_CFG_FILE" > /tmp/connect.yml; /redpanda-connect -c /tmp/connect.yml'
+    environment:
+      # This Redpanda Connect configuration creates fake data,
+      # processes it, and writes the output to a set of topics.
+      #
+      # Input:
+      #  - Uses Redpanda Connect's generate input to generate fake data.
+      # See https://docs.redpanda.com/redpanda-connect/components/inputs/generate/
+      # Pipeline:
+      #  - Bloblang mapping to batch each input and map 1 message to 'logins'
+      #    topic, and a random number (1-3) of messages to 'transaction' topic
+      #  - Unarchive processor to parse the JSON array and extract each
+      #    element into its own message.
+      # See https://docs.redpanda.com/redpanda-connect/guides/bloblang/about/
+      # Output:
+      #  - kafka_franz output to write the messages to the Redpanda brokers.
+      # See https://docs.redpanda.com/redpanda-connect/components/outputs/kafka_franz/
+      CONNECT_CFG_FILE: |
+        input:
+          generate:
+            interval: 1s
+            mapping: |
+              let first_name = fake("first_name")
+              let last_name  = fake("last_name")
+
+              root.user_id    = counter()
+              root.name       = $$first_name + " " + $$last_name
+              root.email      = ($$first_name.slice(0,1) + $$last_name + "@" + fake("domain_name")).lowercase()
+              root.ip         = fake("ipv4")
+              root.login_time = now()
+        pipeline:
+          processors:
+            - mapping: |
+                root = range(0, random_int(min:2, max:4)).map_each(cust -> this)
+            - unarchive:
+                format: "json_array"
+            - mapping: |
+                if batch_index() == 0 {
+                  meta topic = "logins"
+                  root = this
+                } else {
+                  meta topic       = "transactions"
+                  root.user_id     = this.user_id
+                  root.email       = this.email
+                  root.index       = batch_index() - 1
+                  root.product_url = fake("url")
+                  root.price       = fake("amount_with_currency")
+                  root.timestamp   = now()
+                }
+        output:
+          kafka_franz:
+            seed_brokers: [ "redpanda-0:9092" ]
+            topic: $${! metadata("topic") }
+            sasl:
+              - mechanism: SCRAM-SHA-256
+                password: secretpassword
+                username: superuser

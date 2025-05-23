@@ -7,7 +7,8 @@
     "build": "antora --to-dir local-docs --fetch docs/local-antora-playbook.yml",
     "serve": "wds --node-resolve --open / --watch --root-dir local-docs --port 5002",
     "start": "cross-env-shell LIVERELOAD=true npx gulp",
-    "test-transforms": "cd setup-tests && npx doc-detective runTests --input ../data-transforms/go -l debug"
+    "test-transforms": "cd setup-tests && npx doc-detective runTests --input ../data-transforms/go -l debug",
+    "test-oidc": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/oidc -l debug"
   },
   "dependencies": {
     "@antora/cli": "3.1.2",
