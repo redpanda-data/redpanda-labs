@@ -87,7 +87,7 @@ services:
   mc:
     depends_on:
       - minio
-    image: minio/mc
+    image: minio/mc:RELEASE.2022-12-24T15-21-38Z
     container_name: mc
     networks:
       - redpanda_network
