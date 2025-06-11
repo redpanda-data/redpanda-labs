@@ -120,7 +120,7 @@ Login credentials:
 - Username: `minio`
 - Password: `minio123`
 
-. Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying Iceberg tables created from Redpanda topics.
+. Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying Iceberg tables created from Redpanda topics. Complete the next two steps first before running the code in the notebook.
 
 . Create a schema in the Schema Registry:
 +
