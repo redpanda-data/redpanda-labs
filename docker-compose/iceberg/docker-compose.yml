@@ -53,6 +53,7 @@ services:
       - --set redpanda.iceberg_rest_catalog_client_secret=catalog123
       # Too low for production, but makes the lab fast
       - --set redpanda.iceberg_catalog_commit_interval_ms=5000
+      - --set redpanda.iceberg_target_lag_ms=10000
     volumes:
       - redpanda-0:/var/lib/redpanda/data
     networks:
