@@ -143,7 +143,6 @@ services:
       - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
       - CATALOG_S3_ENDPOINT=http://minio:9000
   spark-iceberg:
-    image: tabulario/spark-iceberg
     container_name: spark-iceberg
     build: spark/
     networks:
