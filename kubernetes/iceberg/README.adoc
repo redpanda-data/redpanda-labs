@@ -27,6 +27,13 @@ git checkout k8s-iceberg
 cd redpanda-labs/kubernetes/iceberg
 ----
 
+. Create the `kind` cluster:
++
+[source,bash]
+----
+kind create cluster --config kind.yaml
+----
+
 . Create the `iceberg-lab` namespace:
 +
 [source,bash]
