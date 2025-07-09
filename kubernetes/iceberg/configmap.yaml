@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redpanda-config
+data:
+  cloud_storage_enabled: "true"
+  cloud_storage_region: "local"
+  cloud_storage_api_endpoint: "minio"
+  cloud_storage_api_endpoint_port: "9000"
+  cloud_storage_disable_tls: "true"
+  cloud_storage_bucket: "redpanda"
+  cloud_storage_segment_max_upload_interval_sec: "30"
+  cloud_storage_enable_remote_write: "true"
+  cloud_storage_enable_remote_read: "true"
+  iceberg_enabled: "true"
+  iceberg_catalog_type: "rest"
+  iceberg_rest_catalog_endpoint: "http://catalog:8181"
+  iceberg_catalog_commit_interval_ms: "5000"
+  iceberg_target_lag_ms: "10000"

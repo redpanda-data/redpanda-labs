@@ -34,7 +34,7 @@ ENV SPARK_HOME="/opt/spark"
 ENV SPARK_VERSION=3.5.6
 ENV SPARK_MAJOR_VERSION=3.5
 ENV ICEBERG_VERSION=1.6.0
-ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
+ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip
 
 # Download and extract Spark, and download Iceberg JARs and AWS CLI
 RUN mkdir -p ${SPARK_HOME} && \

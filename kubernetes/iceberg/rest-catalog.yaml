@@ -1,0 +1,46 @@
+# iceberg-rest.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest
+  namespace: iceberg-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-rest
+  template:
+    metadata:
+      labels:
+        app: iceberg-rest
+    spec:
+      containers:
+        - name: iceberg-rest
+          image: tabulario/iceberg-rest
+          ports:
+            - containerPort: 8181
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: minio
+            - name: AWS_SECRET_ACCESS_KEY
+              value: minio123
+            - name: AWS_REGION
+              value: local
+            - name: CATALOG_WAREHOUSE
+              value: s3://redpanda/
+            - name: CATALOG_IO__IMPL
+              value: org.apache.iceberg.aws.s3.S3FileIO
+            - name: CATALOG_S3_ENDPOINT
+              value: http://minio.iceberg-lab.svc.cluster.local:9000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest
+  namespace: iceberg-lab
+spec:
+  selector:
+    app: iceberg-rest
+  ports:
+    - port: 8181
+      targetPort: 8181

@@ -1,0 +1,19 @@
+accessKey: minio
+secretKey: minio123
+mode: standalone
+persistence:
+  enabled: false
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 200m
+nodeSelector:
+  kubernetes.io/hostname: kind-worker
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: spark
+    effect: NoSchedule

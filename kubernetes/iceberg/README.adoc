@@ -1,0 +1,149 @@
+= Iceberg Streaming Lab on Kubernetes with Redpanda, MinIO, and Spark
+
+This lab sets up an Iceberg-based streaming pipeline using:
+
+* MinIO as an object store
+* Spark + Jupyter for processing
+* Redpanda as the streaming engine
+
+== Prerequisites
+
+Install the following tools:
+
+* Docker
+* kind
+* kubectl
+* Helm
+* Docker image build context for Spark
+
+== Run the lab
+
+. Clone the repository:
++
+[source,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs
+git checkout k8s-iceberg
+cd redpanda-labs/kubernetes/iceberg
+----
+
+. Create the `iceberg-lab` namespace:
++
+[source,bash]
+----
+kubectl create namespace iceberg-lab
+----
+
+. Deploy MinIO:
++
+[source,bash]
+----
+helm repo add minio https://charts.min.io/
+helm repo update
+
+helm install minio minio/minio \
+  --namespace iceberg-lab \
+  --values minio-values.yaml
+----
+
+. Apply the REST catalog:
++
+[source,bash]
+----
+kubectl apply -f rest-catalog.yaml -n iceberg-lab
+----
+
+. Label and taint your dedicated Spark worker node:
++
+[source,bash]
+----
+kubectl label node kind-worker node-role.kubernetes.io/spark-node=true
+kubectl taint nodes kind-worker dedicated=spark:NoSchedule
+----
+
+. Build and load the Spark Docker image:
++
+[source,bash]
+----
+docker build -t spark-iceberg-jupyter:latest ../../docker-compose/iceberg/spark
+
+kind load docker-image spark-iceberg-jupyter:latest --name kind --nodes kind-worker
+----
+
+. Verify the image is loaded:
++
+[source,bash]
+----
+docker exec -it kind-worker crictl images | grep spark-iceberg-jupyter
+----
+
+. Deploy Spark:
++
+[source,bash]
+----
+kubectl apply -f spark.yaml -n iceberg-lab
+----
+
+. Apply the ConfigMap and Secret with the Redpanda configuration:
++
+[source,bash]
+----
+kubectl apply -f configmap.yaml -n iceberg-lab
+kubectl apply -f secret.yaml -n iceberg-lab
+----
+
+. Deploy Redpanda:
++
+[source,bash]
+----
+helm repo add jetstack https://charts.jetstack.io
+helm repo add redpanda https://charts.redpanda.com
+helm repo update
+
+helm install cert-manager jetstack/cert-manager \
+  --set crds.enabled=true \
+  --namespace cert-manager \
+  --create-namespace
+
+helm upgrade --install redpanda redpanda/redpanda \
+  --namespace iceberg-lab \
+  --version 5.9.20 \
+  --values redpanda-values.yaml
+----
+
+=== Port forwarding
+
+[source,bash]
+----
+# MinIO UI
+kubectl port-forward svc/minio 9001:9001 -n iceberg-lab
+
+# Spark Jupyter
+kubectl port-forward deploy/spark-iceberg 8888:8888 -n iceberg-lab
+
+# Redpanda Console
+kubectl port-forward svc/redpanda-console 8080:8080 -n iceberg-lab
+----
+
+== Validate setup
+
+Alias Redpanda CLI:
+
+[source,bash]
+----
+alias internal-rpk="kubectl -n iceberg-lab exec -i -t redpanda-0 -c redpanda -- rpk"
+----
+
+Create Iceberg topics:
+
+[source,bash]
+----
+internal-rpk topic create key_value --topic-config=redpanda.iceberg.mode=key_value
+internal-rpk topic create value_schema_id_prefix --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
+----
+
+Produce sample data:
+
+[source,bash]
+----
+echo "hello world" | internal-rpk topic produce key_value --forma_

@@ -1,0 +1,81 @@
+external:
+  domain: customredpandadomain.local
+statefulset:
+  initContainers:
+    setDataDirOwnership:
+      enabled: true
+config:
+  extraClusterConfiguration:
+    cloud_storage_enabled:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_enabled
+    cloud_storage_region:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_region
+    cloud_storage_api_endpoint:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_api_endpoint
+    cloud_storage_api_endpoint_port:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_api_endpoint_port
+    cloud_storage_disable_tls:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_disable_tls
+    cloud_storage_bucket:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_bucket
+    cloud_storage_segment_max_upload_interval_sec:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_segment_max_upload_interval_sec
+    cloud_storage_enable_remote_write:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_enable_remote_write
+    cloud_storage_enable_remote_read:
+      configMapRef:
+        name: redpanda-config
+        key: cloud_storage_enable_remote_read
+    iceberg_enabled:
+      configMapRef:
+        name: redpanda-config
+        key: iceberg_enabled
+    iceberg_catalog_type:
+      configMapRef:
+        name: redpanda-config
+        key: iceberg_catalog_type
+    iceberg_rest_catalog_endpoint:
+      configMapRef:
+        name: redpanda-config
+        key: iceberg_rest_catalog_endpoint
+    iceberg_catalog_commit_interval_ms:
+      configMapRef:
+        name: redpanda-config
+        key: iceberg_catalog_commit_interval_ms
+    iceberg_target_lag_ms:
+      configMapRef:
+        name: redpanda-config
+        key: iceberg_target_lag_ms
+
+    cloud_storage_access_key:
+      secretRef:
+        name: redpanda-secret
+        key: cloud_storage_access_key
+    cloud_storage_secret_key:
+      secretRef:
+        name: redpanda-secret
+        key: cloud_storage_secret_key
+    iceberg_rest_catalog_client_id:
+      secretRef:
+        name: redpanda-secret
+        key: iceberg_rest_catalog_client_id
+    iceberg_rest_catalog_client_secret:
+      secretRef:
+        name: redpanda-secret
+        key: iceberg_rest_catalog_client_secret
