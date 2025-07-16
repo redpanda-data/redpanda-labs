@@ -1,0 +1,69 @@
+# =============================================================================
+# MINIO BUCKET SETUP JOB
+# =============================================================================
+# This job initializes the MinIO object storage for Redpanda and Iceberg:
+# 1. Creates the 'redpanda' bucket for storing segments and Iceberg data
+# 2. Sets appropriate permissions for Redpanda access
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-setup
+  namespace: iceberg-lab
+spec:
+  template:
+    spec:
+      # Restart on failure to handle temporary network issues or MinIO startup delays
+      restartPolicy: OnFailure
+      containers:
+        - name: minio-setup
+          # Use official MinIO client (mc) for bucket operations
+          # Pinned to specific version for reproducibility
+          image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+
+          # =============================================================================
+          # AUTHENTICATION CONFIGURATION
+          # =============================================================================
+          # Use the same credentials that Redpanda will use for object storage
+          # These are stored in Kubernetes secrets for security
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_access_key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_secret_key
+            - name: AWS_REGION
+              value: "local"  # MinIO default region
+
+          # =============================================================================
+          # BUCKET INITIALIZATION SCRIPT
+          # =============================================================================
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Setting up MinIO bucket..."
+
+              # Wait for MinIO to be available before proceeding
+              # This handles the case where MinIO is still starting up
+              until (/usr/bin/mc alias set minio http://iceberg-minio-hl.iceberg-lab.svc.cluster.local:9000 $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY) do
+                echo '...waiting for MinIO...'
+                sleep 1
+              done
+              echo "MinIO is ready, creating bucket..."
+
+              # Create bucket (ignore if already exists)
+              # The 'redpanda' bucket will store both Redpanda segments and Iceberg data
+              /usr/bin/mc mb minio/redpanda --ignore-existing
+
+              # Set bucket to public access for simplified lab environment
+              # In production, use more restrictive bucket policies
+              # This allows Redpanda and Spark to access the bucket without complex IAM setup
+              /usr/bin/mc anonymous set public minio/redpanda
+
+              echo "Bucket setup completed successfully!"

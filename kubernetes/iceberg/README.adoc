@@ -1,64 +1,146 @@
 = Iceberg Streaming Lab on Kubernetes with Redpanda, MinIO, and Spark
+:env-kubernetes: true
+:description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
+:page-layout: lab
 
-This lab sets up an Iceberg-based streaming pipeline using:
+This lab provides a local Kubernetes environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like MinIO, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
 
-* MinIO as an object store
-* Spark + Jupyter for processing
-* Redpanda as the streaming engine
+In this setup, you will:
+
+- Produce data to Redpanda topics that are Iceberg-enabled.
+- Observe how Redpanda writes this data in Iceberg format to MinIO as the Tiered Storage backend.
+- Use Spark to query the Iceberg tables, demonstrating a complete pipeline from data production to querying.
+
+This environment is ideal for experimenting with Redpanda's Iceberg and Tiered Storage capabilities, enabling you to test end-to-end workflows for analytics and data lake architectures.
 
 == Prerequisites
 
+=== System requirements
+
+Make sure you have the following system requirements:
+
+* **Operating System**: macOS, Linux, or Windows with WSL2
+* **CPU**: Minimum 4 cores
+* **Memory**: Minimum 8 GB RAM
+* **Storage**: Minimum 20 GB free disk space for Docker images and data
+* **Docker**: At least 6 GB memory allocation for Docker Desktop
+
+=== Required tools
+
 Install the following tools:
 
-* Docker
-* kind
-* kubectl
-* Helm
-* Docker image build context for Spark
+* https://docs.docker.com/get-docker/[Docker] (with sufficient memory allocation)
+* https://kind.sigs.k8s.io/docs/user/quick-start/[kind] (Kubernetes in Docker)
+* https://kubernetes.io/docs/tasks/tools/[kubectl] (Kubernetes CLI)
+* https://helm.sh/docs/intro/install/[Helm] (Kubernetes package manager)
+
 
 == Run the lab
 
-. Clone the repository:
-+
+Follow these steps to set up the lab environment:
+
+=== Clone the repository
+
 [source,bash]
 ----
-git clone https://github.com/redpanda-data/redpanda-labs
-git checkout k8s-iceberg
+git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/kubernetes/iceberg
 ----
 
-. Create the `kind` cluster:
-+
+=== Create the Kubernetes cluster and namespace
+
 [source,bash]
 ----
 kind create cluster --config kind.yaml
-----
-
-. Create the `iceberg-lab` namespace:
-+
-[source,bash]
-----
 kubectl create namespace iceberg-lab
 ----
 
-. Deploy MinIO:
+=== Configure Redpanda for Iceberg
+
+Configuration for Redpanda is provided in `configmap.yaml` and `secret.yaml`. This sets up the necessary configurations for Iceberg topics and Tiered Storage.
+
+[source,bash]
+----
+kubectl apply -f configmap.yaml --namespace iceberg-lab
+kubectl apply -f secret.yaml --namespace iceberg-lab
+----
+
+=== Deploy MinIO
+
+. Deploy the MinIO Operator:
 +
 [source,bash]
 ----
-helm repo add minio https://charts.min.io/
+kubectl apply -k "github.com/minio/operator?ref=v5.0.18"
+----
+
+. Wait for the MinIO Operator to be ready:
++
+[source,bash]
+----
+kubectl wait --for=condition=available deployment --all --namespace minio-operator --timeout=120s
+----
+
+. Create a MinIO instance:
++
+[source,bash]
+----
+helm repo add minio-operator https://operator.min.io
 helm repo update
-
-helm install minio minio/minio \
+helm upgrade --install iceberg-minio minio-operator/tenant \
   --namespace iceberg-lab \
-  --values minio-values.yaml
+  --version 7.1.1 \
+  --values minio-tenant-values.yaml
 ----
 
-. Apply the REST catalog:
+. Wait for the MinIO instance to be ready:
 +
 [source,bash]
 ----
-kubectl apply -f rest-catalog.yaml -n iceberg-lab
+sleep 10 && kubectl wait --for=condition=ready pod -l v1.min.io/tenant=iceberg-minio --namespace iceberg-lab --timeout=300s
 ----
++
+If you see `error: no matching resources found`, it means the MinIO Operator has not yet created the Pods. Wait a few moments and try the command again.
+
+=== Set up MinIO bucket and permissions
+
+This step creates a job that sets up the MinIO bucket and permissions required for Redpanda to access the object store.
+
+[source,bash]
+----
+kubectl apply -f minio-setup-job.yaml --namespace iceberg-lab
+kubectl wait --for=condition=complete job/minio-setup --namespace iceberg-lab --timeout=60s
+----
+
+If the job times out, check the logs with `kubectl logs job/minio-setup --namespace iceberg-lab iceberg-lab`. If you see `400 Bad Request` errors, MinIO might have reverted to TLS mode. See the <<troubleshoot, troubleshooting section>>.
+
+=== Deploy the Iceberg REST catalog
+
+This step deploys the Iceberg REST catalog, which allows you to interact with Iceberg tables over HTTP. It uses a script to resolve the MinIO IP address and update the catalog configuration.
+
+[source,bash]
+----
+./deploy-iceberg-rest-catalog.sh
+----
+
+You should see output indicating the catalog is deployed.
+
+[role="no-copy no-wrap"]
+----
+=== Deployment Summary ===
+✓ Iceberg REST catalog deployed successfully
+✓ MinIO IP resolved and configured: 10.244.3.3
+✓ Configuration file: rest-catalog.yaml
+
+Next steps:
+1. Test the catalog: kubectl port-forward -n iceberg-lab svc/iceberg-rest 8181:8181
+2. Verify Redpanda integration: kubectl logs -n iceberg-lab deployment/iceberg-rest
+3. Re-run this script if MinIO Pods restart or IPs change
+
+For troubleshooting, see: dns-solution.md
+----
+
+=== Prepare Spark
 
 . Label and taint your dedicated Spark worker node:
 +
@@ -72,10 +154,13 @@ kubectl taint nodes kind-worker dedicated=spark:NoSchedule
 +
 [source,bash]
 ----
-docker build -t spark-iceberg-jupyter:latest ../../docker-compose/iceberg/spark
-
+docker build -t spark-iceberg-jupyter:latest ./spark
 kind load docker-image spark-iceberg-jupyter:latest --name kind --nodes kind-worker
 ----
++
+This step builds the Spark image with Kubernetes-specific configurations for Iceberg and uploads it to the kind cluster. The Dockerfile automatically detects your system architecture (ARM64 or x86_64) and downloads the appropriate dependencies.
++
+Wait for the build to complete and the image to be loaded into the kind cluster.
 
 . Verify the image is loaded:
 +
@@ -83,24 +168,23 @@ kind load docker-image spark-iceberg-jupyter:latest --name kind --nodes kind-wor
 ----
 docker exec -it kind-worker crictl images | grep spark-iceberg-jupyter
 ----
++
+You should see output similar to the following:
++
+[role="no-copy no-wrap"]
+----
+docker.io/library/spark-iceberg-jupyter    latest      86f20b1213dd3    3.83GB
+----
 
 . Deploy Spark:
 +
 [source,bash]
 ----
-kubectl apply -f spark.yaml -n iceberg-lab
+./deploy-spark.sh
 ----
 
-. Apply the ConfigMap and Secret with the Redpanda configuration:
-+
-[source,bash]
-----
-kubectl apply -f configmap.yaml -n iceberg-lab
-kubectl apply -f secret.yaml -n iceberg-lab
-----
+=== Deploy Redpanda
 
-. Deploy Redpanda:
-+
 [source,bash]
 ----
 helm repo add jetstack https://charts.jetstack.io
@@ -110,47 +194,196 @@ helm repo update
 helm install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --namespace cert-manager \
-  --create-namespace
+  --create-namespace \
+  --version 1.17.4
 
+echo "Deploying Redpanda (this may take a few minutes)"
 helm upgrade --install redpanda redpanda/redpanda \
   --namespace iceberg-lab \
-  --version 5.9.20 \
+  --version 5.9.25 \
   --values redpanda-values.yaml
 ----
 
-=== Port forwarding
+. Wait for the Redpanda cluster to be ready:
++
+[source,bash]
+----
+kubectl --namespace iceberg-lab rollout status statefulset redpanda --watch
+----
+When the Redpanda cluster is ready, the output should look similar to the following:
++
+[.no-copy]
+----
+statefulset rolling update complete 3 pods at revision redpanda-8654f645b4...
+----
+
+=== Forward ports
+
+In this step, you set up access to the MinIO UI, Spark Jupyter Notebook, and Redpanda Console.
+
+==== Set up MinIO console access
+
+For reliable access to the MinIO console, create a NodePort service:
 
 [source,bash]
 ----
-# MinIO UI
-kubectl port-forward svc/minio 9001:9001 -n iceberg-lab
-
-# Spark Jupyter
-kubectl port-forward deploy/spark-iceberg 8888:8888 -n iceberg-lab
-
-# Redpanda Console
-kubectl port-forward svc/redpanda-console 8080:8080 -n iceberg-lab
+kubectl apply -f minio-nodeport.yaml --namespace iceberg-lab
 ----
 
-== Validate setup
+The NodePort service exposes MinIO console on port 32090 of all cluster nodes. In a kind cluster, you can access it directly at: http://localhost:32090
 
-Alias Redpanda CLI:
+NOTE: This approach avoids the known port-forwarding issues with MinIO console (see https://github.com/minio/object-browser/issues/2539[issue #2539]). The MinIO Console UI requires websockets which don't work reliably through `kubectl port-forward` tunnels. NodePort provides direct access without websocket connectivity issues.
 
+==== Set up port forwarding for other services
+
+For Spark Jupyter Notebook and Redpanda Console, use port forwarding:
+
+[,bash]
+----
+kubectl port-forward deploy/spark-iceberg 8888:8888 --namespace iceberg-lab &
+kubectl port-forward svc/redpanda-console 8080:8080 --namespace iceberg-lab &
+----
+
+You can run these commands in separate terminals, or run them in the background by appending `&` as shown above.
+
+This way, all port-forward processes will run in the background in the same terminal. You can bring them to the foreground with `fg` or stop them with `kill` if needed.
+
+== Create and validate Iceberg topics
+
+You can validate your setup by performing the following steps:
+
+. Alias the Redpanda CLI:
++
 [source,bash]
 ----
-alias internal-rpk="kubectl -n iceberg-lab exec -i -t redpanda-0 -c redpanda -- rpk"
+alias internal-rpk="kubectl --namespace iceberg-lab exec -i -t redpanda-0 -c redpanda -- rpk"
 ----
++
+This command allows you to run `rpk` commands directly against the Redpanda broker in the `iceberg-lab` namespace using the `internal-rpk` alias. You can also use `kubectl exec -i -t redpanda-0 -c redpanda -- rpk` directly if you prefer not to set an alias.
 
-Create Iceberg topics:
-
+. Create Iceberg topics:
++
 [source,bash]
 ----
 internal-rpk topic create key_value --topic-config=redpanda.iceberg.mode=key_value
-internal-rpk topic create value_schema_id_prefix --topic-config=redpanda.iceberg.mode=value_schema_id_prefix
 ----
 
-Produce sample data:
-
+. Produce sample data:
++
 [source,bash]
 ----
-echo "hello world" | internal-rpk topic produce key_value --forma_
+echo "hello world" | internal-rpk topic produce key_value --format='%k %v\n'
+----
+
+. Open Redpanda Console at http://localhost:8080/topics to see that the topics exist in Redpanda.
+
+. Open MinIO at http://localhost:32090 to view your data stored in the S3-compatible object store.
++
+Login credentials:
++
+- Username: minio
+- Password: minio123
+
+. Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying the Iceberg table created from your Redpanda topic.
+
+== Clean up
+
+When you're finished with the lab, you can clean up the resources:
+
+. Stop all port forwarding processes:
++
+[,bash]
+----
+pkill -f "kubectl port-forward"
+----
++
+You can also use kbd:[Ctrl+C] if the port forwarding is running in the foreground.
+
+. Delete the MinIO NodePort service:
++
+[,bash]
+----
+kubectl delete service minio-nodeport -n iceberg-lab
+----
+
+. Delete the kind cluster (this removes everything):
++
+[,bash]
+----
+kind delete cluster
+----
+
+Or, if you want to keep the cluster but remove just the lab resources:
+
+[,bash]
+----
+# Delete the namespace (removes all lab resources)
+kubectl delete namespace iceberg-lab
+
+# Delete the MinIO operator
+kubectl delete -k "github.com/minio/operator?ref=v5.0.18"
+
+# Delete cert-manager
+helm uninstall cert-manager --namespace cert-manager
+kubectl delete namespace cert-manager
+----
+
+== Troubleshoot
+
+=== Redpanda bucket access errors
+
+If Redpanda logs show `bucket not found` errors after setup:
+
+. Verify the bucket exists:
++
+[source,bash]
+----
+kubectl exec -n iceberg-lab iceberg-minio-pool-0-0 -c minio -- mc ls local/
+----
+
+. Check Redpanda can reach MinIO:
++
+[source,bash]
+----
+kubectl exec -n iceberg-lab redpanda-0 -c redpanda -- curl -I http://iceberg-minio-hl.iceberg-lab.svc.cluster.local:9000/redpanda
+----
+
+=== Iceberg REST catalog 500 errors
+
+If the Iceberg REST catalog shows `UnknownHostException` errors in the logs:
+
+. Check the catalog logs for DNS resolution errors:
++
+[source,bash]
+----
+kubectl logs -n iceberg-lab deployment/iceberg-rest | grep -i "unknownhost\|resolve"
+----
+
+. If you see errors like `UnknownHostException: redpanda.iceberg-minio-hl...`, this indicates the S3 client is using bucket-style URLs that aren't valid DNS names in Kubernetes.
+
+. Verify the hostAliases configuration is correct:
++
+[source,bash]
+----
+# Get the MinIO pod IP
+MINIO_IP=$(kubectl get pod iceberg-minio-pool-0-0 -n iceberg-lab -o jsonpath='{.status.podIP}')
+echo "MinIO IP: $MINIO_IP"
+
+# Check if the REST catalog deployment has the correct hostAliases
+kubectl get deployment iceberg-rest -n iceberg-lab -o yaml | grep -A 10 hostAliases
+----
+
+. If the MinIO Pod IP has changed, update the hostAliases in the REST catalog deployment:
++
+[source,bash]
+----
+# Update the IP in rest-catalog.yaml and reapply
+./deploy-iceberg-rest-catalog.sh
+kubectl rollout status deployment/iceberg-rest -n iceberg-lab
+----
+
+== Suggested reading
+
+- https://min.io/docs/minio/kubernetes/upstream/operations/installation.html[MinIO Kubernetes Operator installation]
+- https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant-helm.html#deploy-tenant-helm[Deploy MinIO tenant with Helm]
+- xref:manage:iceberg/about-iceberg-topics.adoc[Iceberg Topics in Redpanda]

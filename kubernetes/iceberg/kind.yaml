@@ -1,8 +1,28 @@
+# This configuration creates a 5-node kind cluster optimized for the streaming lab:
+#
+# 1. Control Plane Node:
+#    - Runs Kubernetes API server, etcd, scheduler, and controller manager
+#    - Port mapping (32090) exposes MinIO console for external access
+#    - Isolated from workload execution for stability
+#
+# 2. Worker Nodes (4x):
+#    - Distribute Redpanda brokers, MinIO storage, Spark executors, and Jupyter
+#    - Multiple nodes allow testing of distributed scenarios and node failures
+#    - Sufficient capacity for concurrent Spark jobs and streaming workloads
+#
+# 3. Port Mapping Strategy:
+#    - hostPort 32090 maps to MinIO NodePort service for browser access
+#    - Enables you to access MinIO console at http://localhost:32090
+#
 ---
 apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
 nodes:
   - role: control-plane
+    extraPortMappings:
+    - containerPort: 32090
+      hostPort: 32090
+      protocol: TCP
   - role: worker
   - role: worker
   - role: worker

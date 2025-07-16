@@ -1,0 +1,31 @@
+# This service exposes the MinIO console outside the Kubernetes cluster:
+#
+# 1. NodePort Service Type:
+#    - Maps internal MinIO console port (9090) to external port (32090)
+#    - Enables browser access at http://localhost:32090 in kind clusters
+#    - Required because MinIO operator doesn't expose console by default
+#
+# 2. Service Selection:
+#    - Targets MinIO tenant pods using the min.io/tenant label
+#    - Automatically discovers MinIO instances in the namespace
+#    - Provides load balancing if multiple MinIO pods exist
+#
+# 3. Developer Workflow:
+#    - Access MinIO browser console for bucket management and monitoring
+#    - Upload/download files for testing data pipelines
+#    - Monitor S3 storage usage and performance metrics
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-nodeport
+  namespace: iceberg-lab
+spec:
+  ports:
+  - name: http
+    port: 9090
+    targetPort: 9090
+    nodePort: 32090
+  selector:
+    v1.min.io/tenant: iceberg-minio
+  type: NodePort
