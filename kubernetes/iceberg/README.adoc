@@ -218,7 +218,7 @@ When the Redpanda cluster is ready, the output should look similar to the follow
 statefulset rolling update complete 3 pods at revision redpanda-8654f645b4...
 ----
 
-=== Forward ports
+=== Expose services
 
 In this step, you set up access to the MinIO UI, Spark Jupyter Notebook, and Redpanda Console.
 
