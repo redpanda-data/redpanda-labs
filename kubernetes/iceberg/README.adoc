@@ -204,14 +204,15 @@ helm upgrade --install redpanda redpanda/redpanda \
   --values redpanda-values.yaml
 ----
 
-. Wait for the Redpanda cluster to be ready:
-+
+Wait for the Redpanda cluster to be ready:
+
 [source,bash]
 ----
 kubectl --namespace iceberg-lab rollout status statefulset redpanda --watch
 ----
+
 When the Redpanda cluster is ready, the output should look similar to the following:
-+
+
 [.no-copy]
 ----
 statefulset rolling update complete 3 pods at revision redpanda-8654f645b4...
