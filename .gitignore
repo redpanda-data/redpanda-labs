@@ -30,6 +30,3 @@ venv/
 
 # Redaction docker .env exception
 !data-transforms/go/redaction/demo/.env
-
-kubernetes/iceberg/rest-catalog.yaml
-kubernetes/iceberg/spark.yaml

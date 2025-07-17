@@ -11,34 +11,25 @@ These aren't valid Kubernetes DNS names because they contain dots in the subdoma
 
 ## The solution
 
-### 1. Static hostAliases
+To address this DNS issue, we introduce an init container that dynamically resolves the MinIO service IP and injects a custom DNS mapping into the pod's `/etc/hosts` file. This ensures that the Iceberg REST catalog client can access MinIO using the expected bucket-style S3 URLs, even though they are not valid Kubernetes DNS names. The init container runs before the main application starts, guaranteeing that the necessary hostname mapping is present for seamless connectivity.
 
 ```yaml
-hostAliases:
-  - ip: "10.244.4.3"  # MinIO pod IP
-    hostnames:
-    - "redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local"
+initContainers:
+- name: dns-resolver
+  image: busybox:1.35
+  command: ['sh', '-c']
+  args:
+  - |
+    # Resolve MinIO IP dynamically
+    MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
+
+    # Write DNS mappings to shared /etc/hosts
+    cp /etc/hosts /shared/hosts
+    echo "$MINIO_IP redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+  volumeMounts:
+  - name: hosts-volume
+    mountPath: /shared
 ```
-
-**Problem**: Pod IPs are ephemeral and change when pods restart.
-
-### 2. Dynamic script
-
-The `deploy-iceberg-rest-catalog.sh` and `deploy-spark.sh` scripts provide:
-
-- **Multi-strategy IP resolution**: Service ClusterIP → Pod IP → Endpoints
-- **Connection validation**: Tests MinIO and REST catalog connectivity
-- **Error handling**: Comprehensive validation and clear error messages
-- **Health checks**: Kubernetes probes for better reliability
-
-## Production considerations
-
-Consider additional approaches:
-
-- **Service Mesh** (Istio/Linkerd) with DNS rewriting
-- **CNI plugins** with advanced DNS features
-- **External DNS providers** for custom resolution
-- **AWS S3 Tables** for native AWS environments
 
 ## Testing
 

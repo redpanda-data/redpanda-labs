@@ -116,28 +116,12 @@ If the job times out, check the logs with `kubectl logs job/minio-setup --namesp
 
 === Deploy the Iceberg REST catalog
 
-This step deploys the Iceberg REST catalog, which allows you to interact with Iceberg tables over HTTP. It uses a script to resolve the MinIO IP address and update the catalog configuration.
+This step deploys the Iceberg REST catalog, which allows you to interact with Iceberg tables over HTTP. It uses an init container approach to automatically resolve DNS issues with bucket-style S3 URLs.
 
 [source,bash]
 ----
-./deploy-iceberg-rest-catalog.sh
-----
-
-You should see output indicating the catalog is deployed.
-
-[role="no-copy no-wrap"]
-----
-=== Deployment Summary ===
-✓ Iceberg REST catalog deployed successfully
-✓ MinIO IP resolved and configured: 10.244.3.3
-✓ Configuration file: rest-catalog.yaml
-
-Next steps:
-1. Test the catalog: kubectl port-forward -n iceberg-lab svc/iceberg-rest 8181:8181
-2. Verify Redpanda integration: kubectl logs -n iceberg-lab deployment/iceberg-rest
-3. Re-run this script if MinIO Pods restart or IPs change
-
-For troubleshooting, see: dns-solution.md
+kubectl apply -f iceberg-rest.yaml
+kubectl wait --for=condition=available deployment/iceberg-rest --namespace iceberg-lab --timeout=120s
 ----
 
 === Prepare Spark
@@ -180,7 +164,8 @@ docker.io/library/spark-iceberg-jupyter    latest      86f20b1213dd3    3.83GB
 +
 [source,bash]
 ----
-./deploy-spark.sh
+kubectl apply -f spark.yaml
+kubectl wait --for=condition=available deployment/spark-iceberg --namespace iceberg-lab --timeout=120s
 ----
 
 === Deploy Redpanda
@@ -360,26 +345,18 @@ If the Iceberg REST catalog shows `UnknownHostException` errors in the logs:
 kubectl logs -n iceberg-lab deployment/iceberg-rest | grep -i "unknownhost\|resolve"
 ----
 
-. If you see errors like `UnknownHostException: redpanda.iceberg-minio-hl...`, this indicates the S3 client is using bucket-style URLs that aren't valid DNS names in Kubernetes.
-
-. Verify the hostAliases configuration is correct:
+. If you see errors, check the init container logs to see if DNS resolution failed:
 +
 [source,bash]
 ----
-# Get the MinIO pod IP
-MINIO_IP=$(kubectl get pod iceberg-minio-pool-0-0 -n iceberg-lab -o jsonpath='{.status.podIP}')
-echo "MinIO IP: $MINIO_IP"
-
-# Check if the REST catalog deployment has the correct hostAliases
-kubectl get deployment iceberg-rest -n iceberg-lab -o yaml | grep -A 10 hostAliases
+kubectl logs -n iceberg-lab deployment/iceberg-rest -c dns-resolver
 ----
 
-. If the MinIO Pod IP has changed, update the hostAliases in the REST catalog deployment:
+. The init container automatically resolves MinIO's IP and configures DNS mappings. If MinIO pods restart and get new IPs, restart the Iceberg REST catalog:
 +
 [source,bash]
 ----
-# Update the IP in rest-catalog.yaml and reapply
-./deploy-iceberg-rest-catalog.sh
+kubectl rollout restart deployment/iceberg-rest -n iceberg-lab
 kubectl rollout status deployment/iceberg-rest -n iceberg-lab
 ----
 

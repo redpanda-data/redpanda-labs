@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-iceberg
+  namespace: iceberg-lab
+  labels:
+    app: spark-iceberg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-iceberg
+  template:
+    metadata:
+      labels:
+        app: spark-iceberg
+    spec:
+      # Share /etc/hosts volume between init container and main container
+      volumes:
+      - name: hosts-volume
+        emptyDir: {}
+
+      # Init container resolves MinIO IP and configures DNS
+      initContainers:
+      - name: dns-resolver
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "Resolving MinIO service IP..."
+
+          # Get MinIO service IP (try ClusterIP first, then Pod IP)
+          MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
+
+          if [ -z "$MINIO_IP" ]; then
+            echo "ClusterIP not found, trying pod IP..."
+            # For headless services, get pod IP directly
+            MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep -A 1 'Name:' | grep 'Address:' | head -1 | awk '{print $2}')
+          fi
+
+          if [ -z "$MINIO_IP" ]; then
+            echo "ERROR: Could not resolve MinIO IP"
+            exit 1
+          fi
+
+          echo "MinIO IP resolved: $MINIO_IP"
+
+          # Copy original /etc/hosts
+          cp /etc/hosts /shared/hosts
+
+          # Add bucket-style hostname mappings
+          echo "$MINIO_IP redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$MINIO_IP lab.redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$MINIO_IP redpanda.minio" >> /shared/hosts
+
+          echo "DNS mappings configured:"
+          cat /shared/hosts | tail -3
+        volumeMounts:
+        - name: hosts-volume
+          mountPath: /shared
+
+      # Schedule on dedicated Spark worker node for performance isolation
+      # Prevents interference from other workloads
+      nodeSelector:
+        kubernetes.io/hostname: kind-worker
+      # Tolerate the dedicated taint on Spark worker node
+      # This ensures only Spark workloads run on the designated node
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: spark
+          effect: NoSchedule
+
+      containers:
+      - name: spark
+        image: spark-iceberg-jupyter:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8888
+        - containerPort: 10000
+
+        # Use the hosts file configured by init container
+        volumeMounts:
+        - name: hosts-volume
+          mountPath: /etc/hosts
+          subPath: hosts
+
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: redpanda-secret
+              key: cloud_storage_access_key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: redpanda-secret
+              key: cloud_storage_secret_key
+        - name: AWS_REGION
+          value: local
+
+        livenessProbe:
+          httpGet:
+            path: /tree
+            port: 8888
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+        readinessProbe:
+          httpGet:
+            path: /tree
+            port: 8888
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-iceberg
+  namespace: iceberg-lab
+  labels:
+    app: spark-iceberg
+spec:
+  selector:
+    app: spark-iceberg
+  ports:
+  - port: 8888
+    targetPort: 8888
+    protocol: TCP
+    name: jupyter
+  - port: 10000
+    targetPort: 10000
+    protocol: TCP
+    name: thrift
+  type: ClusterIP
