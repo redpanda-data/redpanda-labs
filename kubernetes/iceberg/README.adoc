@@ -170,7 +170,17 @@ kubectl wait --for=condition=available deployment/spark-iceberg --namespace iceb
 
 === Deploy Redpanda
 
-[source,bash]
+. Install the Redpanda Operator custom resource definitions (CRDs):
++
+[,bash]
+----
+kubectl kustomize "https://github.com/redpanda-data/redpanda-operator//operator/config/crd?ref=v2.4.4" \
+    | kubectl apply --server-side -f -
+----
+
+. Deploy the Redpanda Operator:
++
+[,bash]
 ----
 helm repo add jetstack https://charts.jetstack.io
 helm repo add redpanda https://charts.redpanda.com
@@ -182,25 +192,41 @@ helm install cert-manager jetstack/cert-manager \
   --create-namespace \
   --version 1.17.4
 
-echo "Deploying Redpanda (this may take a few minutes)"
-helm upgrade --install redpanda redpanda/redpanda \
+helm upgrade --install redpanda-controller redpanda/operator \
   --namespace iceberg-lab \
-  --version 5.9.25 \
-  --values redpanda-values.yaml
+  --create-namespace \
+  --version v2.4.4
 ----
 
-Wait for the Redpanda cluster to be ready:
+. Ensure that the Deployment is successfully rolled out:
++
+[,bash]
+----
+kubectl --namespace iceberg-lab rollout status --watch deployment/redpanda-controller-operator
+----
++
+If you see `deployment "redpanda-controller-operator" successfully rolled out`, the operator is ready.
 
+. Create the Redpanda cluster:
++
 [source,bash]
 ----
-kubectl --namespace iceberg-lab rollout status statefulset redpanda --watch
+kubectl apply -f redpanda.yaml --namespace iceberg-lab
 ----
 
+. Wait for the Redpanda cluster to be ready:
++
+[source,bash]
+----
+kubectl get redpanda --namespace iceberg-lab --watch
+----
++
 When the Redpanda cluster is ready, the output should look similar to the following:
-
++
 [.no-copy]
 ----
-statefulset rolling update complete 3 pods at revision redpanda-8654f645b4...
+NAME       READY   STATUS
+redpanda   True    Redpanda reconciliation succeeded
 ----
 
 === Expose services

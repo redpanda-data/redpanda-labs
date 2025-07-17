@@ -61,10 +61,10 @@ data:
   # The catalog manages table metadata and schema evolution
   iceberg_rest_catalog_endpoint: "http://iceberg-rest.iceberg-lab.svc.cluster.local:8181"
 
-  # Commit Iceberg table changes every 5 seconds
+  # Commit Iceberg table changes every 10 seconds
   # Shorter intervals provide more frequent snapshots but increase overhead
   # Balance between query freshness and performance
-  iceberg_catalog_commit_interval_ms: "5000"
+  iceberg_catalog_commit_interval_ms: "10000"
 
   # Target lag for Iceberg table updates (10 seconds)
   iceberg_target_lag_ms: "10000"
