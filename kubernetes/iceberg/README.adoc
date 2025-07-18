@@ -2,7 +2,7 @@
 :env-kubernetes: true
 :description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
 :page-layout: lab
-:page-categories: Iceberg, Tiered Storage
+:page-categories: Iceberg, Tiered Storage, Management, High Availability, Data Replication, Integration
 
 This lab provides a local Kubernetes environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like MinIO, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
 
