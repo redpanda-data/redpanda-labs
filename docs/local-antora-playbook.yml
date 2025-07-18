@@ -76,6 +76,8 @@ antora:
       theme_variables:
         line_color: '#e2401b'
         font_family: Inter, sans-serif
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/algolia-indexer/index'
+    excludes: ['.thumbs','script', '.page-versions','.feedback-section','.banner-container']
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/collect-bloblang-samples'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-categories'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/modify-redirects'
