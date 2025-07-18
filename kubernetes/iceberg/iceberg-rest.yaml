@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iceberg-rest
+  namespace: iceberg-lab
+  labels:
+    app: iceberg-rest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-rest
+  template:
+    metadata:
+      labels:
+        app: iceberg-rest
+    spec:
+      # Share /etc/hosts volume between init container and main container
+      volumes:
+      - name: hosts-volume
+        emptyDir: {}
+
+      # Init container resolves MinIO IP and configures DNS
+      initContainers:
+      - name: dns-resolver
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "Resolving MinIO service IP..."
+
+          # Get MinIO service IP (try ClusterIP first, then Pod IP)
+          MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
+
+          if [ -z "$MINIO_IP" ]; then
+            echo "ClusterIP not found, trying pPod IP..."
+            # For headless services, get Pod IP directly
+            MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep -A 1 'Name:' | grep 'Address:' | head -1 | awk '{print $2}')
+          fi
+
+          if [ -z "$MINIO_IP" ]; then
+            echo "ERROR: Could not resolve MinIO IP"
+            exit 1
+          fi
+
+          echo "MinIO IP resolved: $MINIO_IP"
+
+          # Copy original /etc/hosts
+          cp /etc/hosts /shared/hosts
+
+          # Add bucket-style hostname mappings
+          echo "$MINIO_IP redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$MINIO_IP lab.redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$MINIO_IP redpanda.minio" >> /shared/hosts
+
+          echo "DNS mappings configured:"
+          cat /shared/hosts | tail -3
+        volumeMounts:
+        - name: hosts-volume
+          mountPath: /shared
+
+      containers:
+      - name: iceberg-rest
+        image: tabulario/iceberg-rest:1.5.0
+        ports:
+        - containerPort: 8181
+
+        # Use the hosts file configured by init container
+        volumeMounts:
+        - name: hosts-volume
+          mountPath: /etc/hosts
+          subPath: hosts
+
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: redpanda-secret
+              key: cloud_storage_access_key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: redpanda-secret
+              key: cloud_storage_secret_key
+        - name: AWS_REGION
+          value: local
+        - name: CATALOG_WAREHOUSE
+          value: s3://redpanda/
+        - name: CATALOG_IO__IMPL
+          value: org.apache.iceberg.aws.s3.S3FileIO
+        - name: CATALOG_S3_ENDPOINT
+          value: http://iceberg-minio-hl.iceberg-lab.svc.cluster.local:9000
+
+        livenessProbe:
+          httpGet:
+            path: /v1/config
+            port: 8181
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+        readinessProbe:
+          httpGet:
+            path: /v1/config
+            port: 8181
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-rest
+  namespace: iceberg-lab
+  labels:
+    app: iceberg-rest
+spec:
+  selector:
+    app: iceberg-rest
+  ports:
+  - port: 8181
+    targetPort: 8181
+    protocol: TCP
+    name: rest-api
+  type: ClusterIP

@@ -91,6 +91,8 @@ export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ```bash
 docker compose build && docker compose up
 ```
++
+The build process may take a few minutes to complete, as it builds the Spark image with the necessary dependencies for Iceberg.
 
 . Create and switch to a new `rpk` profile that connects to your Redpanda broker:
 +

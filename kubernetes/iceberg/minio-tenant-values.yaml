@@ -1,0 +1,44 @@
+# This Helm values file configures a single-node MinIO tenant optimized for development:
+#
+# 1. Tenant Resource Allocation:
+#    - Single server with 5Gi storage (sufficient for lab data volumes)
+#    - Deployed to kind-worker node
+#
+# 2. S3 Compatibility Configuration:
+#    - Access credentials match Redpanda secret configuration
+#    - Bucket-style URL access for seamless Spark/Iceberg integration
+#    - Console disabled animations for better performance in containers
+#
+# 3. Node Placement Strategy:
+#    - nodeSelector ensures MinIO runs on a specific worker nodes so we only need to load the built Docker image onto that node
+#    - tolerations allow co-location with Spark workloads if needed
+#
+# Production Note: For production deployments, increase storage size,
+# enable TLS, use distributed mode, and implement proper RBAC
+tenant:
+  name: iceberg-minio
+  namespace: iceberg-lab
+  pools:
+    - name: pool-0
+      servers: 1
+      volumesPerServer: 1
+      size: 5Gi
+      affinity: {}
+  mountPath: /export
+  certificate:
+    requestAutoCert: false
+  configSecret:
+    name: minio-config
+    accessKey: minio
+    secretKey: minio123
+  env:
+    - name: MINIO_BROWSER_LOGIN_ANIMATION
+      value: 'off'
+console:
+  enabled: true
+nodeSelector:
+  kubernetes.io/hostname: kind-worker
+tolerations:
+  - key: spark
+    operator: Equal
+    effect: NoSchedule

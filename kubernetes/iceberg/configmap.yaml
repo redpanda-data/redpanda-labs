@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redpanda-configmap
+data:
+  # =============================================================================
+  # object storage (TIERED STORAGE) CONFIGURATION
+  # =============================================================================
+
+  # Enable Tiered Storage for efficient long-term data retention
+  # This allows older segments to be moved to object storage (MinIO)
+  cloud_storage_enabled: "true"
+
+  # Set region for S3 API compatibility
+  # MinIO uses 'local' as a default region in standalone mode
+  cloud_storage_region: "local"
+
+  # MinIO endpoint using Kubernetes service DNS
+  # Using headless service for direct pod communication
+  cloud_storage_api_endpoint: "iceberg-minio-hl.iceberg-lab.svc.cluster.local"
+  cloud_storage_api_endpoint_port: "9000"
+
+  # Disable TLS for simplicity in lab environment
+  # In production, enable TLS and configure proper certificates
+  cloud_storage_disable_tls: "true"
+
+  # S3 bucket name for storing Redpanda segments and Iceberg data
+  # This bucket is created by the minio-setup-job
+  cloud_storage_bucket: "redpanda"
+
+  # Upload segments to object storage every 30 seconds
+  # Shorter intervals provide better durability but increase overhead
+  # Adjust based on your durability vs performance requirements
+  cloud_storage_segment_max_upload_interval_sec: "30"
+
+  # Enable writing new data to object storage
+  # Required for Tiered Storage functionality
+  cloud_storage_enable_remote_write: "true"
+
+  # Enable reading data from object storage
+  # Allows querying older data that has been tiered
+  cloud_storage_enable_remote_read: "true"
+
+  # Use path-style URLs for S3 operations (required for MinIO)
+  # Path-style: http://endpoint/bucket/key
+  # Virtual-hosted-style: http://bucket.endpoint/key (not supported by MinIO)
+  cloud_storage_url_style: "path"
+
+  # =============================================================================
+  # ICEBERG INTEGRATION CONFIGURATION
+  # =============================================================================
+
+  # Enable Iceberg table format support
+  # This allows topics to be created with Iceberg metadata
+  iceberg_enabled: "true"
+
+  # Use REST catalog for centralized metadata management
+  iceberg_catalog_type: "rest"
+
+  # Iceberg REST catalog endpoint using Kubernetes service DNS
+  # The catalog manages table metadata and schema evolution
+  iceberg_rest_catalog_endpoint: "http://iceberg-rest.iceberg-lab.svc.cluster.local:8181"
+
+  # Commit Iceberg table changes every 10 seconds
+  # Shorter intervals provide more frequent snapshots but increase overhead
+  # Balance between query freshness and performance
+  iceberg_catalog_commit_interval_ms: "10000"
+
+  # Target lag for Iceberg table updates (10 seconds)
+  iceberg_target_lag_ms: "10000"

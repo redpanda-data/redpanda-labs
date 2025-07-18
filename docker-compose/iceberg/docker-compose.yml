@@ -8,7 +8,7 @@ volumes:
 services:
   redpanda-0:
     container_name: redpanda-0
-    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v24.3.1}
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.1.5}
     command:
       - redpanda
       - start
@@ -105,7 +105,7 @@ services:
       "
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v2.8.0}
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.0.0}
     networks:
       - redpanda_network
     entrypoint: /bin/sh
