@@ -8,7 +8,7 @@
 # 2. Cloud Storage Integration (S3/MinIO):
 #    - cloud_storage_* settings configure S3-compatible object storage
 #    - path-style URLs required for MinIO compatibility in Kubernetes
-#    - Tiered storage enables efficient long-term data retention
+#    - Tiered Storage enables efficient long-term data retention
 #
 # 3. Iceberg Sink Configuration:
 #    - iceberg_enabled activates native Iceberg table creation from topics

@@ -205,7 +205,7 @@ helm upgrade --install redpanda-controller redpanda/operator \
 kubectl --namespace iceberg-lab rollout status --watch deployment/redpanda-controller-operator
 ----
 +
-If you see `deployment "redpanda-controller-operator" successfully rolled out`, the operator is ready.
+When you see `deployment "redpanda-controller-operator" successfully rolled out`, the operator is ready.
 
 . Create the Redpanda cluster:
 +
@@ -353,7 +353,7 @@ If Redpanda logs show `bucket not found` errors after setup:
 kubectl exec -n iceberg-lab iceberg-minio-pool-0-0 -c minio -- mc ls local/
 ----
 
-. Check Redpanda can reach MinIO:
+. Check that Redpanda can reach MinIO:
 +
 [source,bash]
 ----
