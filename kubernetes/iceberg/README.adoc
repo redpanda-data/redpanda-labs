@@ -1,4 +1,4 @@
-= Iceberg Streaming Lab on Kubernetes with Redpanda, MinIO, and Spark
+= Iceberg Streaming on Kubernetes with Redpanda, MinIO, and Spark
 :env-kubernetes: true
 :description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
 :page-layout: lab
