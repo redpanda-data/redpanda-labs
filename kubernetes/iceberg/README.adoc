@@ -390,4 +390,4 @@ kubectl rollout status deployment/iceberg-rest -n iceberg-lab
 
 - https://min.io/docs/minio/kubernetes/upstream/operations/installation.html[MinIO Kubernetes Operator installation]
 - https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant-helm.html#deploy-tenant-helm[Deploy MinIO tenant with Helm]
-- xref:manage:iceberg/about-iceberg-topics.adoc[Iceberg Topics in Redpanda]
+- xref:ROOT:manage:iceberg/about-iceberg-topics.adoc[Iceberg Topics in Redpanda]
