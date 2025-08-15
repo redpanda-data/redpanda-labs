@@ -68,23 +68,41 @@ cd redpanda-labs/docker-compose/iceberg
 
 . Set the `REDPANDA_VERSION` environment variable to at least version 24.3.1. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-For example:
-+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_VERSION = "v{latest-redpanda-version}"
+----
+====
+
+
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 NOTE: You must use at least version v3.0.0 of Redpanda Console to deploy this lab.
 +
-For example:
-+
+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
+
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_CONSOLE_VERSION = "v{latest-console-version}"
+----
+====
 
 . Start the Docker Compose environment, which includes Redpanda, MinIO, Spark, and Jupyter Notebook:
 +

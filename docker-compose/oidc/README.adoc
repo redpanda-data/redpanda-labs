@@ -151,23 +151,41 @@ cd redpanda-labs/docker-compose/oidc
 
 . Set the `REDPANDA_VERSION` environment variable to a supported version of Redpanda. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-For example:
-+
+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
 
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_VERSION = "v{latest-redpanda-version}"
+----
+====
+
+
 . Set the `REDPANDA_CONSOLE_VERSION` environment variable to the version of Redpanda Console that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
 NOTE: You must use Redpanda Console version v3.1.0 or later to deploy this lab.
 +
-For example:
-+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
+
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_CONSOLE_VERSION = "v{latest-console-version}"
+----
+====
 
 . Create a `.env` file and add the following environment variables:
 +
