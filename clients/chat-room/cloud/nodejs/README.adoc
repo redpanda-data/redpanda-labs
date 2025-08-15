@@ -64,21 +64,25 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd clients/chat-room/cloud/nodejs
 ----
 
-. Install the required dependencies:
+. Open the TypeScript files in the `src/` directory (`admin.ts`, `producer.ts`, `consumer.ts`, and `index.ts`) and update the Redpanda connection information:
++
+- Replace the placeholders wrapped in angle brackets (`<>`) with your Redpanda Cloud connection details (such as `bootstrap-server-address`, `username`, and `password`). You can find these values in your Redpanda Cloud console.
++
+Make sure to save your changes before running the application.
+
+. From the `clients/chat-room/cloud/nodejs` directory, install the required dependencies:
 +
 [,bash]
 ----
 npm i
 ----
 
-. From `chat-room/`, build the client application:
+. From the `clients/chat-room/cloud/nodejs` directory, build the client application:
 +
 [,bash]
 ----
 node_modules/typescript/bin/tsc src/index.ts
 ----
-
-. Open the TypeScript files and replace the placeholders wrapped in angle brackets (`<>`) with the same values that you used in the Redpanda Cloud Quickstart.
 
 . Verify that the `chat-room` topic exists in your cluster by listing all topics:
 +
