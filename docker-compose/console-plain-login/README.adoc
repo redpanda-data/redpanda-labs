@@ -59,12 +59,21 @@ endif::[]
 
 . Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-For example:
-+
+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
+
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_VERSION = "v{latest-redpanda-version}"
+----
+====
 
 . Save your license key to `license/redpanda.license` in the same location as your Docker Compose file. Or, to use another location, update the license paths in the Docker Compose file to another directory that contains your license key.
 

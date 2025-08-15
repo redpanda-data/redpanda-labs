@@ -51,12 +51,20 @@ cd redpanda-labs/docker-compose/cdc/mysql-json
 
 . Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].
 +
-For example:
-+
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 ----
+
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_VERSION = "v{latest-redpanda-version}"
+----
+====
 
 . Run the following in the directory where you saved the Docker Compose file:
 +
@@ -155,12 +163,23 @@ docker compose exec redpanda rpk topic consume dbz.pandashop.orders
 
 . While the consumer is running, open another terminal to insert a record to the `orders` table.
 +
+[tabs]
+====
+macOS/Linux::
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 docker compose exec mysql mysql -u mysqluser -p
 ----
-+
+
+Windows::
+[,powershell,subs="attributes+"]
+----
+$env:REDPANDA_VERSION = "v{latest-redpanda-version}"
+docker compose exec mysql mysql -u mysqluser -p
+----
+====
+
 Provide `mysqlpw` as the password when prompted.
 
 . Insert the following record:
