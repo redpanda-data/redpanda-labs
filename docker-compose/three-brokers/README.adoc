@@ -23,6 +23,8 @@ This Docker Compose file is also used in the https://docs.redpanda.com/current/g
 
 You must have https://docs.docker.com/compose/install/[Docker and Docker Compose] installed on your host machine.
 
+This lab is intended for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
+
 == Run the lab
 
 // For GitHub, provide instructions for cloning the repo.

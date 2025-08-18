@@ -31,6 +31,8 @@ ifdef::env-site[]
 endif::[]
 - https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine.
 
+This lab is intended for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
+
 == Set up Azure Entra ID
 
 This section guides you through creating an Azure Entra ID application registration and configuring it for use with Redpanda.
