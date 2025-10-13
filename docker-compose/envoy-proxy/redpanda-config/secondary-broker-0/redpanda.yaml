@@ -1,0 +1,67 @@
+redpanda:
+    data_directory: /var/lib/redpanda/data
+    node_id: 0
+    seed_servers:
+        - host:
+            address: secondary-broker-0
+            port: 33145
+        - host:
+            address: secondary-broker-1
+            port: 33145
+        - host:
+            address: secondary-broker-2
+            port: 33145
+    rpc_server:
+        address: secondary-broker-0
+        port: 33145
+    kafka_api:
+        - address: 0.0.0.0
+          port: 9092
+          name: internal
+        - address: 0.0.0.0
+          port: 29092
+          name: external
+    advertised_rpc_api:
+        address: secondary-broker-0
+        port: 33145
+    advertised_kafka_api:
+        - address: secondary-broker-0
+          port: 9092
+          name: internal
+        - address: localhost
+          port: 29092
+          name: external
+    developer_mode: true
+    auto_create_topics_enabled: true
+    fetch_reads_debounce_timeout: 10
+    group_initial_rebalance_delay: 0
+    group_topic_partitions: 3
+    log_segment_size_min: 1
+    storage_min_free_bytes: 10485760
+    topic_partitions_per_shard: 1000
+    write_caching_default: "true"
+rpk:
+    overprovisioned: true
+pandaproxy:
+    pandaproxy_api:
+        - address: 0.0.0.0
+          port: 8082
+          name: internal
+        - address: 0.0.0.0
+          port: 28082
+          name: external
+    advertised_pandaproxy_api:
+        - address: secondary-broker-0
+          port: 8082
+          name: internal
+        - address: localhost
+          port: 28082
+          name: external
+schema_registry:
+    schema_registry_api:
+        - address: 0.0.0.0
+          port: 8081
+          name: internal
+        - address: 0.0.0.0
+          port: 28081
+          name: external

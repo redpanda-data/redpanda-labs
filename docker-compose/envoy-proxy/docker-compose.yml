@@ -1,0 +1,213 @@
+services:
+  # Primary Redpanda Cluster (3 brokers)
+  primary-broker-0:
+    image: redpandadata/redpanda:latest
+    container_name: primary-broker-0
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/primary-broker-0:/etc/redpanda
+    ports:
+      - "19092:19092"
+      - "18081:18081"
+      - "18082:18082"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=primary-broker-0:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  primary-broker-1:
+    image: redpandadata/redpanda:latest
+    container_name: primary-broker-1
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/primary-broker-1:/etc/redpanda
+    ports:
+      - "19093:19093"
+      - "18083:18083"
+      - "18084:18084"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=primary-broker-1:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  primary-broker-2:
+    image: redpandadata/redpanda:latest
+    container_name: primary-broker-2
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/primary-broker-2:/etc/redpanda
+    ports:
+      - "19094:19094"
+      - "18085:18085"
+      - "18086:18086"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=primary-broker-2:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Secondary Redpanda Cluster (3 brokers)
+  secondary-broker-0:
+    image: redpandadata/redpanda:latest
+    container_name: secondary-broker-0
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/secondary-broker-0:/etc/redpanda
+    ports:
+      - "29092:29092"
+      - "28081:28081"
+      - "28082:28082"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=secondary-broker-0:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  secondary-broker-1:
+    image: redpandadata/redpanda:latest
+    container_name: secondary-broker-1
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/secondary-broker-1:/etc/redpanda
+    ports:
+      - "29093:29093"
+      - "28083:28083"
+      - "28084:28084"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=secondary-broker-1:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  secondary-broker-2:
+    image: redpandadata/redpanda:latest
+    container_name: secondary-broker-2
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+    volumes:
+      - ./redpanda-config/secondary-broker-2:/etc/redpanda
+    ports:
+      - "29094:29094"
+      - "28085:28085"
+      - "28086:28086"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers=secondary-broker-2:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Envoy Proxy for failover
+  envoy:
+    image: envoyproxy/envoy:contrib-v1.31-latest
+    container_name: envoy-proxy
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+      - "9094:9094"
+      - "9901:9901"  # Admin interface
+    volumes:
+      - ./envoy-proxy/envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - redpanda-net
+    depends_on:
+      primary-broker-0:
+        condition: service_healthy
+      primary-broker-1:
+        condition: service_healthy
+      primary-broker-2:
+        condition: service_healthy
+      secondary-broker-0:
+        condition: service_healthy
+      secondary-broker-1:
+        condition: service_healthy
+      secondary-broker-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/bash -c 'echo > /dev/tcp/localhost/9901' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # RPK client
+  rpk-client:
+    image: redpandadata/redpanda:latest
+    container_name: rpk-client
+    entrypoint: ["/bin/bash"]
+    command: ["-c", "tail -f /dev/null"]
+    volumes:
+      - ./test-producer.sh:/test-producer.sh
+      - ./test-consumer.sh:/test-consumer.sh
+    networks:
+      - redpanda-net
+    depends_on:
+      - envoy
+    restart: unless-stopped
+
+  # Python client
+  python-client:
+    image: python:3.11-slim
+    container_name: python-client
+    command: ["/bin/bash", "-c", "pip install kafka-python && tail -f /dev/null"]
+    volumes:
+      - ./python-producer.py:/app/python-producer.py
+      - ./python-consumer.py:/app/python-consumer.py
+    working_dir: /app
+    networks:
+      - redpanda-net
+    depends_on:
+      - envoy
+    restart: unless-stopped
+
+networks:
+  redpanda-net:
+    driver: bridge
