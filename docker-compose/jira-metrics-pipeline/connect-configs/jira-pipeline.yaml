@@ -1,0 +1,108 @@
+# JIRA Metrics Pipeline
+#
+# This pipeline queries JIRA issues and streams them to Redpanda topics
+# for real-time metrics, alerting, and analytics.
+#
+# Environment variables required:
+# - REDPANDA_LICENSE: Enterprise license (must be exported in shell)
+# - JIRA_BASE_URL: https://your-domain.atlassian.net
+# - JIRA_USERNAME: your-email@example.com
+# - JIRA_API_TOKEN: your-api-token
+# - JIRA_PROJECT: YOUR_PROJECT_KEY
+# - REDPANDA_BROKERS: redpanda:9092 (set in docker-compose.yml)
+
+input:
+  generate:
+    mapping: |
+      # Query JIRA for recent issues (last 7 days for testing)
+      root.jql = "project = ${JIRA_PROJECT} AND updated >= -7d ORDER BY updated DESC"
+      root.maxResults = 10
+      root.fields = [
+        "key",
+        "summary",
+        "status",
+        "priority",
+        "assignee",
+        "reporter",
+        "created",
+        "updated",
+        "resolutiondate",
+        "issuetype",
+        "labels",
+        "components"
+      ]
+    # Query every 30 seconds
+    interval: 30s
+
+pipeline:
+  processors:
+    # Execute JIRA query
+    - jira:
+        base_url: "${JIRA_BASE_URL}"
+        username: "${JIRA_USERNAME}"
+        api_token: "${JIRA_API_TOKEN}"
+        max_results_per_page: 100
+        request_timeout: 30s
+        max_retries: 10
+
+    # Transform and enrich each issue with metrics
+    - mapping: |
+        # Basic issue info
+        root.issue_key = this.key
+        root.summary = this.fields.summary
+        root.status = this.fields.status.name
+        root.priority = this.fields.priority.name
+        root.issue_type = this.fields.issuetype.name
+        root.url = "${JIRA_BASE_URL}/browse/" + this.key
+
+        # People
+        root.assignee = if this.fields.assignee != null {
+          this.fields.assignee.displayName
+        } else { "Unassigned" }
+
+        root.reporter = if this.fields.reporter != null {
+          this.fields.reporter.displayName
+        } else { "Unknown" }
+
+        # Dates (keep original format for downstream processing)
+        root.created = this.fields.created
+        root.updated = this.fields.updated
+        root.resolved = this.fields.resolutiondate
+
+        # Labels and components
+        root.labels = this.fields.labels
+        root.components = this.fields.components.map_each(c -> c.name)
+
+        # Flags for routing
+        root.is_completed = this.fields.status.name.lowercase().contains("done") ||
+                           this.fields.status.name.lowercase().contains("closed") ||
+                           this.fields.status.name.lowercase().contains("resolved")
+
+        root.is_high_priority = ["Highest", "High"].contains(this.fields.priority.name)
+
+        # Note: Timestamp-based metrics (age, staleness, lead time) can be calculated
+        # by downstream consumers using the raw `created`, `updated`, and `resolved` fields.
+
+        # Add pipeline processing timestamp
+        root.pipeline_timestamp = now()
+
+    # Route to primary topic based on issue properties
+    - mapping: |
+        # Route based on priority and completion status
+        meta kafka_topic = if this.is_high_priority {
+          "jira.issues.high-priority"
+        } else if this.is_completed {
+          "jira.issues.completed"
+        } else {
+          "jira.issues.all"
+        }
+
+output:
+  kafka:
+    addresses: ["${REDPANDA_BROKERS}"]
+    topic: '${! meta("kafka_topic") }'
+    max_in_flight: 1
+    batching:
+      count: 100
+      period: 1s
+    compression: snappy

@@ -74,7 +74,7 @@ To create a symlink for your README, execute the following CLI command:
 NOTE: This command is not supported on Windows. If you're using Windows, create the symlinks manually. See the https://docs.antora.org/antora/latest/symlinks/#windows[Antora documentation] for instructions.
 
 ```bash
-npx doc-tools <path-to-readme> <target-asciidoc-filename>
+npx doc-tools link-readme -s <path-to-readme> -t <target-asciidoc-filename>
 ```
 
 Replace `<path-to-readme>` with the name of the directory where your README is saved. Replace `<target-asciidoc-filename>` with the Asciidoc filename that you want to generate.
