@@ -6,6 +6,12 @@ kafka:
     urls:
       - http://redpanda:8081
 
+redpanda:
+  adminApi:
+    enabled: true
+    urls:
+      - http://redpanda:9644
+
 connect:
   enabled: false
 
