@@ -362,7 +362,7 @@ docker compose down -v
 
 == Next steps
 
-Now that you have Jira issues streaming into Redpanda, you can extend this pipeline with Redpanda Connect outputs:
+After you have Jira issues streaming into Redpanda, you can extend this pipeline with Redpanda Connect outputs:
 
 === Send alerts and notifications
 
