@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 # Set environment variables
 ENV SPARK_HOME="/opt/spark"
-ENV SPARK_VERSION=3.5.6
+ENV SPARK_VERSION=3.5.7
 ENV SPARK_MAJOR_VERSION=3.5
 ENV ICEBERG_VERSION=1.6.0
 ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip
