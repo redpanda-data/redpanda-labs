@@ -8,3 +8,4 @@
 - link:./owl-shop/README.adoc[Owl shop streaming application]
 - link:./console-plain-login/README.adoc[Redpanda Console with Plain Login Authentication]
 - link:./cdc/README.adoc[Change data capture (CDC) with Debezium]
+- link:./redpanda-migrator-demo/README.md[Data migration from Kafka to Redpanda]

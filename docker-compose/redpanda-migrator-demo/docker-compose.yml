@@ -1,0 +1,169 @@
+networks:
+  redpanda-network:
+    driver: bridge
+
+volumes:
+  source-data:
+  target-data:
+
+services:
+  # ============================================
+  # SOURCE CLUSTER (Simulating Confluent Kafka)
+  # ============================================
+  redpanda-source:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: redpanda-source
+    hostname: redpanda-source
+    networks:
+      - redpanda-network
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda-source:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda-source:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda-source:33145
+      - --advertise-rpc-addr redpanda-source:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+    ports:
+      - "19092:19092"  # Kafka API
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # HTTP Proxy
+      - "19644:9644"   # Admin API
+    volumes:
+      - source-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # TARGET CLUSTER (Redpanda)
+  # ============================================
+  redpanda-target:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: redpanda-target
+    hostname: redpanda-target
+    networks:
+      - redpanda-network
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-target:9092,external://localhost:29092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr internal://redpanda-target:8082,external://localhost:28082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-target:33145
+      - --advertise-rpc-addr redpanda-target:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+    ports:
+      - "29092:29092"  # Kafka API
+      - "28081:28081"  # Schema Registry
+      - "28082:28082"  # HTTP Proxy
+      - "29644:9644"   # Admin API
+    volumes:
+      - target-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # REDPANDA CONSOLE - SOURCE
+  # ============================================
+  console-source:
+    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    container_name: redpanda-console-source
+    hostname: console-source
+    networks:
+      - redpanda-network
+    environment:
+      KAFKA_BROKERS: "redpanda-source:9092"
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: "http://redpanda-source:8081"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+
+  # ============================================
+  # REDPANDA CONSOLE - TARGET
+  # ============================================
+  console-target:
+    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    container_name: redpanda-console-target
+    hostname: console-target
+    networks:
+      - redpanda-network
+    environment:
+      KAFKA_BROKERS: "redpanda-target:9092"
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: "http://redpanda-target:8081"
+    ports:
+      - "8081:8080"
+    depends_on:
+      redpanda-target:
+        condition: service_healthy
+
+  # ============================================
+  # REDPANDA MIGRATOR
+  # ============================================
+  migrator:
+    image: docker.redpanda.com/redpandadata/connect:4.75.1
+    container_name: redpanda-migrator
+    hostname: migrator
+    networks:
+      - redpanda-network
+    volumes:
+      - ./config/migrator-config.yaml:/migrator-config.yaml:ro
+    command:
+      - run
+      - /migrator-config.yaml
+    ports:
+      - "4195:4195"  # Metrics/health endpoint
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4195/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
+  # RPK CLIENT (for running commands)
+  # ============================================
+  rpk-client:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: rpk-client
+    hostname: rpk-client
+    networks:
+      - redpanda-network
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        echo "RPK client ready. Waiting for user commands..."
+        sleep infinity
+    volumes:
+      - ./config:/config:ro
+      - ./scripts:/scripts:ro
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-target:
+        condition: service_healthy

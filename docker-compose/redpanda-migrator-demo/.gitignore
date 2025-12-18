@@ -1,0 +1,17 @@
+# Docker
+.env
+*.log
+
+# Volumes
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
