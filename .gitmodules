@@ -1,3 +1,12 @@
 [submodule "redpanda-edge-agent"]
 	path = redpanda-edge-agent
 	url = https://github.com/redpanda-data/redpanda-edge-agent
+[submodule "docker-compose/redpanda-shadow-demo"]
+	path = docker-compose/redpanda-shadow-demo
+	url = https://github.com/vuldin/redpanda-shadow-demo
+[submodule "docker-compose/redpanda-migrator-demo"]
+	path = docker-compose/redpanda-migrator-demo
+	url = https://github.com/vuldin/redpanda-migrator-demo
+[submodule "docker-compose/redpanda-envoy"]
+	path = docker-compose/redpanda-envoy
+	url = https://github.com/vuldin/redpanda-envoy
