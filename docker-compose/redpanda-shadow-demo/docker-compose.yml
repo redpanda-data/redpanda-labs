@@ -1,0 +1,131 @@
+services:
+  # Source Cluster
+  redpanda-source:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: redpanda-source
+    hostname: redpanda-source
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda-source:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda-source:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda-source:33145
+      - --advertise-rpc-addr redpanda-source:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --set redpanda.enable_shadow_linking=true
+    ports:
+      - "19092:19092"  # Kafka API
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # HTTP Proxy
+      - "19644:9644"   # Admin API
+    networks:
+      - redpanda-network
+    volumes:
+      - redpanda-source-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  console-source:
+    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    container_name: console-source
+    depends_on:
+      - redpanda-source
+    ports:
+      - "8080:8080"
+    networks:
+      - redpanda-network
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      KAFKA_BROKERS: redpanda-source:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda-source:8081
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda-source:9644
+    volumes:
+      - ./config/console-source.yml:/tmp/config.yml
+
+  # Shadow Cluster
+  redpanda-shadow:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: redpanda-shadow
+    hostname: redpanda-shadow
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-shadow:9092,external://localhost:29092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr internal://redpanda-shadow:8082,external://localhost:28082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-shadow:33145
+      - --advertise-rpc-addr redpanda-shadow:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --set redpanda.enable_shadow_linking=true
+    ports:
+      - "29092:29092"  # Kafka API
+      - "28081:28081"  # Schema Registry
+      - "28082:28082"  # HTTP Proxy
+      - "29644:9644"   # Admin API
+    networks:
+      - redpanda-network
+    volumes:
+      - redpanda-shadow-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  console-shadow:
+    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    container_name: console-shadow
+    depends_on:
+      - redpanda-shadow
+    ports:
+      - "8081:8080"
+    networks:
+      - redpanda-network
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      KAFKA_BROKERS: redpanda-shadow:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda-shadow:8081
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda-shadow:9644
+    volumes:
+      - ./config/console-shadow.yml:/tmp/config.yml
+
+  # Client container for testing and setup
+  rpk-client:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    container_name: rpk-client
+    depends_on:
+      - redpanda-source
+      - redpanda-shadow
+    networks:
+      - redpanda-network
+    volumes:
+      - ./config:/config
+      - ./scripts:/scripts
+    entrypoint: /bin/bash
+    command: -c "tail -f /dev/null"
+
+networks:
+  redpanda-network:
+    driver: bridge
+
+volumes:
+  redpanda-source-data:
+  redpanda-shadow-data:

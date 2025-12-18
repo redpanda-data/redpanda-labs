@@ -1,0 +1,14 @@
+kafka:
+  brokers:
+    - redpanda-shadow:9092
+
+schemaRegistry:
+  enabled: true
+  urls:
+    - http://redpanda-shadow:8081
+
+redpanda:
+  adminApi:
+    enabled: true
+    urls:
+      - http://redpanda-shadow:9644
