@@ -829,7 +829,7 @@ Volumes persist between container restarts but are removed with `make clean`.
 
 ## Learn More
 
-- [Redpanda Migrator Documentation](https://docs.redpanda.com/current/migrate/)
+- [Redpanda Migrator Documentation](https://docs.redpanda.com/redpanda-connect/cookbooks/redpanda_migrator/)
 - [Redpanda Connect Documentation](https://docs.redpanda.com/redpanda-connect/)
 - [Schema Registry Documentation](https://docs.redpanda.com/current/manage/schema-registry/)
 
