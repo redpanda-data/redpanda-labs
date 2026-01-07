@@ -5,6 +5,11 @@
 set -e
 
 SOURCE_BROKERS="redpanda-source:9092"
+
+# Admin credentials for producing
+ADMIN_USER="admin-user"
+ADMIN_PASS="admin-secret-password"
+
 BATCH_SIZE=50        # Messages per batch
 BATCH_INTERVAL=2     # Seconds between batches
 MESSAGE_NUM=1
@@ -44,6 +49,9 @@ while true; do
             --brokers "$SOURCE_BROKERS" \
             --key "$ORDER_ID" \
             --partition $(($MESSAGE_NUM % 12)) \
+            -X user="$ADMIN_USER" \
+            -X pass="$ADMIN_PASS" \
+            -X sasl.mechanism=SCRAM-SHA-256 \
             2>/dev/null
 
         MESSAGE_NUM=$((MESSAGE_NUM + 1))
@@ -59,6 +67,9 @@ while true; do
             --brokers "$SOURCE_BROKERS" \
             --key "$USER_ID" \
             --partition $(($i % 6)) \
+            -X user="$ADMIN_USER" \
+            -X pass="$ADMIN_PASS" \
+            -X sasl.mechanism=SCRAM-SHA-256 \
             2>/dev/null
     done
 
@@ -72,6 +83,9 @@ while true; do
             --brokers "$SOURCE_BROKERS" \
             --key "$EVENT_TYPE" \
             --partition $(($i % 8)) \
+            -X user="$ADMIN_USER" \
+            -X pass="$ADMIN_PASS" \
+            -X sasl.mechanism=SCRAM-SHA-256 \
             2>/dev/null
     done
 
@@ -84,6 +98,9 @@ while true; do
             --brokers "$SOURCE_BROKERS" \
             --key "$ALERT_ID" \
             --partition $(($i % 3)) \
+            -X user="$ADMIN_USER" \
+            -X pass="$ADMIN_PASS" \
+            -X sasl.mechanism=SCRAM-SHA-256 \
             2>/dev/null
     done
 

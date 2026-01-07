@@ -6,6 +6,11 @@ set -e
 
 SOURCE_SCHEMA_REGISTRY="http://redpanda-source:8081"
 TARGET_SCHEMA_REGISTRY="http://redpanda-target:8081"
+
+# Admin credentials for Schema Registry
+ADMIN_USER="admin-user"
+ADMIN_PASS="admin-secret-password"
+
 SYNC_INTERVAL=10  # From migrator config
 WAIT_TIME=15      # Wait for sync to occur (1.5x interval)
 
@@ -26,7 +31,7 @@ echo ""
 
 # Get initial schemas in target
 echo "2. Getting current schemas in target..."
-target_schemas_before=$(curl -s "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/ /g')
+target_schemas_before=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/ /g')
 echo "   Current schemas in target: $target_schemas_before"
 echo ""
 
@@ -34,6 +39,7 @@ echo ""
 echo "3. Registering NEW schema in source (demo-continuous-test)..."
 response=$(curl -s -X POST \
   -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
   --data '{
     "schema": "{\"type\":\"record\",\"name\":\"ContinuousTest\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"test_id\",\"type\":\"string\"},{\"name\":\"message\",\"type\":\"string\"},{\"name\":\"timestamp\",\"type\":\"long\"}]}"
   }' \
@@ -52,7 +58,7 @@ echo ""
 
 # Verify schema exists in source
 echo "4. Verifying schema exists in source..."
-if curl -s "$SOURCE_SCHEMA_REGISTRY/subjects" 2>/dev/null | grep -q "demo-continuous-test"; then
+if curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$SOURCE_SCHEMA_REGISTRY/subjects" 2>/dev/null | grep -q "demo-continuous-test"; then
     echo "   ✅ Schema found in source"
 else
     echo "   ❌ Schema not found in source!"
@@ -72,11 +78,11 @@ echo ""
 
 # Check if schema appeared in target
 echo "6. Checking if schema synced to target..."
-if curl -s "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | grep -q "demo-continuous-test"; then
+if curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | grep -q "demo-continuous-test"; then
     echo "   ✅ SUCCESS! Schema synced to target automatically!"
 
     # Get schema details from target
-    target_schema=$(curl -s "$TARGET_SCHEMA_REGISTRY/subjects/demo-continuous-test/versions/latest" 2>/dev/null)
+    target_schema=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$TARGET_SCHEMA_REGISTRY/subjects/demo-continuous-test/versions/latest" 2>/dev/null)
     target_id=$(echo "$target_schema" | sed 's/.*"id":\([0-9]*\).*/\1/')
     echo "   Target schema ID: $target_id"
 
@@ -89,7 +95,7 @@ else
     echo "   ❌ FAILED! Schema not found in target"
     echo ""
     echo "   Schemas in target:"
-    curl -s "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
+    curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
     echo ""
     echo "   This indicates continuous schema syncing is NOT working."
     exit 1
@@ -100,10 +106,10 @@ echo ""
 echo "7. Final schema comparison:"
 echo ""
 echo "   Source schemas:"
-curl -s "$SOURCE_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
+curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$SOURCE_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
 echo ""
 echo "   Target schemas:"
-curl -s "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
+curl -s -u "$ADMIN_USER:$ADMIN_PASS" "$TARGET_SCHEMA_REGISTRY/subjects" 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n     /g'
 echo ""
 
 echo "========================================="

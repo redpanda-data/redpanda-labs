@@ -8,6 +8,12 @@ input:
     seed_brokers:
       - redpanda-source:9092
 
+    # SASL authentication for source cluster
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: migrator-user
+        password: migrator-secret-password
+
     # Topics to migrate (regex pattern)
     topics:
       - 'demo-.*'
@@ -22,12 +28,22 @@ input:
     # Schema Registry migration (source)
     schema_registry:
       url: http://redpanda-source:8081
+      basic_auth:
+        enabled: true
+        username: migrator-user
+        password: migrator-secret-password
 
 output:
   redpanda_migrator:
     # Target Redpanda cluster
     seed_brokers:
       - redpanda-target:9092
+
+    # SASL authentication for target cluster
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: migrator-user
+        password: migrator-secret-password
 
     # Max in-flight messages (1 for strict ordering)
     max_in_flight: 1
@@ -47,6 +63,10 @@ output:
     schema_registry:
       url: http://redpanda-target:8081
       interval: 10s  # Continuously sync schemas every 10 seconds
+      basic_auth:
+        enabled: true
+        username: migrator-user
+        password: migrator-secret-password
 
     # Auto-create topics with matching partition counts and configurations
     # Includes cleanup.policy (compact, compact,delete, delete)

@@ -7,6 +7,10 @@ set -e
 SOURCE_BROKERS="redpanda-source:9092"
 TARGET_BROKERS="redpanda-target:9092"
 
+# Admin credentials for verification
+ADMIN_USER="admin-user"
+ADMIN_PASS="admin-secret-password"
+
 echo "🔍 Verifying Migration..."
 echo ""
 
@@ -14,7 +18,11 @@ echo ""
 get_message_count() {
   local brokers=$1
   local topic=$2
-  rpk topic describe "$topic" -p --brokers "$brokers" 2>/dev/null | tail -n +2 | awk '{sum += $6} END {print sum+0}'
+  rpk topic describe "$topic" -p --brokers "$brokers" \
+    -X user="$ADMIN_USER" \
+    -X pass="$ADMIN_PASS" \
+    -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | tail -n +2 | awk '{sum += $6} END {print sum+0}'
 }
 
 # Function to get topic config
@@ -22,14 +30,22 @@ get_topic_config() {
   local brokers=$1
   local topic=$2
   local config=$3
-  rpk topic describe "$topic" -c --brokers "$brokers" 2>/dev/null | grep "^$config" | awk '{print $2}'
+  rpk topic describe "$topic" -c --brokers "$brokers" \
+    -X user="$ADMIN_USER" \
+    -X pass="$ADMIN_PASS" \
+    -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | grep "^$config" | awk '{print $2}'
 }
 
 # Function to get partition count
 get_partition_count() {
   local brokers=$1
   local topic=$2
-  rpk topic describe "$topic" --brokers "$brokers" 2>/dev/null | grep "^PARTITIONS" | awk '{print $2}'
+  rpk topic describe "$topic" --brokers "$brokers" \
+    -X user="$ADMIN_USER" \
+    -X pass="$ADMIN_PASS" \
+    -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | grep "^PARTITIONS" | awk '{print $2}'
 }
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -44,8 +60,12 @@ for topic in "${TOPICS[@]}"; do
   echo "  ├─ Checking existence..."
 
   # Check if topic exists in both clusters
-  source_exists=$(rpk topic list --brokers "$SOURCE_BROKERS" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
-  target_exists=$(rpk topic list --brokers "$TARGET_BROKERS" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
+  source_exists=$(rpk topic list --brokers "$SOURCE_BROKERS" \
+    -X user="$ADMIN_USER" -X pass="$ADMIN_PASS" -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
+  target_exists=$(rpk topic list --brokers "$TARGET_BROKERS" \
+    -X user="$ADMIN_USER" -X pass="$ADMIN_PASS" -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
 
   if [ "$source_exists" -ne "1" ]; then
     echo "  │  ❌ Topic does not exist in source!"
@@ -111,8 +131,8 @@ echo "📋 Checking schemas..."
 echo ""
 
 # List schemas from both registries (parse JSON without jq)
-source_schemas=$(curl -s http://redpanda-source:8081/subjects 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n/g' | grep "demo-" | sort)
-target_schemas=$(curl -s http://redpanda-target:8081/subjects 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n/g' | grep "demo-" | sort)
+source_schemas=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" http://redpanda-source:8081/subjects 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n/g' | grep "demo-" | sort)
+target_schemas=$(curl -s -u "$ADMIN_USER:$ADMIN_PASS" http://redpanda-target:8081/subjects 2>/dev/null | sed 's/\[//g; s/\]//g; s/"//g; s/,/\n/g' | grep "demo-" | sort)
 
 echo "Source schemas:"
 if [ -z "$source_schemas" ]; then
@@ -148,7 +168,9 @@ migrated=0
 total=0
 for topic in "${TOPICS[@]}"; do
   total=$((total + 1))
-  target_exists=$(rpk topic list --brokers "$TARGET_BROKERS" 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
+  target_exists=$(rpk topic list --brokers "$TARGET_BROKERS" \
+    -X user="$ADMIN_USER" -X pass="$ADMIN_PASS" -X sasl.mechanism=SCRAM-SHA-256 \
+    2>/dev/null | tail -n +2 | awk '{print $1}' | grep -c "^$topic$" || echo "0")
   if [ "$target_exists" -eq "1" ]; then
     migrated=$((migrated + 1))
   fi

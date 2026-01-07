@@ -8,6 +8,7 @@ This demo showcases:
 - ✅ **Compacted topic migration** (preserving cleanup policies)
 - ✅ **Consumer offset migration**
 - ✅ **Real-time data streaming**
+- ✅ **ACL-based security** with non-superuser migration patterns
 
 ## Architecture
 
@@ -23,7 +24,7 @@ This demo showcases:
 │  │  Port: 19092     │                               │           │
 │  │  Schema: 18081   │                               ▼           │
 │  └──────────────────┘                       ┌──────────────────┐│
-│                                              │ Target Cluster  ││
+│                                             │ Target Cluster   ││
 │  ┌──────────────────┐                       │   (Redpanda)     ││
 │  │ Redpanda Console │◄──────────────────────│                  ││
 │  │  Port: 8080      │                       │  Port: 29092     ││
@@ -32,6 +33,120 @@ This demo showcases:
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Security Configuration
+
+This demo includes ACL-based security to demonstrate production-ready migration patterns using non-superuser accounts. Normally it is expected that migrations will be handled by superuser accounts due to the amount of access needed by this user. But in some organizations this is not possible.
+
+### Users
+
+The demo creates two users:
+
+| User | Type | Purpose |
+|------|------|---------|
+| `admin-user` | Superuser | Setup and administration tasks |
+| `migrator-user` | Non-superuser | Migration operations with minimal permissions |
+
+**Credentials (demo only):**
+- Admin: `admin-user` / `admin-secret-password`
+- Migrator: `migrator-user` / `migrator-secret-password`
+
+**Production Warning:** Use strong, randomly generated passwords and store them securely (e.g., HashiCorp Vault, AWS Secrets Manager).
+
+### ACL Configuration
+
+The demo demonstrates the principle of least privilege by granting only the permissions necessary for migration.
+
+#### Source Cluster (Read-Only)
+
+The `migrator-user` has minimal read permissions on the source:
+
+**Kafka ACLs:**
+- **Topics:** READ, DESCRIBE, DESCRIBE_CONFIGS on `demo-` prefix
+- **Consumer Group:** READ on `redpanda-migrator` group
+- **Cluster:** DESCRIBE (discover topics)
+
+**Schema Registry ACLs:**
+- **Global:** READ, DESCRIBE (list and read schemas)
+
+#### Target Cluster (Write Access)
+
+The `migrator-user` can create and write to demo topics:
+
+**Kafka ACLs:**
+- **Topics:** WRITE, CREATE, DESCRIBE, DESCRIBE_CONFIGS, ALTER on `demo-` prefix
+- **Consumer Group:** CREATE, READ on `redpanda-migrator` group
+- **Consumer Offsets:** WRITE, DESCRIBE on `__consumer_offsets`
+- **Cluster:** DESCRIBE (discover cluster)
+
+**Schema Registry ACLs:**
+- **Global:** WRITE, DESCRIBE, ALTER_CONFIGS, DESCRIBE_CONFIGS
+
+### Why These ACLs?
+
+**Source Cluster:**
+- `READ` on topics → Consume messages for migration
+- `DESCRIBE` on topics → Get topic metadata (partitions)
+- `DESCRIBE_CONFIGS` on topics → Read topic configurations (cleanup policies, retention, etc.)
+- `READ` on consumer group → Track migration progress
+- `DESCRIBE` on cluster → Discover topics
+- Schema Registry `READ` → Fetch schemas to migrate
+
+**Target Cluster:**
+- `CREATE` on topics → Auto-create topics during migration (scoped to `demo-` pattern)
+- `WRITE` on topics → Produce migrated messages
+- `DESCRIBE_CONFIGS` on topics → Read topic configurations for verification
+- `ALTER` on topics → Apply topic configurations
+- `WRITE` on `__consumer_offsets` → Migrate consumer offsets
+- `DESCRIBE` on cluster → Cluster discovery
+- Schema Registry `WRITE` → Register schemas
+- Schema Registry `ALTER_CONFIGS` → Enable import mode
+
+### SASL Authentication & ACL Enforcement
+
+This demo implements full SASL/SCRAM-SHA-256 authentication with ACL-based authorization:
+
+**Authentication:**
+- SASL/SCRAM-SHA-256 enabled on all Kafka listeners
+- Superuser configured via bootstrap file
+- All Kafka API operations require authentication
+- Schema Registry uses HTTP Basic Auth with SASL credentials
+
+**Authorization:**
+- ACL-based authorization enforced
+- Non-superuser migration with minimal permissions
+- Pattern-based ACLs (`demo-` prefix) restrict access
+- ACL verification tests confirm proper enforcement
+
+**Bootstrap Configuration:**
+
+The demo uses `.bootstrap.yaml` files to configure superusers at cluster startup:
+```yaml
+superusers:
+  - admin-user
+```
+
+This ensures the superuser account exists before SASL is enabled, preventing lockout.
+
+**Setup Process:**
+1. Clusters start with superuser bootstrapped
+2. `make setup` creates users and enables SASL
+3. ACLs are created to grant specific permissions
+4. Authorization is enabled to enforce ACL checks
+5. All subsequent operations require authentication
+
+**Verification:**
+```bash
+make verify-acls
+```
+
+This runs tests to verify:
+- migrator-user can read from source (READ permissions work)
+- migrator-user cannot write to source (restrictions enforced)
+- migrator-user can create `demo-*` topics on target (pattern ACLs work)
+- migrator-user cannot create other topics (pattern restrictions enforced)
+
+For production deployments, replace hardcoded passwords with secure credential management (HashiCorp Vault, AWS Secrets Manager, etc.) and consider using mTLS for additional security. See [Redpanda Authentication docs](https://docs.redpanda.com/current/manage/security/authentication/) for advanced configuration.
 
 ## Quick Start
 
@@ -56,13 +171,21 @@ This will start:
 - **Target Console** on port 8081
 - **Redpanda Migrator** on port 4195 (metrics)
 
-### Step 2: Setup Topics and Schemas
+### Step 2: Setup Users, ACLs, Topics, and Schemas
 
 ```bash
 make setup
 ```
 
-This creates demo topics in the source cluster:
+This command:
+1. Creates `admin-user` and `migrator-user` on both clusters
+2. Enables SASL/SCRAM-SHA-256 authentication
+3. Configures ACLs for read-only source and read-write target access
+4. Creates demo topics in the source cluster
+5. Registers Avro schemas in Schema Registry
+6. Enables IMPORT mode on target Schema Registry
+
+**Demo topics created:**
 
 | Topic | Partitions | Cleanup Policy | Description |
 |-------|------------|----------------|-------------|
@@ -73,19 +196,35 @@ This creates demo topics in the source cluster:
 
 It also registers Avro schemas in Schema Registry and **enables IMPORT mode** on the target Schema Registry.
 
-**⚠️ IMPORTANT - Schema Registry Import Mode:**
+**IMPORTANT - Schema Registry Import Mode:**
 - The target Schema Registry **must be in IMPORT mode** for schema migration to work
 - `make setup` automatically enables this mode
-- **After migration is complete**, you should disable import mode:
+- After migration is completeyou should disable import mode:
   ```bash
   curl -X PUT http://localhost:28081/mode \
     -H "Content-Type: application/json" \
+    -u 'admin-user:admin-secret-password' \
     -d '{"mode":"READWRITE"}'
   ```
 - Import mode allows the migrator to register schemas with preserved IDs and versions
 - Once migration is done, return to READWRITE mode for normal operations
 
-### Step 3: Start Continuous Data Production
+### Step 3: Verify ACL Configuration (Optional)
+
+```bash
+make verify-acls
+```
+
+This runs comprehensive tests to verify:
+- migrator-user can list and read topics on source
+- migrator-user cannot write to source (restrictions work)
+- migrator-user can create `demo-*` topics on target
+- migrator-user cannot create non-demo topics (pattern restrictions work)
+- Schema Registry permissions work correctly
+
+This step is optional but recommended to confirm the security configuration before starting migration.
+
+### Step 4: Start Continuous Data Production
 
 ```bash
 make demo-start
@@ -99,7 +238,7 @@ This starts continuous message production (~81 messages every 2 seconds):
 
 The producer runs in the background, simulating real-time production traffic.
 
-### Step 4: Verify Continuous Schema Syncing
+### Step 5: Verify Continuous Schema Syncing
 
 ```bash
 make verify-continuous-schema
@@ -110,9 +249,9 @@ This test:
 - Waits 15 seconds for automatic sync
 - Confirms the schema appears in target without manual intervention
 
-**This proves continuous schema replication is working!**
+This proves continuous schema replication is working!
 
-### Step 5: Monitor Migration Lag
+### Step 6: Monitor Migration Lag
 
 ```bash
 make monitor-lag
@@ -123,9 +262,9 @@ This displays a real-time dashboard (refreshing every 2 seconds) showing:
 - Total message counts in source
 - Continuous production status
 
-**Press Ctrl+C to exit when done watching.**
+Press Ctrl+C to exit when done watching.
 
-### Step 6: Stop Continuous Production
+### Step 7: Stop Continuous Production
 
 ```bash
 make demo-stop
@@ -140,11 +279,11 @@ make verify
 ```
 
 Run anytime to verify:
-- ✅ All topics migrated
-- ✅ Partition counts match
-- ✅ Message counts match
-- ✅ Cleanup policies preserved (`compact`, `compact,delete`)
-- ✅ Schemas migrated
+- All topics migrated
+- Partition counts match
+- Message counts match
+- Cleanup policies preserved (`compact`, `compact,delete`)
+- Schemas migrated
 
 ## Available Commands
 
@@ -156,7 +295,8 @@ Run anytime to verify:
 | `make restart` | Restart all containers |
 | `make logs` | Show logs from all containers |
 | `make status` | Show container status |
-| `make setup` | Create topics and schemas |
+| `make setup` | Create users, ACLs, topics, and schemas |
+| `make verify-acls` | Verify ACL configuration and test permissions |
 | `make demo-start` | Start continuous data production (background) |
 | `make demo-stop` | Stop continuous data production |
 | `make check` | Check migration progress (one-time snapshot) |
@@ -196,7 +336,7 @@ Prometheus metrics including:
 
 ## What Gets Migrated?
 
-### ✅ Automatically Migrated
+### Automatically Migrated
 
 - **Topic data** - All messages with keys, headers, timestamps
 - **Partition counts** - Target topics match source partition count
@@ -205,7 +345,7 @@ Prometheus metrics including:
 - **Consumer offsets** - Consumer groups can resume from correct position
 - **Schemas** - Avro schemas from Schema Registry
 
-### ⚠️ Notes
+### Notes
 
 - **Schema IDs** must be preserved using Schema Registry IMPORT mode (see below)
 - **Replication factors** can be overridden for target cluster (see configuration section)
@@ -222,7 +362,7 @@ Redpanda Migrator (Connect 4.75.1) automatically preserves topic configurations 
 - Cleanup policies (`compact`, `compact,delete`, `delete`) - always preserved
 - Other topic-level configurations (retention, compression, etc.)
 
-**Verification:**
+Verification:
 ```bash
 make verify
 ```
@@ -233,12 +373,12 @@ This will confirm that cleanup policies and partition counts match between sourc
 
 The demo uses the standalone `redpanda_migrator` component (not `redpanda_migrator_bundle`) which enables continuous schema synchronization.
 
-**How It Works:**
+How It Works:
 - Initial sync occurs at migrator startup
 - Continuous polling runs every 10 seconds (configurable via `interval` parameter)
 - New schemas registered in the source Schema Registry are automatically discovered and migrated
 
-**Configuration:**
+Configuration:
 ```yaml
 input:
   redpanda_migrator:
@@ -252,24 +392,24 @@ output:
       interval: 10s  # Continuously sync every 10 seconds
 ```
 
-**Options:**
+Options:
 - `interval: 10s` - Sync every 10 seconds (demo setting)
 - `interval: 30s` - Sync every 30 seconds
 - `interval: 5m` - Sync every 5 minutes (default)
 - `interval: 0s` - One-time sync only at startup (disables continuous polling)
 
-**Production Recommendation:** Set the interval based on your schema change frequency. For active development with frequent schema changes, use 10-30s. For stable production environments, 5m (default) is sufficient.
+Production Recommendation:Set the interval based on your schema change frequency. For active development with frequent schema changes, use 10-30s. For stable production environments, 5m (default) is sufficient.
 
 **Important Note:** The `redpanda_migrator_bundle` component does NOT support continuous schema syncing - it wraps schema migration in a one-time sequence. Use the standalone `redpanda_migrator` component for continuous schema replication.
 
 ### 3. Replication Factor Override
 
 The migrator can override the source replication factor when creating topics in the target cluster. This is useful for:
-- **Upgrading to production standards** (e.g., RF=2 → RF=3)
-- **Adapting to different cluster sizes** (e.g., RF=5 → RF=3)
-- **Dev/test environments** (e.g., RF=3 → RF=1)
+- Upgrading to production standards (e.g., RF=2 → RF=3)
+- Adapting to different cluster sizes (e.g., RF=5 → RF=3)
+- Dev/test environments (e.g., RF=3 → RF=1)
 
-**Configuration:**
+Configuration:
 ```yaml
 output:
   redpanda_migrator:
@@ -280,13 +420,13 @@ output:
     topic_replication_factor: 3  # Force RF=3 regardless of source
 ```
 
-**Options:**
+Options:
 - `topic_replication_factor: 1` - Single broker (dev/test only)
 - `topic_replication_factor: 3` - Production standard (recommended, requires 3+ brokers)
 - `topic_replication_factor: -1` - Automatic: `min(source_rf, available_brokers)`
 - Omit the setting - Preserve source replication factor
 
-**Example Use Cases:**
+Example Use Cases:
 
 ```yaml
 # Force all topics to RF=3 (production standard)
@@ -307,7 +447,7 @@ topic_replication_factor: 1
 
 ### Consumer Offset Partition Errors
 
-**Expected Behavior:** You may see errors in migrator logs about `__consumer_offsets` partitions:
+You may see errors in migrator logs about `__consumer_offsets` partitions:
 ```
 Failed to send message to redpanda_migrator_offsets:
 UNKNOWN_TOPIC_OR_PARTITION: This server does not host this topic-partition
@@ -322,6 +462,7 @@ This is normal and expected - the source and target clusters may have different 
 ```bash
 make start
 make setup
+make verify-acls
 make demo-start
 make verify-continuous-schema
 make monitor-lag
@@ -331,18 +472,25 @@ make clean
 ```
 
 This demonstrates the full continuous replication workflow including:
-- ✅ Real-time data migration with sustained load
-- ✅ Continuous schema replication (10s interval)
-- ✅ Automatic cleanup policy preservation
-- ✅ Consumer offset migration
-- ✅ Real-time lag monitoring
+- SASL authentication and ACL-based authorization
+- Non-superuser migration with minimal permissions
+- Real-time data migration with sustained load
+- Continuous schema replication (10s interval)
+- Automatic cleanup policy preservation
+- Consumer offset migration
+- Real-time lag monitoring
 
 ### Scenario 2: Verify Compacted Topics
 
 ```bash
 # After running demo
-docker compose exec rpk-client rpk topic describe demo-user-state --brokers redpanda-source:9092 -c | grep cleanup.policy
-docker compose exec rpk-client rpk topic describe demo-user-state --brokers redpanda-target:9092 -c | grep cleanup.policy
+docker compose exec rpk-client rpk topic describe demo-user-state \
+  --brokers redpanda-source:9092 -c \
+  -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256 | grep cleanup.policy
+
+docker compose exec rpk-client rpk topic describe demo-user-state \
+  --brokers redpanda-target:9092 -c \
+  -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256 | grep cleanup.policy
 
 # Both should show: cleanup.policy=compact
 ```
@@ -351,10 +499,14 @@ docker compose exec rpk-client rpk topic describe demo-user-state --brokers redp
 
 ```bash
 # Check source partitions
-docker compose exec rpk-client rpk topic describe demo-orders --brokers redpanda-source:9092
+docker compose exec rpk-client rpk topic describe demo-orders \
+  --brokers redpanda-source:9092 \
+  -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256
 
 # Check target partitions
-docker compose exec rpk-client rpk topic describe demo-orders --brokers redpanda-target:9092
+docker compose exec rpk-client rpk topic describe demo-orders \
+  --brokers redpanda-target:9092 \
+  -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256
 
 # Both should have 12 partitions
 ```
@@ -363,17 +515,17 @@ docker compose exec rpk-client rpk topic describe demo-orders --brokers redpanda
 
 ```bash
 # List schemas in source
-curl -s http://localhost:18081/subjects | jq
+curl -s -u admin-user:admin-secret-password http://localhost:18081/subjects | jq
 
 # List schemas in target
-curl -s http://localhost:28081/subjects | jq
+curl -s -u admin-user:admin-secret-password http://localhost:28081/subjects | jq
 
 # Both should have: ["demo-orders-value", "demo-user-state-value"]
 ```
 
 ### Scenario 5: Real-Time Lag Monitoring
 
-**Watch the migrator keep up with continuous data production.**
+Watch the migrator keep up with continuous data production.
 
 ```bash
 # Start continuous production
@@ -387,7 +539,7 @@ make monitor-lag
 make demo-stop
 ```
 
-**Expected Output:**
+Expected Output:
 
 ```
 📊 Migration Lag Monitor - 14:23:45
@@ -457,6 +609,52 @@ Edit `scripts/producer.sh` and adjust `BATCH_SIZE` and `NUM_BATCHES`.
 Edit `scripts/setup.sh` to create your own topics with different configurations.
 
 ## Troubleshooting
+
+### Authentication/Authorization Errors
+
+**Error: "ILLEGAL_SASL_STATE" or "SASL handshake failed"**
+
+This means SASL authentication is not properly configured:
+
+```bash
+# Check if SASL is enabled
+docker compose exec rpk-client rpk cluster config get enable_sasl \
+  -X admin.hosts=redpanda-source:9644 \
+  -X user=admin-user \
+  -X pass=admin-secret-password
+
+# Should return: true
+```
+
+If SASL is not enabled, run `make setup` to configure it.
+
+**Error: "TOPIC_AUTHORIZATION_FAILED" or "Not authorized"**
+
+This means the user doesn't have the required ACL permissions:
+
+```bash
+# List ACLs to verify permissions
+docker compose exec rpk-client rpk security acl list \
+  --brokers redpanda-source:9092 \
+  -X user=admin-user \
+  -X pass=admin-secret-password \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+# Should show ACLs for migrator-user
+```
+
+If ACLs are missing, run `make setup` to create them, or run `make verify-acls` to test permissions.
+
+**Migrator can't connect to brokers**
+
+Check that the migrator configuration includes SASL credentials:
+
+```bash
+# Verify migrator config
+cat config/migrator-config.yaml | grep -A5 sasl
+
+# Should show SCRAM-SHA-256 authentication with credentials
+```
 
 ### Topics not appearing in target
 
@@ -563,7 +761,7 @@ When the migrator encounters a new topic in the source cluster, it:
 2. Creates the topic in the target with **identical partition count**
 3. Preserves all topic configurations
 
-**Verify:**
+Verify:
 ```bash
 make verify
 # Shows partition counts match for all topics
@@ -576,7 +774,7 @@ The migrator automatically:
 2. Registers them in target Schema Registry
 3. Maintains schema compatibility
 
-**Verify:**
+Verify:
 ```bash
 curl http://localhost:18081/subjects | jq  # Source
 curl http://localhost:28081/subjects | jq  # Target
@@ -590,7 +788,7 @@ Topics with `cleanup.policy=compact` (or `compact,delete`) are:
 2. Created in target with same cleanup policy
 3. Data compaction behavior preserved
 
-**Verify:**
+Verify:
 ```bash
 docker compose exec rpk-client rpk topic describe demo-user-state -c --brokers redpanda-target:9092 | grep cleanup.policy
 # Should show: cleanup.policy=compact

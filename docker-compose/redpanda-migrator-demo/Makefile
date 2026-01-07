@@ -1,4 +1,4 @@
-.PHONY: help start stop restart logs status setup demo-start demo-stop check monitor-lag verify verify-continuous-schema clean
+.PHONY: help start stop restart logs status setup verify-acls demo-start demo-stop check monitor-lag verify verify-continuous-schema clean
 
 help:
 	@echo "Redpanda Migrator Demo - Available Commands:"
@@ -9,7 +9,8 @@ help:
 	@echo "  make logs           - Show logs from all containers"
 	@echo "  make status         - Show status of all containers"
 	@echo ""
-	@echo "  make setup          - Create topics and setup migration"
+	@echo "  make setup          - Create users, ACLs, topics, and schemas"
+	@echo "  make verify-acls    - Verify ACL configuration and permissions"
 	@echo "  make demo-start     - Start continuous data production (background)"
 	@echo "  make demo-stop      - Stop continuous data production"
 	@echo "  make check          - Check migration status (one-time)"
@@ -22,10 +23,11 @@ help:
 	@echo "Workflow (continuous replication):"
 	@echo "  1. make start"
 	@echo "  2. make setup"
-	@echo "  3. make demo-start               (start continuous production)"
-	@echo "  4. make verify-continuous-schema (test schema syncing)"
-	@echo "  5. make monitor-lag              (watch lag in real-time, Ctrl+C to exit)"
-	@echo "  6. make demo-stop                (stop when done)"
+	@echo "  3. make verify-acls              (verify ACLs are working)"
+	@echo "  4. make demo-start               (start continuous production)"
+	@echo "  5. make verify-continuous-schema (test schema syncing)"
+	@echo "  6. make monitor-lag              (watch lag in real-time, Ctrl+C to exit)"
+	@echo "  7. make demo-stop                (stop when done)"
 	@echo ""
 	@echo "Web UIs:"
 	@echo "  Source Console:   http://localhost:8080"
@@ -65,15 +67,22 @@ status:
 	@docker compose ps
 
 setup:
-	@echo "Setting up demo environment..."
-	@echo ""
-	@echo "📝 Creating topics in source cluster..."
+	@echo "Setting up demo environment with security..."
 	@docker compose exec rpk-client /scripts/setup.sh
 	@echo ""
-	@echo "✅ Setup complete!"
+	@echo "📌 Next step: Verify ACL configuration"
+	@echo "   Run: make verify-acls"
+
+verify-acls:
+	@echo "🔒 Verifying ACL Configuration"
+	@echo "=============================="
+	@docker compose exec rpk-client /scripts/verify-acls.sh
 	@echo ""
-	@echo "Topics created in source:"
-	@docker compose exec rpk-client rpk topic list --brokers redpanda-source:9092 | grep demo || true
+	@echo "📌 ACL verification complete!"
+	@echo ""
+	@echo "💡 ACLs are working correctly. The migrator-user has:"
+	@echo "   - Read-only access to source cluster"
+	@echo "   - Read-write access to target cluster (demo-* topics only)"
 	@echo ""
 	@echo "📌 Next step: Start continuous data production"
 	@echo "   Run: make demo-start"

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Setup script for Redpanda Migrator Demo with Security
-# Creates users, ACLs, topics, and schemas for secure migration
+# Post-restart setup script - creates ACLs, topics, and schemas
+# This runs AFTER clusters have been restarted to clear connection state
 
 set -e
 
@@ -17,56 +17,35 @@ MIGRATOR_USER="migrator-user"
 MIGRATOR_PASS="migrator-secret-password"
 
 echo "========================================="
-echo "Redpanda Migrator Demo - Secure Setup"
+echo "Post-Restart Setup"
 echo "========================================="
 echo ""
-echo "ℹ️  Superusers configured via .bootstrap.yaml"
-echo ""
 
-# ====================
-# STEP 1: Create Users
-# ====================
-echo "1. Creating users..."
-echo ""
 
-# Create migrator-user on source
-echo "  Creating migrator-user on source cluster..."
-rpk security user create "$MIGRATOR_USER" \
-  --password "$MIGRATOR_PASS" \
-  --api-urls "redpanda-source:9644" \
-  -X user="$ADMIN_USER" \
-  -X pass="$ADMIN_PASS"
+echo "  ⏳ Waiting for clusters to become healthy..."
+sleep 20
 
-# Create migrator-user on target
-echo "  Creating migrator-user on target cluster..."
-rpk security user create "$MIGRATOR_USER" \
-  --password "$MIGRATOR_PASS" \
-  --api-urls "redpanda-target:9644" \
-  -X user="$ADMIN_USER" \
-  -X pass="$ADMIN_PASS"
-
-echo "  ✅ Users created!"
-echo ""
-
-# ====================
-# STEP 2: Enable SASL
-# ====================
-echo "2. Enabling SASL authentication..."
-echo ""
-
-echo "  Enabling SASL on source cluster..."
-rpk cluster config set enable_sasl true \
+# Wait for source cluster to be healthy
+until rpk cluster health \
+  -X admin.hosts=redpanda-source:9644 \
   -X user="$ADMIN_USER" \
   -X pass="$ADMIN_PASS" \
-  -X admin.hosts=redpanda-source:9644
+  -X sasl.mechanism=SCRAM-SHA-256 2>/dev/null | grep -q "Healthy.*true"; do
+  echo "     Waiting for source cluster..."
+  sleep 3
+done
 
-echo "  Enabling SASL on target cluster..."
-rpk cluster config set enable_sasl true \
+# Wait for target cluster to be healthy
+until rpk cluster health \
+  -X admin.hosts=redpanda-target:9644 \
   -X user="$ADMIN_USER" \
   -X pass="$ADMIN_PASS" \
-  -X admin.hosts=redpanda-target:9644
+  -X sasl.mechanism=SCRAM-SHA-256 2>/dev/null | grep -q "Healthy.*true"; do
+  echo "     Waiting for target cluster..."
+  sleep 3
+done
 
-echo "  ✅ SASL enabled!"
+echo "  ✅ Clusters restarted and ready!"
 echo ""
 
 # ============================
@@ -78,10 +57,10 @@ echo ""
 # Kafka ACLs
 echo "  Kafka ACLs:"
 
-echo "    - Topic READ/DESCRIBE/DESCRIBE_CONFIGS on demo-* (read topic data and configs)"
+echo "    - Topic READ/DESCRIBE on demo-* (read topic data)"
 rpk security acl create \
   --allow-principal "User:$MIGRATOR_USER" \
-  --operation read,describe,describe_configs \
+  --operation read,describe \
   --topic 'demo-' \
   --resource-pattern-type prefixed \
   --brokers "$SOURCE_BROKERS" \
@@ -134,10 +113,10 @@ echo ""
 # Kafka ACLs
 echo "  Kafka ACLs:"
 
-echo "    - Topic WRITE/CREATE/DESCRIBE/DESCRIBE_CONFIGS/ALTER on demo-* (create and write topics)"
+echo "    - Topic WRITE/CREATE/DESCRIBE/ALTER on demo-* (create and write topics)"
 rpk security acl create \
   --allow-principal "User:$MIGRATOR_USER" \
-  --operation write,create,describe,describe_configs,alter \
+  --operation write,create,describe,alter \
   --topic 'demo-' \
   --resource-pattern-type prefixed \
   --brokers "$TARGET_BROKERS" \
@@ -165,10 +144,10 @@ rpk security acl create \
   -X pass="$ADMIN_PASS" \
   -X sasl.mechanism=SCRAM-SHA-256
 
-echo "    - Cluster DESCRIBE (discover cluster)"
+echo "    - Cluster DESCRIBE/CREATE (create topics and discover)"
 rpk security acl create \
   --allow-principal "User:$MIGRATOR_USER" \
-  --operation describe \
+  --operation describe,create \
   --cluster \
   --brokers "$TARGET_BROKERS" \
   -X user="$ADMIN_USER" \
@@ -412,10 +391,7 @@ echo ""
 
 # List topics
 echo "  Source cluster topics:"
-rpk topic list --brokers "$SOURCE_BROKERS" \
-  -X user="$ADMIN_USER" \
-  -X pass="$ADMIN_PASS" \
-  -X sasl.mechanism=SCRAM-SHA-256 | grep "demo-"
+rpk topic list --brokers "$BROKERS" | grep "demo-"
 
 echo ""
 echo "  Topic configurations:"
