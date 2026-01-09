@@ -62,7 +62,7 @@ jobs:
 
       - name: Test envoy proxy
         if: needs.setup.outputs.envoy-proxy == 'true'
-        run: npm run test-envoy
+        run: npm run test-envoy-ci
 
       - name: Test envoy shadowing
         if: needs.setup.outputs.envoy-shadowing == 'true'

@@ -1,0 +1,107 @@
+# Envoy Proxy Failover Demo - CI Version
+# =======================================
+#
+# Lightweight version for CI testing with 1 broker per cluster (2 total).
+# Tests the same failover logic with fewer resources.
+
+services:
+  # Primary Redpanda Cluster (1 broker)
+  primary-broker-0:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: primary-broker-0
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://primary-broker-0:9092,external://localhost:19092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr primary-broker-0:33145
+      - --advertise-rpc-addr primary-broker-0:33145
+      - --mode dev-container
+      - --smp=1
+    ports:
+      - "19092:19092"
+      - "18081:18081"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Secondary Redpanda Cluster (1 broker)
+  secondary-broker-0:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: secondary-broker-0
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://secondary-broker-0:9092,external://localhost:29092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr secondary-broker-0:33145
+      - --advertise-rpc-addr secondary-broker-0:33145
+      - --mode dev-container
+      - --smp=1
+    ports:
+      - "29092:29092"
+      - "28081:28081"
+    networks:
+      - redpanda-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Envoy Proxy for failover
+  envoy:
+    image: envoyproxy/envoy:${ENVOY_VERSION:-contrib-v1.31-latest}
+    container_name: envoy-proxy
+    ports:
+      - "9092:9092"
+      - "9901:9901"
+    volumes:
+      - ./envoy-proxy/envoy.ci.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - redpanda-net
+    depends_on:
+      primary-broker-0:
+        condition: service_healthy
+      secondary-broker-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/bash -c 'echo > /dev/tcp/localhost/9901' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Python client
+  python-client:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    container_name: python-client
+    command: ["/bin/bash", "-c", "pip install kafka-python && tail -f /dev/null"]
+    volumes:
+      - ./python-producer.py:/app/python-producer.py
+      - ./python-consumer.py:/app/python-consumer.py
+      - ./test-producer.py:/app/test-producer.py
+      - ./test-failover-producer.py:/app/test-failover-producer.py
+    working_dir: /app
+    networks:
+      - redpanda-net
+    depends_on:
+      - envoy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import kafka' 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+networks:
+  redpanda-net:
+    driver: bridge
