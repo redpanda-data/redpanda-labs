@@ -1,0 +1,406 @@
+= Migrate Data with Redpanda Migrator
+:env-docker: true
+:page-categories: Migration, Integration, Security
+:description: Migrate data, schemas, and consumer offsets from a source Kafka cluster to a target Redpanda cluster using Redpanda Migrator.
+:page-layout: lab
+:page-topic-type: lab
+:personas: streaming_developer, platform_operator, evaluator
+// Learning objectives - what readers will explore
+:learning-objective-1: Run Redpanda Migrator for continuous data replication between clusters
+:learning-objective-2: Explore SASL authentication and ACL-based authorization for secure migration
+:learning-objective-3: Observe topic and schema migration with preserved configurations
+// CI Test for Redpanda Migrator Demo
+// (test start {"id":"redpanda-migrator-demo", "description": "Redpanda Migrator demo CI test"})
+// (step {"action":"runShell", "command": "docker compose down -v 2>/dev/null || true", "workingDirectory": "../docker-compose/redpanda-migrator-demo"})
+// Set up attributes to hold the latest versions.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 25.3.4
+:latest-console-version: 3.4.0
+:latest-connect-version: 4.77.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+ifndef::env-site[]
+:imagesdir: ../../docs/modules/docker-compose/images/
+endif::[]
+
+This lab demonstrates how to use Redpanda Migrator to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster. Redpanda Migrator is built on Redpanda Connect and provides continuous data replication with automatic topic creation, schema migration, and consumer offset synchronization.
+
+== What you'll explore
+
+In this lab, you will:
+
+* [ ] {learning-objective-1}
+* [ ] {learning-objective-2}
+* [ ] {learning-objective-3}
+
+== What you will build
+
+This lab creates a complete migration environment with:
+
+* A source cluster (simulating Confluent Kafka) with SASL authentication
+* A target Redpanda cluster with matching security configuration
+* Redpanda Migrator configured for continuous replication
+* Redpanda Console instances for both clusters
+
+The migrator demonstrates:
+
+* Auto topic creation with matching partition counts
+* Schema Registry migration with continuous syncing
+* Compacted topic migration (preserving cleanup policies)
+* Consumer offset migration
+* ACL-based security with non-superuser migration patterns
+
+== Prerequisites
+
+* https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine
+* At least 4GB RAM available
+* `make` (optional, but recommended)
+
+This lab is for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+----
+
+. Change into the `docker-compose/redpanda-migrator-demo/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/redpanda-migrator-demo
+----
+
+. Set the required environment variables for the container versions.
++
+Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases^].
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_VERSION={latest-redpanda-version}
+----
++
+Set the `REDPANDA_CONSOLE_VERSION` environment variable:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONSOLE_VERSION={latest-console-version}
+----
++
+Set the `REDPANDA_CONNECT_VERSION` environment variable for the migrator:
++
+[,bash,subs="attributes+"]
+----
+export REDPANDA_CONNECT_VERSION={latest-connect-version}
+----
+
+. Start the demo environment:
++
+[,bash]
+----
+make start
+----
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../docker-compose/redpanda-migrator-demo", "timeout": 300000})
+// (step {"action":"wait", "duration": 10000})
+// (step {"action":"runShell", "command": "docker exec redpanda-source rpk cluster health", "output": "/Healthy/"})
+// (step {"action":"runShell", "command": "docker exec redpanda-target rpk cluster health", "output": "/Healthy/"})
+// (step {"action":"runShell", "command": "curl -s http://localhost:4195/ping", "output": "/pong/"})
++
+This starts the following services:
++
+|===
+| Service | Port | Description
+
+| Source cluster
+| 19092
+| Kafka API (simulating Confluent Kafka)
+
+| Target cluster
+| 29092
+| Kafka API (Redpanda)
+
+| Source Console
+| 8080
+| Web UI for source cluster
+
+| Target Console
+| 8081
+| Web UI for target cluster
+
+| Migrator
+| 4195
+| Metrics and health endpoint
+|===
+
+. Set up users, ACLs, topics, and schemas:
++
+[,bash]
+----
+make setup
+----
+// (step {"action":"runShell", "command": "docker compose exec rpk-client /scripts/setup.sh", "workingDirectory": "../docker-compose/redpanda-migrator-demo", "timeout": 180000, "output": "/Secure Setup Complete/"})
+// (step {"action":"wait", "duration": 90000})
+// (step {"action":"runShell", "command": "docker exec rpk-client rpk topic list --brokers redpanda-source:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256", "output": "/demo-orders/"})
+// (step {"action":"runShell", "command": "curl -s -u admin-user:admin-secret-password http://localhost:28081/subjects", "output": "/demo-orders-value/"})
++
+This command:
++
+* Creates `admin-user` (superuser) and `migrator-user` (limited permissions) on both clusters
+* Enables SASL/SCRAM-SHA-256 authentication
+* Configures ACLs for read-only source access and read-write target access
+* Creates demo topics with various configurations
+* Registers Avro schemas in the source Schema Registry
+* Enables IMPORT mode on the target Schema Registry
++
+The following topics are created:
++
+|===
+| Topic | Partitions | Cleanup Policy
+
+| `demo-orders`
+| 12
+| delete
+
+| `demo-user-state`
+| 6
+| compact
+
+| `demo-events`
+| 8
+| compact,delete
+
+| `demo-alerts`
+| 3
+| delete
+|===
+
+. (Optional) Verify the ACL configuration:
++
+[,bash]
+----
+make verify-acls
+----
++
+This tests that:
++
+* `migrator-user` can read from the source cluster
+* `migrator-user` cannot write to the source cluster
+* `migrator-user` can create `demo-*` topics on the target
+* `migrator-user` cannot create non-demo topics on the target
+
+. Start continuous data production:
++
+[,bash]
+----
+make demo-start
+----
+// (step {"action":"runShell", "command": "docker exec rpk-client bash -c 'echo test | rpk topic produce demo-orders --brokers redpanda-source:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256'"})
+// (step {"action":"wait", "duration": 15000})
+// (step {"action":"runShell", "command": "docker exec rpk-client rpk topic list --brokers redpanda-target:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256", "output": "/demo-orders/"})
++
+This starts a background producer that sends approximately 81 messages every 2 seconds across all demo topics.
+
+. Verify continuous schema syncing:
++
+[,bash]
+----
+make verify-continuous-schema
+----
++
+This test registers a new schema after the migrator starts and confirms it automatically appears in the target Schema Registry within 15 seconds.
+
+. Monitor migration lag:
++
+[,bash]
+----
+make monitor-lag
+----
++
+This displays a real-time dashboard showing lag per topic, message counts, and production status. Press Ctrl+C to exit.
+
+. When finished, stop continuous production:
++
+[,bash]
+----
+make demo-stop
+----
+
+== Verify data consistency
+
+Run the verification script to confirm successful migration:
+
+[,bash]
+----
+make verify
+----
+
+This checks:
+
+* All topics are migrated
+* Partition counts match
+* Message counts match
+* Cleanup policies are preserved
+* Schemas are migrated
+
+== Security configuration
+
+This lab implements production-ready security patterns using non-superuser accounts.
+
+=== Users
+
+|===
+| User | Type | Purpose
+
+| `admin-user`
+| Superuser
+| Setup and administration tasks
+
+| `migrator-user`
+| Non-superuser
+| Migration operations with minimal permissions
+|===
+
+Credentials (for demo only):
+
+* Admin: `admin-user` / `admin-secret-password`
+* Migrator: `migrator-user` / `migrator-secret-password`
+
+WARNING: For production deployments, use strong, randomly generated passwords and store them securely using a secrets manager such as HashiCorp Vault or AWS Secrets Manager.
+
+=== ACL configuration
+
+The migrator uses the principle of least privilege:
+
+*Source cluster (read-only):*
+
+* Topics: READ, DESCRIBE, DESCRIBE_CONFIGS on `demo-*` prefix
+* Consumer group: READ on `redpanda-migrator` group
+* Cluster: DESCRIBE
+* Schema Registry: READ, DESCRIBE
+
+*Target cluster (read-write):*
+
+* Topics: WRITE, CREATE, DESCRIBE, DESCRIBE_CONFIGS, ALTER on `demo-*` prefix
+* Consumer group: CREATE, READ on `redpanda-migrator` group
+* Consumer offsets: WRITE, DESCRIBE on `__consumer_offsets`
+* Cluster: DESCRIBE
+* Schema Registry: WRITE, DESCRIBE, ALTER_CONFIGS, DESCRIBE_CONFIGS
+
+== Configuration
+
+The migrator configuration is in `config/migrator-config.yaml`.
+
+Key settings:
+
+[,yaml]
+----
+input:
+  redpanda_migrator:
+    seed_brokers:
+      - redpanda-source:9092
+    topics:
+      - 'demo-.*'
+    regexp_topics: true
+    start_from_oldest: true
+    schema_registry:
+      url: http://redpanda-source:8081
+      interval: 10s  # Continuous schema sync
+
+output:
+  redpanda_migrator:
+    seed_brokers:
+      - redpanda-target:9092
+    max_in_flight: 1
+    schema_registry:
+      url: http://redpanda-target:8081
+----
+
+=== Schema Registry import mode
+
+The target Schema Registry must be in IMPORT mode for schema migration to work. The `make setup` command enables this automatically.
+
+After migration completes, disable import mode to return to normal operations:
+
+[,bash]
+----
+curl -X PUT http://localhost:28081/mode \
+  -H "Content-Type: application/json" \
+  -u 'admin-user:admin-secret-password' \
+  -d '{"mode":"READWRITE"}'
+----
+
+== Clean up
+
+To stop and remove all containers and data:
+
+[,bash]
+----
+make clean
+----
+
+== Troubleshoot
+
+=== Authentication errors
+
+If you see "ILLEGAL_SASL_STATE" errors, run `make setup` to configure SASL authentication.
+
+=== Topics not appearing in target
+
+Check that the migrator is running:
+
+[,bash]
+----
+docker compose ps migrator
+curl http://localhost:4195/ping
+----
+
+Check the migrator logs:
+
+[,bash]
+----
+docker compose logs migrator
+----
+
+=== Schemas not migrating
+
+If you see "Subject is not in import mode" errors, enable import mode:
+
+[,bash]
+----
+curl -X PUT http://localhost:28081/mode \
+  -H "Content-Type: application/json" \
+  -u 'admin-user:admin-secret-password' \
+  -d '{"mode":"IMPORT"}'
+----
+
+Then restart the migrator:
+
+[,bash]
+----
+docker compose restart migrator
+----
+
+== Next steps
+
+After running this demo:
+
+ifndef::env-site[]
+* Read the https://docs.redpanda.com/redpanda-connect/cookbooks/redpanda_migrator/[Redpanda Migrator documentation^]
+* Learn about https://docs.redpanda.com/current/manage/schema-registry/[Schema Registry^] configuration
+* Explore https://docs.redpanda.com/current/manage/security/authentication/[Redpanda authentication^] options
+endif::[]
+ifdef::env-site[]
+* Read the xref:redpanda-connect:cookbooks:redpanda_migrator.adoc[Redpanda Migrator documentation]
+* Learn about xref:ROOT:manage:schema-reg/schema-reg-overview.adoc[Schema Registry] configuration
+* Explore xref:ROOT:manage:security/authentication.adoc[Redpanda authentication] options
+endif::[]
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../docker-compose/redpanda-migrator-demo"})
+// (test end)

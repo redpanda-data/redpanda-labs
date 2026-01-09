@@ -11,7 +11,7 @@ services:
   # SOURCE CLUSTER (Simulating Confluent Kafka)
   # ============================================
   redpanda-source:
-    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: redpanda-source
     hostname: redpanda-source
     networks:
@@ -54,7 +54,7 @@ services:
   # TARGET CLUSTER (Redpanda)
   # ============================================
   redpanda-target:
-    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: redpanda-target
     hostname: redpanda-target
     networks:
@@ -97,7 +97,7 @@ services:
   # REDPANDA CONSOLE - SOURCE
   # ============================================
   console-source:
-    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.4.0}
     container_name: redpanda-console-source
     hostname: console-source
     networks:
@@ -121,7 +121,7 @@ services:
   # REDPANDA CONSOLE - TARGET
   # ============================================
   console-target:
-    image: docker.redpanda.com/redpandadata/console:v3.3.2
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.4.0}
     container_name: redpanda-console-target
     hostname: console-target
     networks:
@@ -145,7 +145,7 @@ services:
   # REDPANDA MIGRATOR
   # ============================================
   migrator:
-    image: docker.redpanda.com/redpandadata/connect:4.75.1
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-4.77.0}
     container_name: redpanda-migrator
     hostname: migrator
     networks:
@@ -172,7 +172,7 @@ services:
   # RPK CLIENT (for running commands)
   # ============================================
   rpk-client:
-    image: docker.redpanda.com/redpandadata/redpanda:v25.3.1
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: rpk-client
     hostname: rpk-client
     networks:

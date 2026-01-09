@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
+      redpanda-migrator: ${{ steps.filter.outputs.redpanda-migrator }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,6 +22,8 @@ jobs:
           filters: |
             data-transforms:
               - 'data-transforms/**'
+            redpanda-migrator:
+              - 'docker-compose/redpanda-migrator-demo/**'
   run-tests:
     needs: setup
     strategy:
@@ -41,11 +44,21 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Increase AIO limit for Redpanda
+        if: needs.setup.outputs.redpanda-migrator == 'true'
+        run: |
+          # Redpanda uses Linux AIO. Increase limit to support multiple brokers.
+          sudo sysctl -w fs.aio-max-nr=1048576
+
       - name: Test data transforms
         if: needs.setup.outputs.data-transforms == 'true'
         run: |
           # Run the tests for the data transforms
           npm run test-transforms
+
+      - name: Test redpanda migrator
+        if: needs.setup.outputs.redpanda-migrator == 'true'
+        run: npm run test-migrator
 
       - name: Upload debug artifacts
         if: failure()

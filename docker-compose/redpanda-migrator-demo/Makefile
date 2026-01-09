@@ -3,6 +3,11 @@
 help:
 	@echo "Redpanda Migrator Demo - Available Commands:"
 	@echo ""
+	@echo "Optional environment variables (defaults are provided):"
+	@echo "  export REDPANDA_VERSION=v25.3.4"
+	@echo "  export REDPANDA_CONSOLE_VERSION=v3.4.0"
+	@echo "  export REDPANDA_CONNECT_VERSION=4.77.0"
+	@echo ""
 	@echo "  make start          - Start all containers"
 	@echo "  make stop           - Stop all containers"
 	@echo "  make restart        - Restart all containers"
