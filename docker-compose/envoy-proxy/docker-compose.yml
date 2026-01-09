@@ -1,7 +1,33 @@
+# Envoy Proxy Failover Demo
+# ==========================
+#
+# This compose file creates two independent 3-node Redpanda clusters with Envoy proxy
+# for transparent failover. Clients connect to Envoy (port 9092) instead of directly
+# to brokers.
+#
+# ENVIRONMENT VARIABLES:
+#   REDPANDA_VERSION - Redpanda image tag (default: v25.3.4)
+#   ENVOY_VERSION    - Envoy image tag (default: contrib-v1.31-latest)
+#   PYTHON_VERSION   - Python image tag (default: 3.11-slim)
+#
+# USEFUL COMMANDS:
+#   Start:           docker compose up -d --wait
+#   Check health:    curl -s localhost:9901/clusters | grep health_flags
+#   View Envoy stats: curl -s localhost:9901/stats
+#   Stop:            docker compose down -v
+#
+# PORT MAPPING:
+#   9092-9094  - Envoy Kafka proxy (clients connect here)
+#   9901       - Envoy admin interface
+#   19092-19094 - Primary cluster Kafka (direct access)
+#   29092-29094 - Secondary cluster Kafka (direct access)
+#   18081-18086 - Primary cluster Schema Registry/HTTP Proxy
+#   28081-28086 - Secondary cluster Schema Registry/HTTP Proxy
+
 services:
   # Primary Redpanda Cluster (3 brokers)
   primary-broker-0:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: primary-broker-0
     command:
       - redpanda
@@ -25,7 +51,7 @@ services:
       start_period: 30s
 
   primary-broker-1:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: primary-broker-1
     command:
       - redpanda
@@ -49,7 +75,7 @@ services:
       start_period: 30s
 
   primary-broker-2:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: primary-broker-2
     command:
       - redpanda
@@ -74,7 +100,7 @@ services:
 
   # Secondary Redpanda Cluster (3 brokers)
   secondary-broker-0:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: secondary-broker-0
     command:
       - redpanda
@@ -98,7 +124,7 @@ services:
       start_period: 30s
 
   secondary-broker-1:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: secondary-broker-1
     command:
       - redpanda
@@ -122,7 +148,7 @@ services:
       start_period: 30s
 
   secondary-broker-2:
-    image: redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
     container_name: secondary-broker-2
     command:
       - redpanda
@@ -147,7 +173,7 @@ services:
 
   # Envoy Proxy for failover
   envoy:
-    image: envoyproxy/envoy:contrib-v1.31-latest
+    image: envoyproxy/envoy:${ENVOY_VERSION:-contrib-v1.31-latest}
     container_name: envoy-proxy
     ports:
       - "9092:9092"
@@ -178,29 +204,16 @@ services:
       retries: 3
       start_period: 10s
 
-  # RPK client
-  rpk-client:
-    image: redpandadata/redpanda:latest
-    container_name: rpk-client
-    entrypoint: ["/bin/bash"]
-    command: ["-c", "tail -f /dev/null"]
-    volumes:
-      - ./test-producer.sh:/test-producer.sh
-      - ./test-consumer.sh:/test-consumer.sh
-    networks:
-      - redpanda-net
-    depends_on:
-      - envoy
-    restart: unless-stopped
-
   # Python client
   python-client:
-    image: python:3.11-slim
+    image: python:${PYTHON_VERSION:-3.11-slim}
     container_name: python-client
     command: ["/bin/bash", "-c", "pip install kafka-python && tail -f /dev/null"]
     volumes:
       - ./python-producer.py:/app/python-producer.py
       - ./python-consumer.py:/app/python-consumer.py
+      - ./test-producer.py:/app/test-producer.py
+      - ./test-failover-producer.py:/app/test-failover-producer.py
     working_dir: /app
     networks:
       - redpanda-net

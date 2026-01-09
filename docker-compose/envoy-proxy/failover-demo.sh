@@ -169,8 +169,19 @@ EOF
 
     chmod +x /tmp/envoy_routing_display.sh
 
-    # Use watch to continuously display the routing info
-    watch -n 2 -t /tmp/envoy_routing_display.sh
+    # Use watch to continuously display the routing info (with fallback for systems without watch)
+    if command -v watch &> /dev/null; then
+        watch -n 2 -t /tmp/envoy_routing_display.sh
+    else
+        echo "Note: 'watch' command not found. Using fallback loop."
+        echo "Install watch for a better experience: brew install watch (macOS) or apt install procps (Linux)"
+        echo ""
+        while true; do
+            clear
+            /tmp/envoy_routing_display.sh
+            sleep 2
+        done
+    fi
 
     # Cleanup
     rm -f /tmp/envoy_routing_display.sh
@@ -244,11 +255,11 @@ case "$1" in
         echo ""
         echo "🎯 Demo ready! Run the following in separate terminals:"
         echo ""
-        echo "   # Start producer:"
-        echo "   docker exec -it rpk-client bash /test-producer.sh"
+        echo "   # Start producer (Python - recommended):"
+        echo "   docker exec -it python-client python3 python-producer.py"
         echo ""
-        echo "   # Start consumer:"
-        echo "   docker exec -it rpk-client bash /test-consumer.sh"
+        echo "   # Start consumer (Python - recommended):"
+        echo "   docker exec -it python-client python3 python-consumer.py"
         echo ""
         echo "Then run: ./failover-demo.sh fail-primary"
         ;;

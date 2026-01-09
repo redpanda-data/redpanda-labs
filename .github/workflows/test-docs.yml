@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
+      envoy-proxy: ${{ steps.filter.outputs.envoy-proxy }}
+      envoy-shadowing: ${{ steps.filter.outputs.envoy-shadowing }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,6 +23,10 @@ jobs:
           filters: |
             data-transforms:
               - 'data-transforms/**'
+            envoy-proxy:
+              - 'docker-compose/envoy-proxy/**'
+            envoy-shadowing:
+              - 'docker-compose/envoy-shadowing/**'
   run-tests:
     needs: setup
     strategy:
@@ -46,6 +52,14 @@ jobs:
         run: |
           # Run the tests for the data transforms
           npm run test-transforms
+
+      - name: Test envoy proxy
+        if: needs.setup.outputs.envoy-proxy == 'true'
+        run: npm run test-envoy
+
+      - name: Test envoy shadowing
+        if: needs.setup.outputs.envoy-shadowing == 'true'
+        run: npm run test-envoy-shadowing
 
       - name: Upload debug artifacts
         if: failure()

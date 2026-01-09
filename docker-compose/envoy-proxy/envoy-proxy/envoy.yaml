@@ -1,3 +1,33 @@
+# Envoy Proxy Configuration for Redpanda Cluster Failover
+# =========================================================
+#
+# HOW FAILOVER WORKS:
+# - Each broker_X_cluster has two endpoint groups with different priorities
+# - Priority 0 = primary cluster (preferred), Priority 1 = secondary cluster (fallback)
+# - Envoy routes ALL traffic to priority 0 endpoints when they're healthy
+# - When priority 0 becomes unhealthy, Envoy automatically fails over to priority 1
+# - When priority 0 recovers, traffic automatically fails back
+#
+# HEALTH CHECKING:
+# - Uses HTTP health checks against Schema Registry (/schemas/types on port 8081)
+# - Schema Registry returns HTTP 500 when Redpanda is in recovery mode
+# - unhealthy_threshold: 3 consecutive failures = mark unhealthy
+# - healthy_threshold: 2 consecutive successes = mark healthy again
+#
+# KAFKA BROKER FILTER:
+# - Rewrites broker addresses in Kafka metadata responses
+# - Clients always see "envoy:909X" instead of actual broker addresses
+# - This enables transparent failover without client reconfiguration
+#
+# PRODUCTION CONSIDERATIONS:
+# - Adjust health check intervals based on your failover time requirements
+# - Consider TLS termination at Envoy for secure client connections
+# - Monitor Envoy stats at the admin interface (port 9901)
+# - Use /clusters endpoint to check real-time health status
+#
+# For more details, see:
+# https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/kafka_broker_filter
+
 admin:
   address:
     socket_address:
@@ -115,14 +145,17 @@ static_resources:
     connect_timeout: 5s
     type: STRICT_DNS
     lb_policy: ROUND_ROBIN
+    # Health checks run against Schema Registry to detect broker availability.
+    # Schema Registry returns HTTP 500 when Redpanda enters recovery mode,
+    # allowing Envoy to detect degraded clusters and trigger failover.
     health_checks:
     - timeout: 2s
-      interval: 3s
-      interval_jitter: 0.5s
-      unhealthy_threshold: 3
-      healthy_threshold: 2
+      interval: 3s           # How often to check health
+      interval_jitter: 0.5s  # Randomize to avoid thundering herd
+      unhealthy_threshold: 3 # Failures before marking unhealthy
+      healthy_threshold: 2   # Successes before marking healthy
       http_health_check:
-        path: /schemas/types
+        path: /schemas/types # Schema Registry endpoint
       no_traffic_interval: 3s
       unhealthy_interval: 3s
       unhealthy_edge_interval: 3s
@@ -130,6 +163,7 @@ static_resources:
     load_assignment:
       cluster_name: broker_0_cluster
       endpoints:
+      # Priority 0: Primary cluster - receives all traffic when healthy
       - priority: 0
         lb_endpoints:
         - endpoint:
@@ -138,7 +172,8 @@ static_resources:
                 address: primary-broker-0
                 port_value: 9092
             health_check_config:
-              port_value: 8081
+              port_value: 8081  # Schema Registry port for health checks
+      # Priority 1: Secondary cluster - only receives traffic when priority 0 is unhealthy
       - priority: 1
         lb_endpoints:
         - endpoint:
@@ -149,8 +184,11 @@ static_resources:
             health_check_config:
               port_value: 8081
     common_lb_config:
+      # Set to 0 to prevent routing to unhealthy hosts even under load
       healthy_panic_threshold:
         value: 0.0
+    # Outlier detection provides additional protection by ejecting hosts
+    # that return errors, even if health checks pass
     outlier_detection:
       consecutive_5xx: 3
       consecutive_gateway_failure: 3
