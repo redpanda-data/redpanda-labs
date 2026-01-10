@@ -1,6 +1,22 @@
+# ==============================================================================
 # Redpanda Migrator Configuration
-# Demonstrates data, schema, offset, and compacted topic migration
-# Uses standalone redpanda_migrator for continuous schema syncing
+# ==============================================================================
+#
+# This configuration demonstrates:
+#  - Continuous data replication with offset preservation
+#  - Auto topic creation with matching partition counts and configurations
+#  - Schema Registry migration with continuous syncing (10s interval)
+#  - Compacted topic migration (preserving cleanup policies)
+#  - Consumer offset migration
+#  - ACL-based security with non-superuser migration patterns
+#
+# IMPORTANT: The target Schema Registry must be in IMPORT mode for schema
+# migration to work. The setup script enables this automatically with:
+#   curl -X PUT http://target:8081/mode -d '{"mode":"IMPORT"}'
+#
+# After migration completes, disable import mode to return to normal operations:
+#   curl -X PUT http://target:8081/mode -d '{"mode":"READWRITE"}'
+# ==============================================================================
 
 input:
   redpanda_migrator:

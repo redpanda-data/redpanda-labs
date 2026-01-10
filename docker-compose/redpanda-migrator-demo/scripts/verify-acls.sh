@@ -1,6 +1,28 @@
 #!/bin/bash
+# ==============================================================================
 # ACL Verification Script
-# Tests that migrator-user has correct permissions and restrictions
+# ==============================================================================
+#
+# Tests that migrator-user has correct permissions and restrictions.
+#
+# SOURCE CLUSTER TESTS (Read-Only):
+#   ✓ Can list topics (DESCRIBE cluster)
+#   ✓ Can describe demo-* topics
+#   ✓ Can consume from demo-* topics
+#   ✓ Can read schemas from Schema Registry
+#   ✓ CANNOT create topics
+#   ✓ CANNOT produce to topics
+#
+# TARGET CLUSTER TESTS (Read-Write):
+#   ✓ Can list topics
+#   ✓ Can create demo-* topics
+#   ✓ CANNOT create non-demo topics
+#   ✓ Can register schemas in Schema Registry
+#
+# This verifies the principle of least privilege:
+#   - Source has read-only access for data extraction
+#   - Target has write access only for demo-* topics
+# ==============================================================================
 
 set -e
 

@@ -1,3 +1,42 @@
+# ==============================================================================
+# Redpanda Migrator Demo - Docker Compose Configuration
+# ==============================================================================
+#
+# SERVICES AND PORTS:
+#   Source Cluster (redpanda-source)
+#     19092 - Kafka API (simulating Confluent Kafka)
+#     18081 - Schema Registry
+#     18082 - HTTP Proxy
+#     19644 - Admin API
+#
+#   Target Cluster (redpanda-target)
+#     29092 - Kafka API (Redpanda)
+#     28081 - Schema Registry
+#     28082 - HTTP Proxy
+#     29644 - Admin API
+#
+#   Source Console (console-source)
+#     8080  - Web UI for source cluster
+#
+#   Target Console (console-target)
+#     8081  - Web UI for target cluster (note: port 8081, internal port 8080)
+#
+#   Migrator (redpanda-connect)
+#     4195  - Metrics and health endpoint
+#
+# SECURITY:
+#   - Both clusters use SASL/SCRAM-SHA-256 authentication
+#   - Bootstrap superuser: admin-user (configured via RP_BOOTSTRAP_USER)
+#   - Migration user: migrator-user (created by setup script)
+#   - ACLs enforce least-privilege access (see setup.sh for details)
+#
+# USAGE:
+#   1. Start environment: make start
+#   2. Configure security: make setup
+#   3. Start demo: make demo-start
+#   4. Verify migration: make verify
+# ==============================================================================
+
 networks:
   redpanda-network:
     driver: bridge

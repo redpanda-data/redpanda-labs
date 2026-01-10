@@ -114,31 +114,7 @@ make start
 // (step {"action":"runShell", "command": "docker exec redpanda-target rpk cluster health", "output": "/Healthy/"})
 // (step {"action":"runShell", "command": "curl -s http://localhost:4195/ping", "output": "/pong/"})
 +
-This starts the following services:
-+
-|===
-| Service | Port | Description
-
-| Source cluster
-| 19092
-| Kafka API (simulating Confluent Kafka)
-
-| Target cluster
-| 29092
-| Kafka API (Redpanda)
-
-| Source Console
-| 8080
-| Web UI for source cluster
-
-| Target Console
-| 8081
-| Web UI for target cluster
-
-| Migrator
-| 4195
-| Metrics and health endpoint
-|===
+This starts source and target Redpanda clusters, Redpanda Console instances, and the migrator service. See `docker-compose.yml` for port mappings and service details.
 
 . Set up users, ACLs, topics, and schemas:
 +
@@ -151,36 +127,7 @@ make setup
 // (step {"action":"runShell", "command": "docker exec rpk-client rpk topic list --brokers redpanda-source:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256", "output": "/demo-orders/"})
 // (step {"action":"runShell", "command": "curl -s -u admin-user:admin-secret-password http://localhost:28081/subjects", "output": "/demo-orders-value/"})
 +
-This command:
-+
-* Creates `admin-user` (superuser) and `migrator-user` (limited permissions) on both clusters
-* Enables SASL/SCRAM-SHA-256 authentication
-* Configures ACLs for read-only source access and read-write target access
-* Creates demo topics with various configurations
-* Registers Avro schemas in the source Schema Registry
-* Enables IMPORT mode on the target Schema Registry
-+
-The following topics are created:
-+
-|===
-| Topic | Partitions | Cleanup Policy
-
-| `demo-orders`
-| 12
-| delete
-
-| `demo-user-state`
-| 6
-| compact
-
-| `demo-events`
-| 8
-| compact,delete
-
-| `demo-alerts`
-| 3
-| delete
-|===
+This creates users with SASL authentication, configures ACLs for secure migration, creates demo topics with various cleanup policies, and registers schemas. See `scripts/setup.sh` for detailed ACL permissions and topic configurations.
 
 . (Optional) Verify the ACL configuration:
 +
@@ -189,12 +136,7 @@ The following topics are created:
 make verify-acls
 ----
 +
-This tests that:
-+
-* `migrator-user` can read from the source cluster
-* `migrator-user` cannot write to the source cluster
-* `migrator-user` can create `demo-*` topics on the target
-* `migrator-user` cannot create non-demo topics on the target
+This tests that `migrator-user` has correct read-only source access and read-write target access with proper restrictions. See `scripts/verify-acls.sh` for test details.
 
 . Start continuous data production:
 +
@@ -250,92 +192,13 @@ This checks:
 * Cleanup policies are preserved
 * Schemas are migrated
 
-== Security configuration
-
-This lab implements production-ready security patterns using non-superuser accounts.
-
-=== Users
-
-|===
-| User | Type | Purpose
-
-| `admin-user`
-| Superuser
-| Setup and administration tasks
-
-| `migrator-user`
-| Non-superuser
-| Migration operations with minimal permissions
-|===
-
-Credentials (for demo only):
-
-* Admin: `admin-user` / `admin-secret-password`
-* Migrator: `migrator-user` / `migrator-secret-password`
-
-WARNING: For production deployments, use strong, randomly generated passwords and store them securely using a secrets manager such as HashiCorp Vault or AWS Secrets Manager.
-
-=== ACL configuration
-
-The migrator uses the principle of least privilege:
-
-*Source cluster (read-only):*
-
-* Topics: READ, DESCRIBE, DESCRIBE_CONFIGS on `demo-*` prefix
-* Consumer group: READ on `redpanda-migrator` group
-* Cluster: DESCRIBE
-* Schema Registry: READ, DESCRIBE
-
-*Target cluster (read-write):*
-
-* Topics: WRITE, CREATE, DESCRIBE, DESCRIBE_CONFIGS, ALTER on `demo-*` prefix
-* Consumer group: CREATE, READ on `redpanda-migrator` group
-* Consumer offsets: WRITE, DESCRIBE on `__consumer_offsets`
-* Cluster: DESCRIBE
-* Schema Registry: WRITE, DESCRIBE, ALTER_CONFIGS, DESCRIBE_CONFIGS
-
 == Configuration
 
-The migrator configuration is in `config/migrator-config.yaml`.
+The migrator uses the principle of least privilege with non-superuser accounts. For detailed security configuration including users, ACLs, and permissions, see:
 
-Key settings:
-
-[,yaml]
-----
-input:
-  redpanda_migrator:
-    seed_brokers:
-      - redpanda-source:9092
-    topics:
-      - 'demo-.*'
-    regexp_topics: true
-    start_from_oldest: true
-    schema_registry:
-      url: http://redpanda-source:8081
-      interval: 10s  # Continuous schema sync
-
-output:
-  redpanda_migrator:
-    seed_brokers:
-      - redpanda-target:9092
-    max_in_flight: 1
-    schema_registry:
-      url: http://redpanda-target:8081
-----
-
-=== Schema Registry import mode
-
-The target Schema Registry must be in IMPORT mode for schema migration to work. The `make setup` command enables this automatically.
-
-After migration completes, disable import mode to return to normal operations:
-
-[,bash]
-----
-curl -X PUT http://localhost:28081/mode \
-  -H "Content-Type: application/json" \
-  -u 'admin-user:admin-secret-password' \
-  -d '{"mode":"READWRITE"}'
-----
+* `scripts/setup.sh` - User creation and ACL configuration
+* `config/migrator-config.yaml` - Migrator settings and Schema Registry sync
+* `docker-compose.yml` - Service ports and environment variables
 
 == Clean up
 

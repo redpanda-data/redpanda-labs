@@ -1,6 +1,43 @@
 #!/bin/bash
+# ==============================================================================
 # Setup script for Redpanda Migrator Demo with Security
-# Creates users, ACLs, topics, and schemas for secure migration
+# ==============================================================================
+#
+# This script creates users, ACLs, topics, and schemas for secure migration.
+#
+# USERS:
+#   admin-user      - Superuser for setup and administration tasks
+#   migrator-user   - Non-superuser for migration with minimal permissions
+#
+# Credentials (for demo only - use strong passwords in production):
+#   Admin: admin-user / admin-secret-password
+#   Migrator: migrator-user / migrator-secret-password
+#
+# WARNING: For production deployments, use strong, randomly generated passwords
+# and store them securely using a secrets manager such as HashiCorp Vault or
+# AWS Secrets Manager.
+#
+# ACL CONFIGURATION (Principle of Least Privilege):
+#
+#   Source Cluster (Read-Only):
+#     Topics:           READ, DESCRIBE, DESCRIBE_CONFIGS on 'demo-*' prefix
+#     Consumer group:   READ on 'redpanda-migrator' group
+#     Cluster:          DESCRIBE
+#     Schema Registry:  READ, DESCRIBE
+#
+#   Target Cluster (Read-Write):
+#     Topics:           WRITE, CREATE, DESCRIBE, DESCRIBE_CONFIGS, ALTER on 'demo-*' prefix
+#     Consumer group:   CREATE, READ on 'redpanda-migrator' group
+#     Consumer offsets: WRITE, DESCRIBE on '__consumer_offsets'
+#     Cluster:          DESCRIBE
+#     Schema Registry:  WRITE, DESCRIBE, ALTER_CONFIGS, DESCRIBE_CONFIGS
+#
+# TOPICS CREATED:
+#   demo-orders      - 12 partitions, delete policy
+#   demo-user-state  -  6 partitions, compact policy
+#   demo-events      -  8 partitions, compact,delete policy
+#   demo-alerts      -  3 partitions, delete policy
+# ==============================================================================
 
 set -e
 
