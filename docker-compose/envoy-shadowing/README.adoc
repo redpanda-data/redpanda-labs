@@ -32,7 +32,7 @@ In this lab, you will:
 
 == Prerequisites
 
-You need https://docs.docker.com/compose/install/[Docker and Docker Compose^]
+You need https://docs.docker.com/compose/install/[Docker and Docker Compose^].
 
 == Run the lab
 
