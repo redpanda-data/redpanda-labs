@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
-      envoy-proxy: ${{ steps.filter.outputs.envoy-proxy }}
       envoy-shadowing: ${{ steps.filter.outputs.envoy-shadowing }}
     steps:
       - name: Checkout code
@@ -23,8 +22,6 @@ jobs:
           filters: |
             data-transforms:
               - 'data-transforms/**'
-            envoy-proxy:
-              - 'docker-compose/envoy-proxy/**'
             envoy-shadowing:
               - 'docker-compose/envoy-shadowing/**'
   run-tests:
@@ -48,7 +45,7 @@ jobs:
         run: npm install
 
       - name: Increase AIO limit for Redpanda
-        if: needs.setup.outputs.envoy-proxy == 'true' || needs.setup.outputs.envoy-shadowing == 'true'
+        if: needs.setup.outputs.envoy-shadowing == 'true'
         run: |
           # Redpanda uses Linux AIO. With 6 brokers each needing ~10000 events,
           # we exceed the default limit of 65536. Increase it.
@@ -59,10 +56,6 @@ jobs:
         run: |
           # Run the tests for the data transforms
           npm run test-transforms
-
-      - name: Test envoy proxy
-        if: needs.setup.outputs.envoy-proxy == 'true'
-        run: npm run test-envoy-ci
 
       - name: Test envoy shadowing
         if: needs.setup.outputs.envoy-shadowing == 'true'

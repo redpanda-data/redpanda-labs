@@ -81,6 +81,9 @@ services:
       start_period: 30s
 
   # Envoy Proxy for transparent client routing
+  # NOTE: We use the 'contrib' image variant because it includes the Kafka broker filter
+  # (envoy.filters.network.kafka_broker) which is not included in the standard Envoy image.
+  # This filter enables Envoy to understand Kafka protocol for intelligent routing.
   envoy:
     image: envoyproxy/envoy:${ENVOY_VERSION:-contrib-v1.31-latest}
     container_name: envoy-proxy

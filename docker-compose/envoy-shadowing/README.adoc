@@ -13,7 +13,7 @@
 // (step {"action":"runShell", "command": "docker compose down -v 2>/dev/null || true", "workingDirectory": "../docker-compose/envoy-shadowing"})
 
 ifdef::env-site[]
-This lab demonstrates a disaster recovery setup that combines xref:ROOT:manage/disaster-recovery.adoc[Redpanda Shadowing] with https://www.envoyproxy.io/[Envoy proxy^].
+This lab demonstrates a disaster recovery setup that combines xref:ROOT:manage:disaster-recovery/shadowing/index.adoc[Redpanda Shadowing] with https://www.envoyproxy.io/[Envoy proxy^].
 endif::[]
 ifndef::env-site[]
 This lab demonstrates a disaster recovery setup that combines https://docs.redpanda.com/current/manage/disaster-recovery/[Redpanda Shadowing^] with https://www.envoyproxy.io/[Envoy proxy^].
@@ -21,6 +21,8 @@ endif::[]
 
 * **Shadowing** provides offset-preserving, byte-for-byte data replication between clusters
 * **Envoy** provides transparent client routing without requiring client reconfiguration
+
+https://www.envoyproxy.io/[Envoy^] is a high-performance proxy that can route traffic intelligently based on backend health. In this setup, Envoy routes Kafka clients to the active cluster and automatically fails over to the shadow cluster when the source becomes unavailable. This eliminates the need to reconfigure clients during disaster recovery.
 
 In this lab, you will:
 
@@ -194,7 +196,7 @@ The following table summarizes the roles of each component in this disaster reco
 == Suggested reading
 
 ifdef::env-site[]
-* xref:ROOT:manage/disaster-recovery.adoc[Shadowing for Disaster Recovery]
+* xref:ROOT:manage:disaster-recovery/shadowing/index.adoc[Shadowing for Disaster Recovery]
 endif::[]
 ifndef::env-site[]
 * https://docs.redpanda.com/current/manage/disaster-recovery/[Shadowing for Disaster Recovery^]

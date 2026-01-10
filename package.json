@@ -9,8 +9,6 @@
     "start": "cross-env-shell LIVERELOAD=true npx gulp",
     "test-transforms": "cd setup-tests && npx doc-detective runTests --input ../data-transforms/go -l debug",
     "test-oidc": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/oidc -l debug",
-    "test-envoy": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/envoy-proxy -l debug",
-    "test-envoy-ci": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/envoy-proxy/README.ci.adoc -l debug",
     "test-envoy-shadowing": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/envoy-shadowing -l debug"
   },
   "dependencies": {
