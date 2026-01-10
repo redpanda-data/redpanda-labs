@@ -4,6 +4,7 @@
 :description: Combine Redpanda Shadowing for data replication with Envoy proxy for transparent client routing during disaster recovery.
 :page-layout: lab
 :page-topic-type: lab
+:personas: platform_operator, streaming_developer
 // Learning objectives
 :learning-objective-1: Set up Shadowing for offset-preserving data replication
 :learning-objective-2: Configure Envoy for automatic client routing during failover
