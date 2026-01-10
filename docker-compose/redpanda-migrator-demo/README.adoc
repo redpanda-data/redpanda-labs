@@ -45,28 +45,11 @@ In this lab, you will:
 * [ ] {learning-objective-2}
 * [ ] {learning-objective-3}
 
-== What you will build
-
-This lab creates a complete migration environment with:
-
-* A source cluster (simulating Confluent Kafka) with SASL authentication
-* A target Redpanda cluster with matching security configuration
-* Redpanda Migrator configured for continuous replication
-* Redpanda Console instances for both clusters
-
-The migrator demonstrates:
-
-* Auto topic creation with matching partition counts
-* Schema Registry migration with continuous syncing
-* Compacted topic migration (preserving cleanup policies)
-* Consumer offset migration
-* ACL-based security with non-superuser migration patterns
-
 == Prerequisites
 
-* https://docs.docker.com/compose/install/[Docker and Docker Compose^] installed on your host machine
+* https://docs.docker.com/compose/install/[Docker and Docker Compose^]
 * At least 4GB RAM available
-* `make` (optional, but recommended)
+* https://www.gnu.org/software/make/[GNU Make^] (usually pre-installed on Linux/macOS)
 
 This lab is for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
 
@@ -121,7 +104,7 @@ make start
 // (step {"action":"runShell", "command": "docker exec redpanda-target rpk cluster health", "output": "/Healthy/"})
 // (step {"action":"runShell", "command": "curl -s http://localhost:4195/ping", "output": "/pong/"})
 +
-This starts source and target Redpanda clusters, Redpanda Console instances, and the migrator service. See `docker-compose.yml` for port mappings and service details.
+This command starts the source and target Redpanda clusters, Redpanda Console instances, and the migrator service. See `docker-compose.yml` for port mappings and service details.
 
 . Set up users, ACLs, topics, and schemas:
 +
@@ -136,14 +119,14 @@ make setup
 +
 This creates users with SASL authentication, configures ACLs for secure migration, creates demo topics with various cleanup policies, and registers schemas. See `scripts/setup.sh` for detailed ACL permissions and topic configurations.
 
-. (Optional) Verify the ACL configuration:
+. Verify the ACL configuration:
 +
 [,bash]
 ----
 make verify-acls
 ----
 +
-This tests that `migrator-user` has correct read-only source access and read-write target access with proper restrictions. See `scripts/verify-acls.sh` for test details.
+This command confirms that the `migrator-user` SASL user has correct read-only source access and read-write target access with proper restrictions. See `scripts/verify-acls.sh` for test details.
 
 . Start continuous data production:
 +
@@ -155,7 +138,7 @@ make demo-start
 // (step {"action":"wait", "duration": 15000})
 // (step {"action":"runShell", "command": "docker exec rpk-client rpk topic list --brokers redpanda-target:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256", "output": "/demo-orders/"})
 +
-This starts a background producer that sends approximately 81 messages every 2 seconds across all demo topics.
+This command starts a background producer that sends approximately 80 messages every 2 seconds across all demo topics.
 
 . Verify continuous schema syncing:
 +
@@ -173,9 +156,9 @@ This test registers a new schema after the migrator starts and confirms it autom
 make monitor-lag
 ----
 +
-This displays a real-time dashboard showing lag per topic, message counts, and production status. Press Ctrl+C to exit.
+This command displays a real-time dashboard showing lag per topic, message counts, and production status. Press kbd:[Ctrl+C] to exit.
 
-. When finished, stop continuous production:
+. When the migration is finished, stop continuous production:
 +
 [,bash]
 ----
@@ -184,14 +167,14 @@ make demo-stop
 
 == Verify data consistency
 
-Run the verification script to confirm successful migration:
+Run the verification script to confirm a successful migration:
 
 [,bash]
 ----
 make verify
 ----
 
-This checks:
+This command checks:
 
 * All topics are migrated
 * Partition counts match
@@ -203,9 +186,9 @@ This checks:
 
 The migrator uses the principle of least privilege with non-superuser accounts. For detailed security configuration including users, ACLs, and permissions, see:
 
-* `scripts/setup.sh` - User creation and ACL configuration
-* `config/migrator-config.yaml` - Migrator settings and Schema Registry sync
-* `docker-compose.yml` - Service ports and environment variables
+* `scripts/setup.sh`: User creation and ACL configuration
+* `config/migrator-config.yaml`: Migrator settings and Schema Registry sync
+* `docker-compose.yml`: Service ports and environment variables
 
 == Clean up
 
