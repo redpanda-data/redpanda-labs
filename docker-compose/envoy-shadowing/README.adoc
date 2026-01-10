@@ -32,10 +32,7 @@ In this lab, you will:
 
 == Prerequisites
 
-* https://docs.docker.com/compose/install/[Docker and Docker Compose^]
-* Redpanda v25.3+ (included in docker-compose.yml)
-
-NOTE: New Redpanda clusters include a 30-day trial license that enables Shadowing.
+You need https://docs.docker.com/compose/install/[Docker and Docker Compose^]
 
 == Run the lab
 
