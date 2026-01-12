@@ -19,6 +19,9 @@ content:
     branches: [main, v/*, api, site-search, shared]
   - url: https://github.com/redpanda-data/rp-connect-docs
     branches: [main]
+  - url: https://github.com/redpanda-data/docs-site
+    branches: 'main'
+    start_paths: [home]
   - url: https://github.com/redpanda-data/cloud-docs
     branches: [main]
   # https://docs.antora.org/antora/latest/playbook/content-source-url/#local-urls
