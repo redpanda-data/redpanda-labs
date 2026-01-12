@@ -1,0 +1,74 @@
+# Redpanda Labs Documentation Personas
+#
+# These personas represent the target audience for Redpanda Labs documentation.
+# Use these when assigning :personas: attributes to lab pages.
+#
+# Many personas are shared with rp-connect-docs. Reuse these IDs where applicable:
+#   - data_engineer: Builds data pipelines
+#   - streaming_developer: Works with Kafka/Redpanda streaming systems
+#   - platform_operator: Deploys and maintains systems in production
+#   - evaluator: Assessing solutions for their organization
+
+schema_version: "1.0"
+repository: redpanda-labs
+
+personas:
+  # Shared with rp-connect-docs - included here for labs context
+  - id: data_engineer
+    name: Data Engineer
+    description: Designs and builds data pipelines
+    experience_level: intermediate
+    typical_content_types:
+      - lab
+      - how-to
+      - cookbook
+
+  - id: streaming_developer
+    name: Streaming Platform Developer
+    description: Works with Kafka/Redpanda streaming systems
+    experience_level: advanced
+    typical_content_types:
+      - lab
+      - concepts
+      - how-to
+
+  - id: platform_operator
+    name: Platform Operator
+    description: Deploys and maintains systems in production
+    experience_level: intermediate
+    typical_content_types:
+      - lab
+      - how-to
+      - troubleshooting
+
+  - id: evaluator
+    name: Technical Evaluator
+    description: Assessing Redpanda for their organization
+    experience_level: beginner
+    typical_content_types:
+      - lab
+      - overview
+      - concepts
+
+  # Labs-specific persona
+  - id: developer
+    name: Application Developer
+    description: Builds applications that produce or consume streaming data
+    experience_level: beginner
+    goals:
+      - Connect applications to Redpanda
+      - Produce and consume messages
+      - Work with schemas and serialization
+      - Implement event-driven patterns
+    pain_points:
+      - Getting started complexity
+      - Client library configuration
+      - Schema management
+    content_preferences:
+      - Quick start guides
+      - Client library examples
+      - Code samples in multiple languages
+    typical_content_types:
+      - lab
+      - tutorial
+      - how-to

@@ -1,0 +1,1 @@
+../../../../docker-compose/redpanda-migrator-demo/README.adoc

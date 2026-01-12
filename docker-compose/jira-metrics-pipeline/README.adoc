@@ -1,0 +1,422 @@
+= Stream Jira Issues to Redpanda for Real-Time Metrics
+:env-docker: true
+:page-categories: Streaming, Integration
+:description: Build a real-time Jira metrics pipeline using Redpanda Connect and Redpanda to track development performance, SLA compliance, and team productivity.
+:page-layout: lab
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
+ifndef::env-site[]
+:latest-redpanda-version: 25.3.1
+:latest-console-version: 3.3.1
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
+endif::[]
+
+This lab demonstrates a production-ready pipeline that streams Jira issues to Redpanda topics in real-time. The pipeline transforms raw Jira API responses into a normalized, consumer-friendly schema and routes issues to different topics, enabling use cases SLA monitoring and team performance analytics.
+
+== Architecture
+
+Redpanda Connect periodically queries the Jira REST API for recently updated issues in your project. Each issue is transformed to extract key fields, flatten nested objects, and compute flags like `is_high_priority` and `is_completed`. Based on these flags, issues are routed to different Redpanda topics:
+
+- `jira.issues.all`: All issues
+- `jira.issues.high-priority`: Issues with Highest/High priority
+- `jira.issues.completed`: Issues marked as Done/Closed/Resolved
+
+== Use cases
+
+=== SLA monitoring and alerting
+
+- Automatically detect stale high-priority issues.
+- Send alerts when issues haven't been updated in a certain number of days.
+- Track response times and prevent SLA breaches.
+- Route critical issues to on-call teams.
+
+=== Team performance analytics
+
+- Calculate team velocity and throughput.
+- Identify bottlenecks in the development process.
+- Track individual contributor metrics.
+- Generate sprint reports automatically.
+
+=== Compliance and audit trail
+
+- Maintain a complete history of issue changes.
+- Immutable event log in Redpanda.
+- Audit who changed what and when.
+
+== Prerequisites
+
+You must have the following installed on your host machine:
+
+- https://docs.docker.com/compose/install/[Docker and Docker Compose^]
+- https://docs.redpanda.com/current/get-started/rpk-install/[rpk^] (Redpanda CLI) - required to generate the Enterprise license
+
+This lab also requires:
+
+- **Jira instance** with API access
+- **Jira API token** from https://id.atlassian.com/manage-profile/security/api-tokens[Atlassian^]
+
+This lab is intended for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
+
+== Run the lab
+
+. Clone the repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/jira-metrics-pipeline/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/jira-metrics-pipeline
+----
+
+. Copy the example environment file:
++
+[,bash]
+----
+cp .env.example .env
+----
+
+. Edit the `.env` file and configure:
++
+[,bash,subs="attributes+"]
+----
+# Versions (optional - defaults are provided)
+REDPANDA_VERSION=v{latest-redpanda-version}
+REDPANDA_CONSOLE_VERSION=v{latest-console-version}
+REDPANDA_CONNECT_VERSION=4.70.0
+
+# Jira credentials (required)
+JIRA_BASE_URL=https://<domain>.atlassian.net
+JIRA_USERNAME=<email-address>
+JIRA_API_TOKEN=<api-token>
+JIRA_PROJECT=<jira-project-key>
+----
+
+. Generate a Redpanda Enterprise trial license:
++
+[,bash]
+----
+rpk generate license \
+  --name "<first-name>" \
+  --last-name "<last-name>" \
+  --email "<email-address>" \
+  --company "<company-name>"
+----
++
+This creates a 30-day trial license in `./redpanda.license`.
+
+. Export the license as a shell environment variable:
++
+[,bash]
+----
+export REDPANDA_LICENSE=$(cat ./redpanda.license)
+----
++
+[NOTE]
+====
+The `REDPANDA_LICENSE` must be exported in your shell. It cannot be loaded from the `.env` file. The `--env-file` flag loads application variables (like `JIRA_*`), but the license must be exported separately.
+====
+
+. Start the Docker containers:
++
+[,bash]
+----
+docker compose up -d
+----
+
+. Create the Kafka topics:
++
+[,bash]
+----
+docker compose exec redpanda rpk topic create jira.issues.all -p 3
+docker compose exec redpanda rpk topic create jira.issues.high-priority -p 3
+docker compose exec redpanda rpk topic create jira.issues.completed -p 3
+----
+
+. Open Redpanda Console at http://localhost:8080[localhost:8080^] to view your topics and messages.
+
+. Monitor the Jira issues streaming into Redpanda:
++
+[,bash]
+----
+# Watch all issues
+docker compose exec redpanda rpk topic consume jira.issues.all --format json
+
+# Watch high-priority issues
+docker compose exec redpanda rpk topic consume jira.issues.high-priority --format json
+
+# Watch completed issues
+docker compose exec redpanda rpk topic consume jira.issues.completed --format json
+----
+
+== How it works
+
+The pipeline performs the following steps:
+
+. **Query Jira**: Every 30 seconds, Redpanda Connect queries Jira for recently updated issues in your project
+. **Transform data**: Each Jira issue is transformed into a normalized schema:
+   - Flattened fields: status, priority, issue type (extracted from nested Jira objects)
+   - Null-safe people fields: assignee and reporter (defaults to "Unassigned"/"Unknown")
+   - Raw timestamps: created, updated, resolved (preserved in original Jira format)
+   - Extracted component names from component objects
+   - Computed boolean flags: `is_completed`, `is_high_priority`
+   - Generated issue URL: `{JIRA_BASE_URL}/browse/{key}`
+   - Pipeline processing timestamp
+. **Route messages**: Issues are intelligently routed to topics based on computed flags:
+   - High priority (Highest/High) → `jira.issues.high-priority`
+   - Completed (Done/Closed/Resolved) → `jira.issues.completed`
+   - All others → `jira.issues.all`
+. **Consume and analyze**: Multiple downstream applications can consume from these topics independently:
+   - Metrics dashboards (Grafana, Kibana)
+   - Alert systems (Slack, PagerDuty)
+   - Data warehouses (Snowflake, BigQuery)
+   - Workflow automation
+
+// For docs site (LLM-readable): include the full pipeline configuration
+ifdef::env-site[]
+== Pipeline configuration
+
+The complete Redpanda Connect pipeline configuration:
+
+[,yaml,role="no-wrap"]
+----
+include::docker-compose:example$jira-metrics-pipeline/jira-pipeline.yaml[]
+----
+endif::[]
+
+== Customize the pipeline
+
+=== Adjust polling frequency
+
+Edit `connect-configs/jira-pipeline.yaml`:
+
+[,yaml]
+----
+input:
+  generate:
+    interval: 60s  # Change from 30s to 1m, 5m, etc.
+----
+
+=== Modify JQL query
+
+Target different issues by changing the JQL query:
+
+[,yaml]
+----
+root.jql = "project = YOUR_PROJECT AND status != Closed AND updated >= -1h"
+----
+
+=== Add custom fields
+
+Include Jira custom fields in your pipeline:
+
+[,yaml]
+----
+root.fields = [
+  "key",
+  "summary",
+  "customfield_10001",  # Add your custom field ID
+  # ... other fields
+]
+----
+
+=== Add more routing rules
+
+Route issues to additional topics based on labels, components, or other criteria:
+
+[,yaml]
+----
+- mapping: |
+    meta kafka_topic = if this.labels.contains("security") {
+      "jira.issues.security"
+    } else { deleted() }
+----
+
+== View logs and metrics
+
+=== Redpanda Connect logs
+
+[,bash]
+----
+docker compose logs -f connect
+----
+
+=== Redpanda logs
+
+[,bash]
+----
+docker compose logs -f redpanda
+----
+
+=== Redpanda Connect metrics
+
+[,bash]
+----
+curl http://localhost:4195/metrics
+----
+
+== Troubleshooting
+
+=== License errors
+
+If you see license-related errors in the Connect logs:
+
+. Verify the license is exported:
++
+[,bash]
+----
+echo $REDPANDA_LICENSE
+----
+
+. If the environment variable is empty, regenerate and export the license:
++
+[,bash]
+----
+rpk generate license --name "Your Name" \
+  --last-name "Last" \
+  --email "you@example.com" \
+  --company "Company"
+
+export REDPANDA_LICENSE=$(cat ./redpanda.license)
+----
+
+. Restart the containers:
++
+[,bash]
+----
+docker compose restart connect
+----
+
+=== Jira authentication errors
+
+If you receive 401 Unauthorized errors:
+
+. Verify your API token is correct.
+. Ensure you're using your email address as the username.
+. Check that your Jira instance URL is correct (include `https://`).
+. Test your credentials with curl:
++
+[,bash]
+----
+curl -u "${JIRA_USERNAME}:${JIRA_API_TOKEN}" \
+  "${JIRA_BASE_URL}/rest/api/3/myself"
+----
+
+=== No issues appearing
+
+If no issues are being published:
+
+. Check the JQL query returns results in Jira directly.
+. Verify the `JIRA_PROJECT` environment variable matches your project key.
+. Check Connect logs for errors:
++
+[,bash]
+----
+docker compose logs connect
+----
+
+. Adjust the query timeframe:
++
+[,yaml]
+----
+root.jql = "project = YOUR_PROJECT AND updated >= -24h"  # Last 24 hours
+----
+
+=== Rate limiting
+
+If you hit Jira rate limits (HTTP 429):
+
+. Increase the polling interval in `connect-configs/jira-pipeline.yaml`:
++
+[,yaml]
+----
+interval: 60s  # Reduce frequency to 60 seconds
+----
+
+. Increase retry settings:
++
+[,yaml]
+----
+- jira:
+    max_retries: 20
+    request_timeout: 60s
+----
+
+. Use more specific JQL queries to reduce result sizes.
+
+== Clean up
+
+To shut down and delete the containers along with all cluster data:
+
+[,bash]
+----
+docker compose down -v
+----
+
+== Next steps
+
+After you have Jira issues streaming into Redpanda, you can extend this pipeline with Redpanda Connect outputs:
+
+=== Send alerts and notifications
+
+// For docs site, use xrefs
+ifdef::env-site[]
+- **Slack**: Post issue updates to channels using the xref:redpanda-connect:components:outputs/slack_post.adoc[`slack_post` output]
+- **Discord**: Send notifications with the xref:redpanda-connect:components:outputs/discord.adoc[`discord` output]
+- **HTTP/Webhooks**: Trigger PagerDuty, Opsgenie, or custom webhooks using the xref:redpanda-connect:components:outputs/http_client.adoc[`http_client` output]
+endif::[]
+// For GitHub, use direct links
+ifndef::env-site[]
+- **Slack**: Post issue updates to channels using the https://docs.redpanda.com/redpanda-connect/components/outputs/slack_post/[`slack_post` output^]
+- **Discord**: Send notifications with the https://docs.redpanda.com/redpanda-connect/components/outputs/discord/[`discord` output^]
+- **HTTP/Webhooks**: Trigger PagerDuty, Opsgenie, or custom webhooks using the https://docs.redpanda.com/redpanda-connect/components/outputs/http_client/[`http_client` output^]
+endif::[]
+
+=== Stream to data warehouses
+
+// For docs site, use xrefs
+ifdef::env-site[]
+- **Snowflake**: Load issues into Snowflake with the xref:redpanda-connect:components:outputs/snowflake_streaming.adoc[`snowflake_streaming` output]
+- **BigQuery**: Stream to Google BigQuery using the xref:redpanda-connect:components:outputs/gcp_bigquery.adoc[`gcp_bigquery` output]
+- **PostgreSQL/MySQL**: Store in relational databases with xref:redpanda-connect:components:outputs/sql_insert.adoc[`sql_insert`] or xref:redpanda-connect:components:outputs/sql_raw.adoc[`sql_raw` outputs]
+endif::[]
+// For GitHub, use direct links
+ifndef::env-site[]
+- **Snowflake**: Load issues into Snowflake with the https://docs.redpanda.com/redpanda-connect/components/outputs/snowflake_streaming/[`snowflake_streaming` output^]
+- **BigQuery**: Stream to Google BigQuery using the https://docs.redpanda.com/redpanda-connect/components/outputs/gcp_bigquery/[`gcp_bigquery` output^]
+- **PostgreSQL/MySQL**: Store in relational databases with https://docs.redpanda.com/redpanda-connect/components/outputs/sql_insert/[`sql_insert`^] or https://docs.redpanda.com/redpanda-connect/components/outputs/sql_raw/[`sql_raw` outputs^]
+endif::[]
+
+=== Calculate metrics
+
+Use the raw timestamp fields (`created`, `updated`, `resolved`) to calculate:
+
+- **Lead time**: Average time from creation to completion
+- **Cycle time**: Average time from "In Progress" to "Done"
+- **Throughput**: Issues completed per time period
+- **Aging**: Distribution of issue ages
+- **SLA compliance**: Percentage of issues resolved within target timeframes
+
+== Suggested reading
+
+// For docs site, use xrefs
+ifdef::env-site[]
+- xref:redpanda-connect:components:processors/jira.adoc[Jira Processor Reference]
+- https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/[Jira REST API Documentation^]
+- https://www.atlassian.com/software/jira/guides/jql[JQL Query Guide^]
+- xref:ROOT:get-started:quick-start.adoc[Redpanda Quickstart]
+endif::[]
+// For GitHub, use direct links
+ifndef::env-site[]
+- https://docs.redpanda.com/redpanda-connect/components/processors/jira/[Jira Processor Reference^]
+- https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/[Jira REST API Documentation^]
+- https://www.atlassian.com/software/jira/guides/jql[JQL Query Guide^]
+- https://docs.redpanda.com/current/get-started/quick-start/[Redpanda Quickstart^]
+endif::[]

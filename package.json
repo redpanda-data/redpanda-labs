@@ -10,6 +10,7 @@
     "test-transforms": "cd setup-tests && npx doc-detective runTests --input ../data-transforms/go -l debug",
     "test-oidc": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/oidc -l debug",
     "test-envoy-shadowing": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/envoy-shadowing -l debug"
+    "test-migrator": "cd setup-tests && npx doc-detective runTests --input ../docker-compose/redpanda-migrator-demo/README.adoc -l debug"
   },
   "dependencies": {
     "@antora/cli": "3.1.2",

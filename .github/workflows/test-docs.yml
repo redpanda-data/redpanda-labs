@@ -11,6 +11,7 @@ jobs:
     outputs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
       envoy-shadowing: ${{ steps.filter.outputs.envoy-shadowing }}
+      redpanda-migrator: ${{ steps.filter.outputs.redpanda-migrator }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,6 +25,8 @@ jobs:
               - 'data-transforms/**'
             envoy-shadowing:
               - 'docker-compose/envoy-shadowing/**'
+            redpanda-migrator:
+              - 'docker-compose/redpanda-migrator-demo/**'
   run-tests:
     needs: setup
     strategy:
@@ -49,6 +52,9 @@ jobs:
         run: |
           # Redpanda uses Linux AIO. With 6 brokers each needing ~10000 events,
           # we exceed the default limit of 65536. Increase it.
+        if: needs.setup.outputs.redpanda-migrator == 'true'
+        run: |
+          # Redpanda uses Linux AIO. Increase limit to support multiple brokers.
           sudo sysctl -w fs.aio-max-nr=1048576
 
       - name: Test data transforms
@@ -60,6 +66,9 @@ jobs:
       - name: Test envoy shadowing
         if: needs.setup.outputs.envoy-shadowing == 'true'
         run: npm run test-envoy-shadowing
+      - name: Test redpanda migrator
+        if: needs.setup.outputs.redpanda-migrator == 'true'
+        run: npm run test-migrator
 
       - name: Upload debug artifacts
         if: failure()

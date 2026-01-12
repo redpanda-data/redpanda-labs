@@ -1,0 +1,484 @@
+#!/bin/bash
+# ==============================================================================
+# Setup script for Redpanda Migrator Demo with Security
+# ==============================================================================
+#
+# This script creates users, ACLs, topics, and schemas for secure migration.
+#
+# USERS:
+#   admin-user      - Superuser for setup and administration tasks
+#   migrator-user   - Non-superuser for migration with minimal permissions
+#
+# Credentials (for demo only - use strong passwords in production):
+#   Admin: admin-user / admin-secret-password
+#   Migrator: migrator-user / migrator-secret-password
+#
+# WARNING: For production deployments, use strong, randomly generated passwords
+# and store them securely using a secrets manager such as HashiCorp Vault or
+# AWS Secrets Manager.
+#
+# ACL CONFIGURATION (Principle of Least Privilege):
+#
+#   Source Cluster (Read-Only):
+#     Topics:           READ, DESCRIBE, DESCRIBE_CONFIGS on 'demo-*' prefix
+#     Consumer group:   READ on 'redpanda-migrator' group
+#     Cluster:          DESCRIBE
+#     Schema Registry:  READ, DESCRIBE
+#
+#   Target Cluster (Read-Write):
+#     Topics:           WRITE, CREATE, DESCRIBE, DESCRIBE_CONFIGS, ALTER on 'demo-*' prefix
+#     Consumer group:   CREATE, READ on 'redpanda-migrator' group
+#     Consumer offsets: WRITE, DESCRIBE on '__consumer_offsets'
+#     Cluster:          DESCRIBE
+#     Schema Registry:  WRITE, DESCRIBE, ALTER_CONFIGS, DESCRIBE_CONFIGS
+#
+# TOPICS CREATED:
+#   demo-orders      - 12 partitions, delete policy
+#   demo-user-state  -  6 partitions, compact policy
+#   demo-events      -  8 partitions, compact,delete policy
+#   demo-alerts      -  3 partitions, delete policy
+# ==============================================================================
+
+set -e
+
+SOURCE_BROKERS="redpanda-source:9092"
+TARGET_BROKERS="redpanda-target:9092"
+TARGET_SCHEMA_REGISTRY="http://redpanda-target:8081"
+
+# Admin credentials (bootstrapped)
+ADMIN_USER="admin-user"
+ADMIN_PASS="admin-secret-password"
+
+# Migrator credentials
+MIGRATOR_USER="migrator-user"
+MIGRATOR_PASS="migrator-secret-password"
+
+echo "========================================="
+echo "Redpanda Migrator Demo - Secure Setup"
+echo "========================================="
+echo ""
+echo "ℹ️  Superusers configured via .bootstrap.yaml"
+echo ""
+
+# ====================
+# STEP 1: Create Users
+# ====================
+echo "1. Creating users..."
+echo ""
+
+# Create migrator-user on source
+echo "  Creating migrator-user on source cluster..."
+rpk security user create "$MIGRATOR_USER" \
+  --password "$MIGRATOR_PASS" \
+  --api-urls "redpanda-source:9644" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS"
+
+# Create migrator-user on target
+echo "  Creating migrator-user on target cluster..."
+rpk security user create "$MIGRATOR_USER" \
+  --password "$MIGRATOR_PASS" \
+  --api-urls "redpanda-target:9644" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS"
+
+echo "  ✅ Users created!"
+echo ""
+
+# ====================
+# STEP 2: Enable SASL
+# ====================
+echo "2. Enabling SASL authentication..."
+echo ""
+
+echo "  Enabling SASL on source cluster..."
+rpk cluster config set enable_sasl true \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X admin.hosts=redpanda-source:9644
+
+echo "  Enabling SASL on target cluster..."
+rpk cluster config set enable_sasl true \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X admin.hosts=redpanda-target:9644
+
+echo "  ✅ SASL enabled!"
+echo ""
+
+# ============================
+# STEP 3: Create ACLs - SOURCE
+# ============================
+echo "3. Creating ACLs on source cluster (read-only)..."
+echo ""
+
+# Kafka ACLs
+echo "  Kafka ACLs:"
+
+echo "    - Topic READ/DESCRIBE/DESCRIBE_CONFIGS on demo-* (read topic data and configs)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation read,describe,describe_configs \
+  --topic 'demo-' \
+  --resource-pattern-type prefixed \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "    - Consumer group READ (consume with migration group)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation read \
+  --group redpanda-migrator \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "    - Cluster DESCRIBE (discover topics)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation describe \
+  --cluster \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+# Schema Registry ACLs
+echo "  Schema Registry ACLs:"
+
+echo "    - Global READ/DESCRIBE (list and read schemas)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation read,describe \
+  --registry-global \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  ✅ Source ACLs created!"
+echo ""
+
+# ============================
+# STEP 4: Create ACLs - TARGET
+# ============================
+echo "4. Creating ACLs on target cluster (read-write)..."
+echo ""
+
+# Kafka ACLs
+echo "  Kafka ACLs:"
+
+echo "    - Topic WRITE/CREATE/DESCRIBE/DESCRIBE_CONFIGS/ALTER on demo-* (create and write topics)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation write,create,describe,describe_configs,alter \
+  --topic 'demo-' \
+  --resource-pattern-type prefixed \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "    - Consumer group CREATE/READ (manage migration group)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation create,read \
+  --group redpanda-migrator \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "    - Consumer offsets WRITE/DESCRIBE (migrate offsets)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation write,describe \
+  --topic '__consumer_offsets' \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "    - Cluster DESCRIBE (discover cluster)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation describe \
+  --cluster \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+# Schema Registry ACLs
+echo "  Schema Registry ACLs:"
+
+echo "    - Global WRITE/DESCRIBE/ALTER_CONFIGS/DESCRIBE_CONFIGS (register and manage schemas)"
+rpk security acl create \
+  --allow-principal "User:$MIGRATOR_USER" \
+  --operation write,describe,alter_configs,describe_configs \
+  --registry-global \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  ✅ Target ACLs created!"
+echo ""
+
+# ====================================
+# STEP 5: Create Admin Superuser ACLs
+# ====================================
+echo "5. Creating superuser ACLs for admin-user..."
+echo ""
+
+# Grant admin-user ALL permissions on source cluster
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --cluster \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --topic '*' \
+  --resource-pattern-type literal \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --group '*' \
+  --resource-pattern-type literal \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+# Grant admin-user ALL permissions on target cluster
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --cluster \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --topic '*' \
+  --resource-pattern-type literal \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:$ADMIN_USER" \
+  --operation all \
+  --group '*' \
+  --resource-pattern-type literal \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  ✅ Admin ACLs created!"
+echo ""
+
+# Add ACLs for Schema Registry internal user
+echo "  Creating ACLs for Schema Registry internal user..."
+rpk security acl create \
+  --allow-principal "User:__schema_registry" \
+  --operation all \
+  --cluster \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:__schema_registry" \
+  --operation all \
+  --topic '_schemas' \
+  --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:__schema_registry" \
+  --operation all \
+  --cluster \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+rpk security acl create \
+  --allow-principal "User:__schema_registry" \
+  --operation all \
+  --topic '_schemas' \
+  --brokers "$TARGET_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  ✅ Schema Registry ACLs created!"
+echo ""
+echo "  ℹ️  SASL authentication and ACL authorization are now enforced."
+echo ""
+
+# ================================
+# STEP 6: Enable Schema Import Mode
+# ================================
+echo "6. Enabling import mode on target Schema Registry..."
+
+# Use admin credentials for Schema Registry HTTP Basic Auth
+curl -X PUT "$TARGET_SCHEMA_REGISTRY/mode" \
+  -H "Content-Type: application/json" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  -d '{"mode":"IMPORT"}' \
+  2>/dev/null
+
+echo "  ✅ Schema Registry import mode enabled!"
+echo ""
+
+# =======================
+# STEP 7: Create Topics
+# =======================
+echo "7. Creating topics in source cluster..."
+echo ""
+
+# Use admin credentials for topic creation
+echo "  📝 Creating demo-orders (12 partitions, delete policy)"
+rpk topic create demo-orders \
+  --brokers "$SOURCE_BROKERS" \
+  --partitions 12 \
+  --replicas 1 \
+  --topic-config retention.ms=604800000 \
+  --topic-config cleanup.policy=delete \
+  --topic-config compression.type=snappy \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  📝 Creating demo-user-state (6 partitions, compact policy)"
+rpk topic create demo-user-state \
+  --brokers "$SOURCE_BROKERS" \
+  --partitions 6 \
+  --replicas 1 \
+  --topic-config cleanup.policy=compact \
+  --topic-config min.compaction.lag.ms=60000 \
+  --topic-config segment.ms=3600000 \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  📝 Creating demo-events (8 partitions, compact,delete policy)"
+rpk topic create demo-events \
+  --brokers "$SOURCE_BROKERS" \
+  --partitions 8 \
+  --replicas 1 \
+  --topic-config cleanup.policy=compact,delete \
+  --topic-config retention.ms=86400000 \
+  --topic-config min.compaction.lag.ms=60000 \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo "  📝 Creating demo-alerts (3 partitions)"
+rpk topic create demo-alerts \
+  --brokers "$SOURCE_BROKERS" \
+  --partitions 3 \
+  --replicas 1 \
+  --topic-config retention.ms=3600000 \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256
+
+echo ""
+echo "  ✅ Topics created successfully!"
+echo ""
+
+# ============================
+# STEP 8: Register Schemas
+# ============================
+echo "8. Registering test schemas in source Schema Registry..."
+echo ""
+
+# Register Avro schema for demo-orders-value
+curl -X POST \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  --data '{
+    "schema": "{\"type\":\"record\",\"name\":\"Order\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"order_id\",\"type\":\"string\"},{\"name\":\"customer_id\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"},{\"name\":\"timestamp\",\"type\":\"long\"}]}"
+  }' \
+  http://redpanda-source:8081/subjects/demo-orders-value/versions \
+  2>/dev/null
+
+# Register schema for demo-user-state-value
+curl -X POST \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  --data '{
+    "schema": "{\"type\":\"record\",\"name\":\"UserState\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"user_id\",\"type\":\"string\"},{\"name\":\"state\",\"type\":\"string\"},{\"name\":\"updated_at\",\"type\":\"long\"}]}"
+  }' \
+  http://redpanda-source:8081/subjects/demo-user-state-value/versions \
+  2>/dev/null
+
+echo "  ✅ Schemas registered!"
+echo ""
+
+# =================
+# STEP 9: Verify
+# =================
+echo "9. Verification:"
+echo ""
+
+# List topics
+echo "  Source cluster topics:"
+rpk topic list --brokers "$SOURCE_BROKERS" \
+  -X user="$ADMIN_USER" \
+  -X pass="$ADMIN_PASS" \
+  -X sasl.mechanism=SCRAM-SHA-256 | grep "demo-"
+
+echo ""
+echo "  Topic configurations:"
+for topic in demo-orders demo-user-state demo-events demo-alerts; do
+  echo ""
+  echo "    $topic:"
+  rpk topic describe "$topic" --brokers "$SOURCE_BROKERS" \
+    -X user="$ADMIN_USER" \
+    -X pass="$ADMIN_PASS" \
+    -X sasl.mechanism=SCRAM-SHA-256 | grep -E "PARTITION|cleanup.policy" | head -3
+done
+
+echo ""
+echo "========================================="
+echo "✅ Secure Setup Complete!"
+echo "========================================="
+echo ""
+echo "Users created:"
+echo "  - admin-user (superuser)"
+echo "  - migrator-user (limited permissions)"
+echo ""
+echo "ACLs configured:"
+echo "  - Source: Read-only access"
+echo "  - Target: Read-write access"
+echo ""
+echo "Next steps:"
+echo "  - Run 'make verify-acls' to test ACL configuration"
+echo "  - Run 'make demo-start' to start data production"
+echo ""

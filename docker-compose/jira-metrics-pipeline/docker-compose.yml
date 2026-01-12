@@ -1,0 +1,77 @@
+---
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v24.2.7}
+    container_name: redpanda-jira-lab
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+    ports:
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # HTTP Proxy
+      - "19092:19092"  # Kafka API
+      - "19644:9644"   # Admin API
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v2.7.2}
+    container_name: redpanda-console-jira-lab
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: true
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    volumes:
+      - ./console-config.yml:/tmp/config.yml:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/admin/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  connect:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-4.70.0}
+    container_name: redpanda-connect-jira-lab
+    hostname: connect
+    ports:
+      - "4195:4195"  # Metrics/health endpoint
+    environment:
+      - REDPANDA_LICENSE_FILEPATH=/license/redpanda.license
+      - JIRA_BASE_URL=${JIRA_BASE_URL}
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_PROJECT=${JIRA_PROJECT}
+      - REDPANDA_BROKERS=redpanda:9092
+    volumes:
+      - ./connect-configs:/configs:ro
+      - ./redpanda.license:/license/redpanda.license:ro
+    entrypoint: /bin/sh
+    command: -c '/redpanda-connect --redpanda-license /license/redpanda.license run /configs/jira-pipeline.yaml'
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  default:
+    name: redpanda-jira-network
