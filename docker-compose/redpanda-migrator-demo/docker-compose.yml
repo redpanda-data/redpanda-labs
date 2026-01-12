@@ -1,0 +1,232 @@
+# ==============================================================================
+# Redpanda Migrator Demo - Docker Compose Configuration
+# ==============================================================================
+#
+# SERVICES AND PORTS:
+#   Source Cluster (redpanda-source)
+#     19092 - Kafka API (simulating Confluent Kafka)
+#     18081 - Schema Registry
+#     18082 - HTTP Proxy
+#     19644 - Admin API
+#
+#   Target Cluster (redpanda-target)
+#     29092 - Kafka API (Redpanda)
+#     28081 - Schema Registry
+#     28082 - HTTP Proxy
+#     29644 - Admin API
+#
+#   Source Console (console-source)
+#     8080  - Web UI for source cluster
+#
+#   Target Console (console-target)
+#     8081  - Web UI for target cluster (note: port 8081, internal port 8080)
+#
+#   Migrator (redpanda-connect)
+#     4195  - Metrics and health endpoint
+#
+# SECURITY:
+#   - Both clusters use SASL/SCRAM-SHA-256 authentication
+#   - Bootstrap superuser: admin-user (configured via RP_BOOTSTRAP_USER)
+#   - Migration user: migrator-user (created by setup script)
+#   - ACLs enforce least-privilege access (see setup.sh for details)
+#
+# USAGE:
+#   1. Start environment: make start
+#   2. Configure security: make setup
+#   3. Start demo: make demo-start
+#   4. Verify migration: make verify
+# ==============================================================================
+
+networks:
+  redpanda-network:
+    driver: bridge
+
+volumes:
+  source-data:
+  target-data:
+
+services:
+  # ============================================
+  # SOURCE CLUSTER (Simulating Confluent Kafka)
+  # ============================================
+  redpanda-source:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: redpanda-source
+    hostname: redpanda-source
+    networks:
+      - redpanda-network
+    environment:
+      # Bootstrap superuser for initial setup
+      RP_BOOTSTRAP_USER: "admin-user:admin-secret-password"
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda-source:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda-source:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda-source:33145
+      - --advertise-rpc-addr redpanda-source:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --set schema_registry_client.scram_username=admin-user
+      - --set schema_registry_client.scram_password=admin-secret-password
+      - --set schema_registry_client.sasl_mechanism=SCRAM-SHA-256
+    ports:
+      - "19092:19092"  # Kafka API
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # HTTP Proxy
+      - "19644:9644"   # Admin API
+    volumes:
+      - source-data:/var/lib/redpanda/data
+      - ./config/source-bootstrap.yaml:/etc/redpanda/.bootstrap.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # TARGET CLUSTER (Redpanda)
+  # ============================================
+  redpanda-target:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: redpanda-target
+    hostname: redpanda-target
+    networks:
+      - redpanda-network
+    environment:
+      # Bootstrap superuser for initial setup
+      RP_BOOTSTRAP_USER: "admin-user:admin-secret-password"
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-target:9092,external://localhost:29092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr internal://redpanda-target:8082,external://localhost:28082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-target:33145
+      - --advertise-rpc-addr redpanda-target:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+      - --set schema_registry_client.scram_username=admin-user
+      - --set schema_registry_client.scram_password=admin-secret-password
+      - --set schema_registry_client.sasl_mechanism=SCRAM-SHA-256
+    ports:
+      - "29092:29092"  # Kafka API
+      - "28081:28081"  # Schema Registry
+      - "28082:28082"  # HTTP Proxy
+      - "29644:9644"   # Admin API
+    volumes:
+      - target-data:/var/lib/redpanda/data
+      - ./config/target-bootstrap.yaml:/etc/redpanda/.bootstrap.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # REDPANDA CONSOLE - SOURCE
+  # ============================================
+  console-source:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.4.0}
+    container_name: redpanda-console-source
+    hostname: console-source
+    networks:
+      - redpanda-network
+    environment:
+      KAFKA_BROKERS: "redpanda-source:9092"
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: "http://redpanda-source:8081"
+      # SASL authentication
+      KAFKA_SASL_ENABLED: "true"
+      KAFKA_SASL_MECHANISM: "SCRAM-SHA-256"
+      KAFKA_SASL_USERNAME: "admin-user"
+      KAFKA_SASL_PASSWORD: "admin-secret-password"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+
+  # ============================================
+  # REDPANDA CONSOLE - TARGET
+  # ============================================
+  console-target:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.4.0}
+    container_name: redpanda-console-target
+    hostname: console-target
+    networks:
+      - redpanda-network
+    environment:
+      KAFKA_BROKERS: "redpanda-target:9092"
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: "http://redpanda-target:8081"
+      # SASL authentication
+      KAFKA_SASL_ENABLED: "true"
+      KAFKA_SASL_MECHANISM: "SCRAM-SHA-256"
+      KAFKA_SASL_USERNAME: "admin-user"
+      KAFKA_SASL_PASSWORD: "admin-secret-password"
+    ports:
+      - "8081:8080"
+    depends_on:
+      redpanda-target:
+        condition: service_healthy
+
+  # ============================================
+  # REDPANDA MIGRATOR
+  # ============================================
+  migrator:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-4.77.0}
+    container_name: redpanda-migrator
+    hostname: migrator
+    networks:
+      - redpanda-network
+    volumes:
+      - ./config/migrator-config.yaml:/migrator-config.yaml:ro
+    command:
+      - run
+      - /migrator-config.yaml
+    ports:
+      - "4195:4195"  # Metrics/health endpoint
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4195/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
+  # RPK CLIENT (for running commands)
+  # ============================================
+  rpk-client:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: rpk-client
+    hostname: rpk-client
+    networks:
+      - redpanda-network
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        echo "RPK client ready. Waiting for user commands..."
+        sleep infinity
+    volumes:
+      - ./config:/config:ro
+      - ./scripts:/scripts:ro
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-target:
+        condition: service_healthy

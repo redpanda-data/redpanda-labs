@@ -38,6 +38,16 @@
         },
         {
           "action": "runShell",
+          "command": "curl -s https://api.github.com/repos/redpanda-data/connect/releases/latest | grep '\"tag_name\"' | cut -d'\"' -f4 | sed 's/^v//'",
+          "setVariables": [
+            {
+              "name": "REDPANDA_CONNECT_VERSION",
+              "regex": ".*"
+            }
+          ]
+        },
+        {
+          "action": "runShell",
           "command": "npx doc-tools install-test-dependencies"
         },
         {
@@ -47,6 +57,10 @@
         {
           "action": "runShell",
           "command": "echo $REDPANDA_CONSOLE_VERSION"
+        },
+        {
+          "action": "runShell",
+          "command": "echo $REDPANDA_CONNECT_VERSION"
         }
       ]
     }

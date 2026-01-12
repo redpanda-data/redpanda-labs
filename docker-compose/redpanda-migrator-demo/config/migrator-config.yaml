@@ -1,0 +1,111 @@
+# ==============================================================================
+# Redpanda Migrator Configuration
+# ==============================================================================
+#
+# This configuration demonstrates:
+#  - Continuous data replication with offset preservation
+#  - Auto topic creation with matching partition counts and configurations
+#  - Schema Registry migration with continuous syncing (10s interval)
+#  - Compacted topic migration (preserving cleanup policies)
+#  - Consumer offset migration
+#  - ACL-based security with non-superuser migration patterns
+#
+# IMPORTANT: The target Schema Registry must be in IMPORT mode for schema
+# migration to work. The setup script enables this automatically with:
+#   curl -X PUT http://target:8081/mode -d '{"mode":"IMPORT"}'
+#
+# After migration completes, disable import mode to return to normal operations:
+#   curl -X PUT http://target:8081/mode -d '{"mode":"READWRITE"}'
+# ==============================================================================
+
+input:
+  redpanda_migrator:
+    # Source cluster (simulating Confluent Kafka)
+    seed_brokers:
+      - redpanda-source:9092
+
+    # SASL authentication for source cluster
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: migrator-user
+        password: migrator-secret-password
+
+    # Topics to migrate (regex pattern)
+    topics:
+      - 'demo-.*'
+    regexp_topics: true
+
+    # Consumer group for migration process
+    consumer_group: redpanda-migrator
+
+    # Start from beginning to migrate all historical data
+    start_from_oldest: true
+
+    # Schema Registry migration (source)
+    schema_registry:
+      url: http://redpanda-source:8081
+      basic_auth:
+        enabled: true
+        username: migrator-user
+        password: migrator-secret-password
+
+output:
+  redpanda_migrator:
+    # Target Redpanda cluster
+    seed_brokers:
+      - redpanda-target:9092
+
+    # SASL authentication for target cluster
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: migrator-user
+        password: migrator-secret-password
+
+    # Max in-flight messages (1 for strict ordering)
+    max_in_flight: 1
+
+    # Replication factor for topics created in target cluster
+    # Overrides source replication factor to ensure production standard
+    # Examples:
+    #   topic_replication_factor: 1   # Single-broker (dev/test)
+    #   topic_replication_factor: 3   # Production standard (requires 3+ brokers)
+    #   topic_replication_factor: -1  # Automatic: min(source_rf, target_brokers)
+    #
+    # Note: This demo uses single-node clusters, so RF=1 is implicit.
+    # For production with 3+ brokers, uncomment the line below:
+    # topic_replication_factor: 3
+
+    # Target Schema Registry with continuous syncing
+    schema_registry:
+      url: http://redpanda-target:8081
+      interval: 10s  # Continuously sync schemas every 10 seconds
+      basic_auth:
+        enabled: true
+        username: migrator-user
+        password: migrator-secret-password
+
+    # Auto-create topics with matching partition counts and configurations
+    # Includes cleanup.policy (compact, compact,delete, delete)
+    # Replication factor is controlled by topic_replication_factor above
+
+# HTTP server for metrics and health checks
+http:
+  enabled: true
+  address: 0.0.0.0:4195
+  root_path: /
+  debug_endpoints: false
+
+# Prometheus metrics
+metrics:
+  prometheus: {}
+  mapping: |
+    # Label the lag metric to identify source cluster
+    meta label = if this == "redpanda_lag" { "source" }
+
+# Logging
+logger:
+  level: INFO
+  format: json
+  add_timestamp: true
+  static_fields:
+    '@service': redpanda-migrator
