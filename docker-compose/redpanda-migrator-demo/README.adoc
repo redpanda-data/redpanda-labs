@@ -29,7 +29,7 @@ ifndef::env-site[]
 endif::[]
 
 ifdef::env-site[]
-This lab demonstrates how to use xref:redpanda-connect:components:inputs:redpanda_migrator.adoc[Redpanda Migrator] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
+This lab demonstrates how to use xref:redpanda-connect:components:inputs/redpanda_migrator.adoc[Redpanda Migrator] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
 endif::[]
 ifndef::env-site[]
 This lab demonstrates how to use https://docs.redpanda.com/redpanda-connect/components/inputs/redpanda_migrator/[Redpanda Migrator^] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
