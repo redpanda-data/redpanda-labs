@@ -45,6 +45,17 @@ In this lab, you will:
 * [ ] {learning-objective-2}
 * [ ] {learning-objective-3}
 
+== Architecture
+
+This lab creates a complete migration environment:
+
+* **Source cluster**: Simulates a Confluent Kafka cluster with SASL authentication, demo topics, and registered schemas
+* **Target cluster**: Redpanda cluster with matching security configuration
+* **Redpanda Migrator**: Continuously replicates data, schemas, and offsets from source to target
+* **Console instances**: Web UIs for both clusters to observe the migration in real-time
+
+The migrator automatically creates topics with matching partition counts and configurations, preserves schema IDs and versions, and migrates consumer offsets.
+
 == Prerequisites
 
 * https://docs.docker.com/compose/install/[Docker and Docker Compose^]
@@ -69,28 +80,18 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/docker-compose/redpanda-migrator-demo
 ----
 
-. Set the required environment variables for the container versions.
+. (Optional) Set container versions.
 +
-Set the `REDPANDA_VERSION` environment variable to the version of Redpanda that you want to run. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases^].
+The `docker-compose.yml` file uses default versions. To use specific versions, set these environment variables:
 +
 [,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION={latest-redpanda-version}
-----
-+
-Set the `REDPANDA_CONSOLE_VERSION` environment variable:
-+
-[,bash,subs="attributes+"]
-----
 export REDPANDA_CONSOLE_VERSION={latest-console-version}
-----
-+
-Set the `REDPANDA_CONNECT_VERSION` environment variable for the migrator:
-+
-[,bash,subs="attributes+"]
-----
 export REDPANDA_CONNECT_VERSION={latest-connect-version}
 ----
++
+For all available Redpanda versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases^].
 
 . Start the demo environment:
 +
@@ -119,14 +120,14 @@ make setup
 +
 This creates users with SASL authentication, configures ACLs for secure migration, creates demo topics with various cleanup policies, and registers schemas. See `scripts/setup.sh` for detailed ACL permissions and topic configurations.
 
-. Verify the ACL configuration:
+. (Optional) Verify the ACL configuration:
 +
 [,bash]
 ----
 make verify-acls
 ----
 +
-This command confirms that the `migrator-user` SASL user has correct read-only source access and read-write target access with proper restrictions. See `scripts/verify-acls.sh` for test details.
+This confirms that `migrator-user` has correct read-only source access and read-write target access with proper restrictions. See `scripts/verify-acls.sh` for test details.
 
 . Start continuous data production:
 +
@@ -138,16 +139,25 @@ make demo-start
 // (step {"action":"wait", "duration": 15000})
 // (step {"action":"runShell", "command": "docker exec rpk-client rpk topic list --brokers redpanda-target:9092 -X user=admin-user -X pass=admin-secret-password -X sasl.mechanism=SCRAM-SHA-256", "output": "/demo-orders/"})
 +
-This command starts a background producer that sends approximately 80 messages every 2 seconds across all demo topics.
+This starts a background producer that sends approximately 80 messages every 2 seconds across all demo topics.
 
-. Verify continuous schema syncing:
+. (Optional) View the migration in Redpanda Console:
++
+Open your browser to observe the migration in real-time:
++
+* Source cluster: http://localhost:8080[http://localhost:8080^]
+* Target cluster: http://localhost:8081[http://localhost:8081^]
++
+You can see topics, messages, and schemas being replicated from source to target.
+
+. (Optional) Verify continuous schema syncing:
 +
 [,bash]
 ----
 make verify-continuous-schema
 ----
 +
-This test registers a new schema after the migrator starts and confirms it automatically appears in the target Schema Registry within 15 seconds.
+This command registers a new schema after the migrator starts and confirms it automatically appears in the target Schema Registry within 15 seconds.
 
 . Monitor migration lag:
 +
@@ -156,31 +166,41 @@ This test registers a new schema after the migrator starts and confirms it autom
 make monitor-lag
 ----
 +
-This command displays a real-time dashboard showing lag per topic, message counts, and production status. Press kbd:[Ctrl+C] to exit.
+This command displays a real-time dashboard showing lag per topic, message counts, and production status. Watch as the lag decreases to 0, indicating the migrator has caught up with the source cluster. Let it run for 30-60 seconds to observe continuous replication, then press kbd:[Ctrl+C] to exit.
 
-. When the migration is finished, stop continuous production:
+. Verify data consistency:
++
+Run the verification script to confirm successful migration:
++
+[,bash]
+----
+make verify
+----
++
+This command checks that all topics, partitions, messages, cleanup policies, and schemas have been migrated correctly.
+
+. Stop continuous production:
 +
 [,bash]
 ----
 make demo-stop
 ----
 
-== Verify data consistency
-
-Run the verification script to confirm a successful migration:
-
+. Disable Schema Registry import mode:
++
+IMPORTANT: This step is required to return the target Schema Registry to normal operations.
++
+The target Schema Registry must be in import mode for schema migration to work (enabled automatically by `make setup`). After migration completes, disable import mode:
++
 [,bash]
 ----
-make verify
+curl -X PUT http://localhost:28081/mode \
+  -H "Content-Type: application/json" \
+  -u 'admin-user:admin-secret-password' \
+  -d '{"mode":"READWRITE"}'
 ----
-
-This command checks:
-
-* All topics are migrated
-* Partition counts match
-* Message counts match
-* Cleanup policies are preserved
-* Schemas are migrated
++
+Import mode allows the migrator to register schemas with preserved IDs and versions. When migration is done, return to readwrite mode for normal operations.
 
 == Configuration
 
@@ -190,14 +210,7 @@ The migrator uses the principle of least privilege with non-superuser accounts. 
 * `config/migrator-config.yaml`: Migrator settings and Schema Registry sync
 * `docker-compose.yml`: Service ports and environment variables
 
-== Clean up
-
-To stop and remove all containers and data:
-
-[,bash]
-----
-make clean
-----
+This lab uses single-node clusters and demo credentials for simplicity. For production migrations, use multi-node clusters with strong, randomly generated passwords stored in a secrets manager such as HashiCorp Vault or AWS Secrets Manager.
 
 == Troubleshoot
 
@@ -239,6 +252,15 @@ Then restart the migrator:
 [,bash]
 ----
 docker compose restart migrator
+----
+
+== Clean up
+
+To stop and remove all containers and data:
+
+[,bash]
+----
+make clean
 ----
 
 == Next steps
