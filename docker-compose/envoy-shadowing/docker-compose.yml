@@ -1,0 +1,123 @@
+# Envoy + Shadowing Combined Lab
+# ===============================
+#
+# Combines Redpanda Shadowing (data replication) with Envoy proxy (transparent client routing)
+# for production-ready disaster recovery without client reconfiguration.
+#
+# ARCHITECTURE:
+#   Clients → Envoy (9092) → Source Cluster (priority 0) / Shadow Cluster (priority 1)
+#                            ↓ Shadowing replication ↓
+#                         Shadow Cluster (offset-preserving replica)
+#
+# ENVIRONMENT VARIABLES:
+#   REDPANDA_VERSION - Redpanda image tag (default: v25.3.4)
+#   ENVOY_VERSION    - Envoy image tag (default: contrib-v1.31-latest)
+#
+# PORTS:
+#   9092  - Envoy Kafka proxy (clients connect here)
+#   9901  - Envoy admin interface
+#   19092 - Source cluster Kafka (direct access)
+#   29092 - Shadow cluster Kafka (direct access)
+
+services:
+  # Source Cluster (Primary)
+  redpanda-source:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: redpanda-source
+    hostname: redpanda-source
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda-source:9092,external://localhost:19092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda-source:33145
+      - --advertise-rpc-addr redpanda-source:33145
+      - --mode dev-container
+      - --smp 1
+      - --set redpanda.enable_shadow_linking=true
+    ports:
+      - "19092:19092"
+      - "18081:18081"
+      - "19644:9644"
+    networks:
+      - redpanda-network
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Shadow Cluster (DR Target)
+  redpanda-shadow:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v25.3.4}
+    container_name: redpanda-shadow
+    hostname: redpanda-shadow
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-shadow:9092,external://localhost:29092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-shadow:33145
+      - --advertise-rpc-addr redpanda-shadow:33145
+      - --mode dev-container
+      - --smp 1
+      - --set redpanda.enable_shadow_linking=true
+    ports:
+      - "29092:29092"
+      - "28081:28081"
+      - "29644:9644"
+    volumes:
+      - ./config:/config
+    networks:
+      - redpanda-network
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Envoy Proxy for transparent client routing
+  # NOTE: We use the 'contrib' image variant because it includes the Kafka broker filter
+  # (envoy.filters.network.kafka_broker) which is not included in the standard Envoy image.
+  # This filter enables Envoy to understand Kafka protocol for intelligent routing.
+  envoy:
+    image: envoyproxy/envoy:${ENVOY_VERSION:-contrib-v1.31-latest}
+    container_name: envoy-proxy
+    ports:
+      - "9092:9092"
+      - "9901:9901"
+    volumes:
+      - ./envoy-proxy/envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - redpanda-network
+    depends_on:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-shadow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/bash -c 'echo > /dev/tcp/localhost/9901' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Python client for testing (kafka-python works with Envoy)
+  python-client:
+    image: python:3.11-slim
+    container_name: python-client
+    command: ["/bin/bash", "-c", "pip install kafka-python && tail -f /dev/null"]
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - redpanda-network
+    depends_on:
+      - envoy
+
+networks:
+  redpanda-network:
+    driver: bridge
