@@ -1,0 +1,202 @@
+= Disaster Recovery with Envoy and Shadowing
+:env-docker: true
+:page-categories: High Availability, Disaster Recovery, Integration
+:description: Combine Redpanda Shadowing for data replication with Envoy proxy for transparent client routing during disaster recovery.
+:page-layout: lab
+:page-topic-type: lab
+:personas: platform_operator, streaming_developer
+// Learning objectives
+:learning-objective-1: Set up Shadowing for offset-preserving data replication
+:learning-objective-2: Configure Envoy for automatic client routing during failover
+:learning-objective-3: Execute a complete disaster recovery failover
+
+// (test start {"id":"envoy-shadowing-dr", "description": "Envoy + Shadowing disaster recovery"})
+// (step {"action":"runShell", "command": "docker compose down -v 2>/dev/null || true", "workingDirectory": "../docker-compose/envoy-shadowing"})
+
+ifdef::env-site[]
+This lab demonstrates a disaster recovery setup that combines xref:ROOT:manage:disaster-recovery/shadowing/index.adoc[Redpanda Shadowing] with https://www.envoyproxy.io/[Envoy proxy^].
+endif::[]
+ifndef::env-site[]
+This lab demonstrates a disaster recovery setup that combines https://docs.redpanda.com/current/manage/disaster-recovery/[Redpanda Shadowing^] with https://www.envoyproxy.io/[Envoy proxy^].
+endif::[]
+
+* **Shadowing** provides offset-preserving, byte-for-byte data replication between clusters
+* **Envoy** provides transparent client routing without requiring client reconfiguration
+
+https://www.envoyproxy.io/[Envoy^] is a high-performance proxy that can route traffic intelligently based on backend health. In this setup, Envoy routes Kafka clients to the active cluster and automatically fails over to the shadow cluster when the source becomes unavailable. This eliminates the need to reconfigure clients during disaster recovery.
+
+In this lab, you will:
+
+* {learning-objective-1}
+* {learning-objective-2}
+* {learning-objective-3}
+
+== Prerequisites
+
+You need https://docs.docker.com/compose/install/[Docker and Docker Compose^].
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/docker-compose/envoy-shadowing
+----
+
+. Start the environment:
++
+[,bash]
+----
+docker compose up -d --wait
+----
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../docker-compose/envoy-shadowing", "timeout": 180000})
+
+. Verify both clusters are healthy:
++
+[,bash]
+----
+docker exec redpanda-source rpk cluster health
+docker exec redpanda-shadow rpk cluster health
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-source rpk cluster health", "output": "/Healthy/"})
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk cluster health", "output": "/Healthy/"})
+
+. Create a topic on the source cluster:
++
+[,bash]
+----
+docker exec redpanda-source rpk topic create demo-topic --partitions 3 --replicas 1
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-source rpk topic create demo-topic --partitions 3 --replicas 1", "output": "/OK/"})
+
+. Create a shadow link to replicate data from source to shadow:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow create \
+  --config-file /config/shadow-link.yaml \
+  --no-confirm \
+  -X admin.hosts=redpanda-shadow:9644
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow create --config-file /config/shadow-link.yaml --no-confirm -X admin.hosts=redpanda-shadow:9644", "output": "/Successfully created/"})
+
+. Verify the shadow link is active:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow status demo-shadow-link -X admin.hosts=redpanda-shadow:9644
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow status demo-shadow-link -X admin.hosts=redpanda-shadow:9644", "output": "/ACTIVE/"})
+
+. Produce messages through Envoy (routes to source cluster):
++
+[,bash]
+----
+docker exec python-client python3 /scripts/test-producer.py
+----
+// (step {"action":"runShell", "command": "docker exec python-client python3 /scripts/test-producer.py", "output": "/OK/"})
+// (step {"action":"wait", "duration": 5000})
+
+. Verify data replicated to shadow (lag should be 0):
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow status demo-shadow-link -X admin.hosts=redpanda-shadow:9644 | grep -A5 "demo-topic"
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow status demo-shadow-link -X admin.hosts=redpanda-shadow:9644", "output": "/demo-topic/"})
+
+== Simulate disaster and failover
+
+. Stop the source cluster to simulate a disaster:
++
+[,bash]
+----
+docker stop redpanda-source
+----
++
+Envoy detects the failure in 10-15 seconds and routes traffic to the shadow cluster.
+// (step {"action":"runShell", "command": "docker stop redpanda-source"})
+// (step {"action":"wait", "duration": 30000})
+
+. Read replicated data from shadow through Envoy:
++
+[,bash]
+----
+docker exec python-client python3 /scripts/test-consumer.py
+----
++
+Consumers can read from shadow topics immediately after Envoy fails over.
+// (step {"action":"runShell", "command": "docker exec python-client python3 /scripts/test-consumer.py", "output": "/OK/"})
+
+. Execute shadow failover to enable writes:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow failover demo-shadow-link --all --no-confirm \
+  -X admin.hosts=redpanda-shadow:9644
+----
++
+Shadow topics are read-only until you run the failover command. This prevents split-brain scenarios where both clusters accept writes.
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow failover demo-shadow-link --all --no-confirm -X admin.hosts=redpanda-shadow:9644", "output": "/Successfully initiated/"})
+// (step {"action":"wait", "duration": 5000})
+
+. Produce new messages to the failed-over shadow cluster:
++
+[,bash]
+----
+docker exec python-client python3 /scripts/test-producer.py
+----
+// (step {"action":"runShell", "command": "docker exec python-client python3 /scripts/test-producer.py", "output": "/OK/"})
+
+== Clean up
+
+Stop and remove the demo environment:
+
+[,bash]
+----
+docker compose down -v
+----
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../docker-compose/envoy-shadowing"})
+
+// (test end)
+
+== What you explored
+
+In this lab, you:
+
+* Set up Shadowing between source and shadow clusters with offset-preserving replication
+* Configured Envoy for automatic client routing based on cluster health
+* Simulated a disaster by stopping the source cluster
+* Verified consumers can read replicated data through Envoy immediately after failover
+* Executed `rpk shadow failover` to enable writes on the shadow cluster
+* Produced new messages to the failed-over cluster without client reconfiguration
+
+The following table summarizes the roles of each component in this disaster recovery setup:
+
+|===
+| Component | Role | Automatic?
+
+| Shadowing
+| Data replication with preserved offsets
+| Yes
+
+| Envoy
+| Client routing to healthy cluster
+| Yes
+
+| `rpk shadow failover`
+| Enable writes on shadow topics
+| No (manual)
+|===
+
+== Suggested reading
+
+ifdef::env-site[]
+* xref:ROOT:manage:disaster-recovery/shadowing/index.adoc[Shadowing for Disaster Recovery]
+endif::[]
+ifndef::env-site[]
+* https://docs.redpanda.com/current/manage/disaster-recovery/[Shadowing for Disaster Recovery^]
+endif::[]
+* https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/kafka_broker_filter[Envoy Kafka Broker Filter^]

@@ -1,0 +1,85 @@
+# Envoy Configuration for Shadowing + Envoy Combined Setup
+# =========================================================
+#
+# Routes clients to source cluster (priority 0) with automatic failover
+# to shadow cluster (priority 1) when source is unhealthy.
+#
+# This provides transparent client routing only.
+# Shadowing handles data replication between clusters.
+# After failover, run `rpk shadow failover` to enable writes on shadow.
+
+admin:
+  address:
+    socket_address:
+      protocol: TCP
+      address: 0.0.0.0
+      port_value: 9901
+
+static_resources:
+  listeners:
+  - name: kafka_listener
+    address:
+      socket_address:
+        protocol: TCP
+        address: 0.0.0.0
+        port_value: 9092
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.kafka_broker
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.kafka_broker.v3.KafkaBroker
+          stat_prefix: kafka_broker
+          id_based_broker_address_rewrite_spec:
+            rules:
+            - id: 0
+              host: envoy
+              port: 9092
+      - name: envoy.filters.network.tcp_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: kafka_tcp
+          cluster: kafka_cluster
+          access_log:
+          - name: envoy.access_loggers.stdout
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+
+  clusters:
+  - name: kafka_cluster
+    connect_timeout: 5s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    # Health checks against Schema Registry
+    health_checks:
+    - timeout: 2s
+      interval: 3s
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      http_health_check:
+        path: /schemas/types
+    load_assignment:
+      cluster_name: kafka_cluster
+      endpoints:
+      # Priority 0: Source cluster (receives all traffic when healthy)
+      - priority: 0
+        lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: redpanda-source
+                port_value: 9092
+            health_check_config:
+              port_value: 8081
+      # Priority 1: Shadow cluster (failover target)
+      - priority: 1
+        lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: redpanda-shadow
+                port_value: 9092
+            health_check_config:
+              port_value: 8081
+    common_lb_config:
+      healthy_panic_threshold:
+        value: 0.0
