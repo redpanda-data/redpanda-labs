@@ -1,0 +1,383 @@
+= Multi-Topic Fan-Out to Iceberg Tables with Wasm Transforms
+:env-docker: true
+:page-layout: lab
+:page-categories: Data Transforms, Iceberg, Wasm, Tiered Storage, Schema Registry, Stream Processing
+:description: Route batched events to multiple Iceberg-enabled topics using Wasm transforms with Schema Registry wire format encoding, creating a streaming data lakehouse pipeline.
+
+ifndef::env-site[]
+:imagesdir: ../../docs/modules/data-transforms/images/
+endif::[]
+
+== Overview
+
+This lab demonstrates how to build a streaming data lakehouse using Redpanda's Wasm data transforms and Iceberg integration. You'll deploy a transform that routes messages from a single input topic to multiple domain-specific output topics, each configured as an Iceberg table for analytics.
+
+A Go producer parses JSON batches and sends individual messages to an input topic. The transform reads routing headers and fans out messages to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against JSON Schemas in Schema Registry and writes to Iceberg tables.
+
+This approach offers several advantages:
+
+* No external ETL. Routing happens inside Redpanda brokers using Wasm transforms.
+* Low latency. In-broker processing is faster than external routing systems.
+* Schema Registry validates every routed message using JSON Schema.
+* Iceberg tables are immediately queryable by Spark.
+* Operational simplicity. A single Redpanda cluster handles routing, validation, and storage.
+
+*Use cases:*
+
+* Multi-tenant data routing to separate lakehouse tables
+* CDC events routed by table name to analytics destinations
+* Event-driven architectures with domain separation
+* Real-time data warehouse ingestion
+
+== Prerequisites
+
+* https://docs.docker.com/compose/install/[Docker and Docker Compose]
+* https://docs.redpanda.com/current/get-started/rpk-install/[rpk CLI] installed
+* https://go.dev/doc/install[Go 1.19 through 1.24] (required for building transforms and the producer)
+
+=== Architecture diagram
+
+----
+┌─────────────────┐
+│  Sample Batches │ (sample-batches.txt - JSON)
+└────────┬────────┘
+         │ Go producer (franz-go)
+         ▼
+┌──────────────────────────────────┐
+│  Producer (main.go)              │
+│ • Parse JSON batches             │
+│ • For each update:               │
+│   - Send plain JSON to events    │
+│   - Add target_table header      │
+└────────┬─────────────────────────┘
+         │ Plain JSON with headers
+         ▼
+┌─────────────────┐
+│  Input Topic    │ (events - plain JSON)
+└────────┬────────┘
+         │ Transform reads headers
+         ▼
+┌──────────────────────────────────┐
+│ Wasm Transform (transform.go)    │
+│ • Read target_table header       │
+│ • Route plain JSON with          │
+│   ToTopic()                      │
+└─────┬───────┬────────┬───────────┘
+      │       │        │
+      ▼       ▼        ▼
+┌─────┴───────┴────────┴──────┐
+│ Iceberg-Enabled Topics       │
+│ • orders                     │
+│ • inventory                  │
+│ • customers                  │
+│ (mode: value_schema_latest)  │
+└─────────┬────────────────────┘
+          │ Redpanda:
+          │ • Validates against JSON Schema
+          │ • Writes to Iceberg tables in Tiered Storage
+          ▼
+┌──────────────────────────────┐
+│  Object Storage              │ (MinIO)
+│  Data in Iceberg format      │
+│  + REST Catalog metadata     │
+└─────────┬────────────────────┘
+          │
+          ▼
+┌──────────────────────────────┐
+│  Spark / Jupyter             │
+│  Query Iceberg tables:       │
+│  • lab.redpanda.orders       │
+│  • lab.redpanda.inventory    │
+│  • lab.redpanda.customers    │
+└──────────────────────────────┘
+----
+
+== Run the lab
+
+=== Set up the environment
+
+. Clone the repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+----
+
+. Change into the lab directory:
++
+[,bash]
+----
+cd redpanda-labs/data-transforms/go/iceberg-fanout
+----
+
+. Set environment variables for Redpanda and Console versions:
++
+[,bash]
+----
+export REDPANDA_VERSION=v25.3.7
+export REDPANDA_CONSOLE_VERSION=v3.0.0
+----
+
+. Start all services with Docker Compose:
++
+[,bash]
+----
+docker compose up -d
+----
++
+This starts Redpanda, MinIO (S3-compatible storage), Iceberg REST catalog, Redpanda Console, and Spark with Jupyter.
+
+. Create an rpk profile for the lab:
++
+[,bash]
+----
+rpk profile create iceberg-fanout --from-profile profile.yml
+----
+
+=== Register schemas in Schema Registry
+
+Redpanda uses Schema Registry with JSON Schema to automatically validate messages routed to output topics.
+
+. Register the JSON Schema for the `orders` topic:
++
+[,bash]
+----
+rpk registry schema create orders-value --schema schemas/orders.json
+----
++
+Example output:
++
+[,role="no-copy"]
+----
+SUBJECT       VERSION  ID    TYPE
+orders-value  1        1     JSON
+----
+
+. Register the schema for the `inventory` topic:
++
+[,bash]
+----
+rpk registry schema create inventory-value --schema schemas/inventory.json
+----
+
+. Register the schema for the `customers` topic:
++
+[,bash]
+----
+rpk registry schema create customers-value --schema schemas/customers.json
+----
+
+. Verify all schemas are registered:
++
+[,bash]
+----
+rpk registry schema list
+----
++
+Example output:
++
+[,role="no-copy"]
+----
+SUBJECT          VERSION  ID    TYPE
+customers-value  1        3     JSON
+inventory-value  1        2     JSON
+orders-value     1        1     JSON
+----
++
+NOTE: With `value_schema_latest` mode, Redpanda automatically uses the latest schema version to validate messages.
+
+=== Create topics
+
+. Create the input topic for batched events (no Iceberg configuration):
++
+[,bash]
+----
+rpk topic create events
+----
+
+. Create Iceberg-enabled output topics with Schema Registry integration:
++
+[,bash]
+----
+rpk topic create orders --topic-config=redpanda.iceberg.mode=value_schema_latest
+rpk topic create inventory --topic-config=redpanda.iceberg.mode=value_schema_latest
+rpk topic create customers --topic-config=redpanda.iceberg.mode=value_schema_latest
+----
++
+The `value_schema_latest` mode tells Redpanda to automatically validate incoming messages against the latest JSON Schema from Schema Registry and write to Iceberg tables.
+
+. Verify all topics are created:
++
+[,bash]
+----
+rpk topic list
+----
+
+=== Build and deploy the transform
+
+NOTE: The transform source code is provided in `transform/transform.go`. If you were creating a new transform from scratch, you would start with `rpk transform init` to scaffold the project.
+
+. Build and deploy the transform:
++
+[,bash]
+----
+cd transform
+rpk transform build
+rpk transform deploy -i events -o orders -o inventory -o customers
+----
+
+. Verify the transform is deployed:
++
+[,bash]
+----
+rpk transform list
+----
++
+Example output:
++
+[,role="no-copy"]
+----
+NAME       INPUT TOPIC  OUTPUT TOPIC                  RUNNING  LAG
+transform  events       orders, inventory, customers  1 / 1    0
+----
+
+=== Build and run the producer
+
+The lab includes a Go producer (using franz-go) that reads JSON batches and sends individual messages to the events topic with routing headers.
+
+. Build the producer:
++
+[,bash]
+----
+cd ..
+cd producer
+go mod download
+go build -o produce-events
+----
+
+. Understand the sample data format:
++
+The `sample-batches.txt` file contains JSON batches. Each batch has multiple table updates:
++
+[,json]
+----
+{
+  "updates": [
+    {"table": "orders", "data": {"order_id": "ORD-1001", "amount": 99.99, "timestamp": 1708185600000}},
+    {"table": "inventory", "data": {"product_id": "P100", "quantity": 50, "timestamp": 1708185600000}},
+    {"table": "customers", "data": {"customer_id": "C5001", "name": "Alice Johnson", "timestamp": 1708185600000}}
+  ]
+}
+----
++
+The producer parses each batch, extracts the individual updates, and sends plain JSON to the events topic with a `target_table` header.
+
+=== Produce sample data
+
+[,bash]
+----
+cat ../sample-batches.txt | ./produce-events
+----
+
+This sends all 10 batches from the file (30 total messages).
+
+=== Verify routing in Redpanda Console
+
+. Open Redpanda Console at http://localhost:8080
+
+. Navigate to Topics and check each topic to see the routed messages and verify the transform is working correctly:
++
+* `events`: Input topic containing the original batched JSON messages
+* `orders`: Output topic containing only order updates
+* `inventory`: Output topic containing only inventory updates
+* `customers`: Output topic containing only customer updates
+
+=== Query Iceberg tables with Spark
+
+The Iceberg-enabled topics automatically write data to object storage, with the Iceberg REST catalog tracking table metadata (schemas, snapshots, manifest files). When you query these tables in Spark, it uses the REST catalog to discover table structures and locate the data files in MinIO.
+
+. Open Jupyter at http://localhost:8888
+
+. Open the provided notebook `Query-Fanout-Tables.ipynb` which contains pre-built queries for analyzing the routed data, or create your own notebook with the following queries:
+
+==== Count records in each table
+
+[,python]
+----
+# Initialize Spark session (if not already done)
+from pyspark.sql import SparkSession
+
+# Count records in each Iceberg table
+print("Orders:", spark.sql("SELECT COUNT(*) FROM lab.redpanda.orders").first()[0])
+print("Inventory:", spark.sql("SELECT COUNT(*) FROM lab.redpanda.inventory").first()[0])
+print("Customers:", spark.sql("SELECT COUNT(*) FROM lab.redpanda.customers").first()[0])
+----
+
+==== View routed data
+
+[,python]
+----
+# Show recent orders
+spark.sql("""
+    SELECT order_id, amount, timestamp
+    FROM lab.redpanda.orders
+    ORDER BY timestamp DESC
+    LIMIT 5
+""").show()
+
+# Show inventory levels
+spark.sql("""
+    SELECT product_id, quantity, timestamp
+    FROM lab.redpanda.inventory
+    ORDER BY timestamp DESC
+    LIMIT 5
+""").show()
+
+# Show customers
+spark.sql("""
+    SELECT customer_id, name, timestamp
+    FROM lab.redpanda.customers
+    ORDER BY timestamp DESC
+    LIMIT 5
+""").show()
+----
+
+==== Verify schema enforcement
+
+[,python]
+----
+# Show table schemas to verify correct data types
+print("Orders schema:")
+spark.sql("DESCRIBE lab.redpanda.orders").show()
+
+print("\nInventory schema:")
+spark.sql("DESCRIBE lab.redpanda.inventory").show()
+
+print("\nCustomers schema:")
+spark.sql("DESCRIBE lab.redpanda.customers").show()
+----
+
+NOTE: It may take a few seconds for data to appear in Iceberg tables after producing. Redpanda writes to Iceberg based on the `iceberg_target_lag_ms` setting (5 seconds in this lab).
+
+== Clean up
+
+Stop and remove all containers:
+
+[,bash]
+----
+docker compose down -v
+----
+
+Delete the rpk profile:
+
+[,bash]
+----
+rpk profile delete iceberg-fanout
+----
+
+== See also
+
+* xref:develop:data-transforms/build.adoc#multi-topic-fanout[Multi-topic fan-out with Schema Registry]
+* xref:manage:iceberg/about-iceberg-topics.adoc[]
+* xref:manage:schema-reg/schema-reg-overview.adoc[Schema Registry Overview]: Schema management and wire format
+* xref:reference:data-transforms/golang-sdk.adoc[]
