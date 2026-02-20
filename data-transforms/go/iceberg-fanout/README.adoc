@@ -386,5 +386,5 @@ rpk profile delete iceberg-fanout
 
 * xref:develop:data-transforms/build.adoc#multi-topic-fanout[Multi-topic fan-out with Schema Registry]
 * xref:manage:iceberg/about-iceberg-topics.adoc[]
-* xref:manage:schema-reg/schema-reg-overview.adoc[Schema Registry Overview]: Schema management and wire format
+* xref:manage:schema-reg/schema-reg-overview.adoc[]
 * xref:reference:data-transforms/golang-sdk.adoc[]
