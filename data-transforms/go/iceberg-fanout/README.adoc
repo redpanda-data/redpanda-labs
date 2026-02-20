@@ -1,7 +1,7 @@
 = Multi-Topic Fan-Out to Iceberg Tables Using Wasm Transforms
 :env-docker: true
 :page-layout: lab
-:page-categories: Data Transforms, Iceberg, Wasm, Tiered Storage, Schema Registry, Stream Processing
+:page-categories: Data Transforms, Iceberg, Tiered Storage, Schema Registry, Stream Processing
 :description: Route batched events to multiple Iceberg-enabled topics using Wasm transforms with JSON Schema validation, creating a streaming data lakehouse pipeline.
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
@@ -381,10 +381,3 @@ Delete the rpk profile:
 ----
 rpk profile delete iceberg-fanout
 ----
-
-== See also
-
-* xref:develop:data-transforms/build.adoc#multi-topic-fanout[Multi-topic fan-out with Schema Registry]
-* xref:manage:iceberg/about-iceberg-topics.adoc[]
-* xref:manage:schema-reg/schema-reg-overview.adoc[]
-* xref:reference:data-transforms/golang-sdk.adoc[]
