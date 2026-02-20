@@ -1,11 +1,18 @@
-= Multi-Topic Fan-Out to Iceberg Tables with Wasm Transforms
+= Multi-Topic Fan-Out to Iceberg Tables Using Wasm Transforms
 :env-docker: true
 :page-layout: lab
 :page-categories: Data Transforms, Iceberg, Wasm, Tiered Storage, Schema Registry, Stream Processing
-:description: Route batched events to multiple Iceberg-enabled topics using Wasm transforms with Schema Registry wire format encoding, creating a streaming data lakehouse pipeline.
-
+:description: Route batched events to multiple Iceberg-enabled topics using Wasm transforms with JSON Schema validation, creating a streaming data lakehouse pipeline.
+// Set up attributes to hold the latest version of Redpanda and Redpanda Console.
+// For GitHub, hard-code the latest version to these values:
 ifndef::env-site[]
-:imagesdir: ../../docs/modules/data-transforms/images/
+:latest-redpanda-version: 25.3.7
+:latest-console-version: 3.0.0
+endif::[]
+// For the docs site, use the built-in attributes that store the latest version as fetched from GitHub releases.
+ifdef::env-site[]
+:latest-redpanda-version: {full-version}
+// All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
 == Overview
@@ -114,8 +121,8 @@ cd redpanda-labs/data-transforms/go/iceberg-fanout
 +
 [,bash]
 ----
-export REDPANDA_VERSION=v25.3.7
-export REDPANDA_CONSOLE_VERSION=v3.0.0
+export REDPANDA_VERSION=v{latest-redpanda-version}
+export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
 . Start all services with Docker Compose:
@@ -283,7 +290,7 @@ This sends all 10 batches from the file (30 total messages).
 
 === Verify routing in Redpanda Console
 
-. Open Redpanda Console at http://localhost:8080
+. Open Redpanda Console at http://localhost:8080.
 
 . Navigate to Topics and check each topic to see the routed messages and verify the transform is working correctly:
 +
@@ -296,7 +303,7 @@ This sends all 10 batches from the file (30 total messages).
 
 The Iceberg-enabled topics automatically write data to object storage, with the Iceberg REST catalog tracking table metadata (schemas, snapshots, manifest files). When you query these tables in Spark, it uses the REST catalog to discover table structures and locate the data files in MinIO.
 
-. Open Jupyter at http://localhost:8888
+. Open Jupyter at http://localhost:8888.
 
 . Open the provided notebook `Query-Fanout-Tables.ipynb` which contains pre-built queries for analyzing the routed data, or create your own notebook with the following queries:
 
