@@ -17,11 +17,11 @@ endif::[]
 
 == Overview
 
-This lab demonstrates how to build a streaming data lakehouse using Redpanda's Wasm data transforms and Iceberg integration. You'll deploy a transform that routes messages from a single input topic to multiple domain-specific output topics, each configured as an Iceberg table for analytics.
+This lab demonstrates how to build a streaming data lakehouse using Redpanda's Wasm data transforms and Iceberg integration. You'll deploy a transform that performs true 1:N fanout, parsing batch messages and routing individual updates from a single input topic to multiple domain-specific output topics, each configured as an Iceberg table for analytics.
 
-A Go producer parses JSON batches and sends individual messages to an input topic. The transform reads routing headers and fans out messages to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against JSON Schemas in Schema Registry and writes to Iceberg tables.
+A Go producer sends complete JSON batches to an input topic. The transform parses each batch, extracts individual updates, and fans them out to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against JSON Schemas in Schema Registry and writes to Iceberg tables.
 
-The multi-topic fanout approach using transforms offers several advantages:
+This approach offers several advantages:
 
 * No external ETL. Routing happens inside Redpanda brokers using Wasm transforms.
 * Low latency. In-broker processing is faster than external routing systems.
@@ -52,23 +52,23 @@ Consider this approach for use cases like:
          ▼
 ┌──────────────────────────────────┐
 │  Producer (main.go)              │
-│ • Parse JSON batches             │
-│ • For each update:               │
-│   - Send plain JSON to events    │
-│   - Add target_table header      │
+│ • Send complete batch JSON       │
+│   to events topic                │
+│ • No parsing or routing          │
 └────────┬─────────────────────────┘
-         │ Plain JSON with headers
+         │ Complete batch JSON
          ▼
 ┌─────────────────┐
-│  Input Topic    │ (events - plain JSON)
+│  Input Topic    │ (events - batch JSON)
 └────────┬────────┘
-         │ Transform reads headers
+         │ Transform parses batches
          ▼
 ┌──────────────────────────────────┐
 │ Wasm Transform (transform.go)    │
-│ • Read target_table header       │
-│ • Route plain JSON with          │
-│   ToTopic()                      │
+│ • Parse batch JSON               │
+│ • Extract individual updates     │
+│ • Fan out to target topics       │
+│   (1:N transformation)           │
 └─────┬───────┬────────┬───────────┘
       │       │        │
       ▼       ▼        ▼
@@ -244,13 +244,13 @@ Example output:
 +
 [,role="no-copy"]
 ----
-NAME       INPUT TOPIC  OUTPUT TOPIC                  RUNNING  LAG
-transform  events       orders, inventory, customers  1 / 1    0
+NAME           INPUT TOPIC  OUTPUT TOPIC                  RUNNING  LAG
+events-fanout  events       orders, inventory, customers  1 / 1    0
 ----
 
 === Build and run the producer
 
-The lab includes a Go producer (using franz-go) that reads JSON batches and sends individual messages to the events topic with routing headers.
+The lab includes a Go producer (using franz-go) that reads JSON batches and sends complete batch messages to the events topic for the transform to parse.
 
 . Build the producer:
 +
@@ -277,7 +277,7 @@ The `sample-batches.txt` file contains JSON batches. Each batch has multiple tab
 }
 ----
 +
-The producer parses each batch, extracts the individual updates, and sends plain JSON to the events topic with a `target_table` header.
+The producer sends the entire batch JSON as a single message to the events topic. The transform then parses each batch and fans out the individual updates to their target topics.
 
 === Produce sample data
 
@@ -286,7 +286,7 @@ The producer parses each batch, extracts the individual updates, and sends plain
 cat ../sample-batches.txt | ./produce-events
 ----
 
-This sends all 10 batches from the file (30 total messages).
+This sends all 10 batches from the file. The transform will fan out these 10 batch messages into 30 individual messages (10 to each output topic).
 
 === Verify routing in Redpanda Console
 
@@ -294,10 +294,25 @@ This sends all 10 batches from the file (30 total messages).
 
 . Navigate to Topics and check each topic to see the routed messages and verify the transform is working correctly:
 +
-* `events`: Input topic containing the original batched JSON messages
-* `orders`: Output topic containing only order updates
-* `inventory`: Output topic containing only inventory updates
-* `customers`: Output topic containing only customer updates
+* `events`: Input topic containing 10 complete batch JSON messages (each with "updates" array)
+* `orders`: Output topic containing 10 individual order updates
+* `inventory`: Output topic containing 10 individual inventory updates
+* `customers`: Output topic containing 10 individual customer updates
++
+Notice the fanout: 10 batch messages became 30 individual messages across the three output topics.
+
+. Check transform logs to verify the fanout processing:
++
+[,bash]
+----
+rpk transform logs events-fanout
+----
++
+You should see log entries showing:
++
+* "Processing batch with 3 updates" (for each input batch)
+* "Routed update to orders", "Routed update to inventory", "Routed update to customers"
+* "Successfully fanned out 3 updates" (for each batch)
 
 === Query Iceberg tables with Spark
 

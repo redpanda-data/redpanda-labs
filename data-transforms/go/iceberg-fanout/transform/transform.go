@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 
 	"github.com/redpanda-data/redpanda/src/transform-sdk/go/transform"
@@ -13,48 +14,55 @@ var validTopics = map[string]bool{
 	"customers": true,
 }
 
-func main() {
-	log.Printf("Starting multi-topic fanout transform")
-	transform.OnRecordWritten(routeMessage)
+type BatchMessage struct {
+	Updates []TableUpdate `json:"updates"`
 }
 
-// routeMessage reads the target_table header and routes the message
-// to the appropriate output topic. Messages contain plain JSON that
-// will be validated by Redpanda against the latest schema in Schema Registry.
-func routeMessage(event transform.WriteEvent, writer transform.RecordWriter) error {
-	// Read the target_table header to determine routing
-	targetTable := ""
-	for _, header := range event.Record().Headers {
-		if string(header.Key) == "target_table" {
-			targetTable = string(header.Value)
-			break
-		}
-	}
+type TableUpdate struct {
+	Table string          `json:"table"`
+	Data  json.RawMessage `json:"data"`
+}
 
-	if targetTable == "" {
-		log.Printf("No target_table header found, skipping message")
-		return nil
-	}
+func main() {
+	log.Printf("Starting multi-topic fanout transform")
+	transform.OnRecordWritten(fanoutBatch)
+}
 
-	if !validTopics[targetTable] {
-		log.Printf("Invalid target table: %s", targetTable)
-		return nil
-	}
+func fanoutBatch(event transform.WriteEvent, writer transform.RecordWriter) error {
+	record := event.Record()
 
-	// Route the message to the target topic
-	// Message value contains plain JSON that Redpanda will validate
-	// against the latest schema from Schema Registry (value_schema_latest mode)
-	record := transform.Record{
-		Key:     event.Record().Key,
-		Value:   event.Record().Value,
-		Headers: event.Record().Headers,
-	}
-
-	if err := writer.Write(record, transform.ToTopic(targetTable)); err != nil {
-		log.Printf("Failed to route message to %s: %v", targetTable, err)
+	// Parse the batch JSON
+	var batch BatchMessage
+	if err := json.Unmarshal(record.Value, &batch); err != nil {
+		log.Printf("Failed to parse batch JSON: %v", err)
 		return err
 	}
 
-	log.Printf("Routed message to topic: %s", targetTable)
+	log.Printf("Processing batch with %d updates", len(batch.Updates))
+
+	// Fan out each update to its target topic
+	for i, update := range batch.Updates {
+		// Validate the target topic
+		if !validTopics[update.Table] {
+			log.Printf("  [%d] Skipping invalid target table: %s", i, update.Table)
+			continue
+		}
+
+		// Create output record with just the data portion
+		outRecord := transform.Record{
+			Key:   record.Key,
+			Value: update.Data, // Individual update data, not batch wrapper
+		}
+
+		// Write to the target topic
+		if err := writer.Write(outRecord, transform.ToTopic(update.Table)); err != nil {
+			log.Printf("  [%d] Failed to route to %s: %v", i, update.Table, err)
+			return err
+		}
+
+		log.Printf("  [%d] Routed update to %s", i, update.Table)
+	}
+
+	log.Printf("Successfully fanned out %d updates", len(batch.Updates))
 	return nil
 }

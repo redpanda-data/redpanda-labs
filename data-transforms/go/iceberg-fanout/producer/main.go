@@ -44,6 +44,7 @@ func main() {
 			continue
 		}
 
+		// Optional: Validate it's valid JSON
 		var batch BatchMessage
 		if err := json.Unmarshal([]byte(line), &batch); err != nil {
 			log.Printf("Failed to parse batch: %v", err)
@@ -51,27 +52,20 @@ func main() {
 		}
 
 		batchCount++
-		fmt.Printf("📦 Batch %d\n", batchCount)
+		fmt.Printf("📦 Batch %d (contains %d updates)\n", batchCount, len(batch.Updates))
 
-		// Send each update to events topic
-		for _, update := range batch.Updates {
-			// Create record with plain JSON value
-			// Add header for transform routing
-			record := &kgo.Record{
-				Topic: "events",
-				Value: update.Data, // Plain JSON - no encoding!
-				Headers: []kgo.RecordHeader{
-					{Key: "target_table", Value: []byte(update.Table)},
-				},
-			}
+		// Send the ENTIRE batch as a single message
+		record := &kgo.Record{
+			Topic: "events",
+			Value: []byte(line), // Raw JSON batch
+			// No headers - transform will parse
+		}
 
-			// Produce synchronously (for simplicity in demo)
-			if err := client.ProduceSync(ctx, record).FirstErr(); err != nil {
-				log.Printf("  ✗ Failed to produce %s: %v", update.Table, err)
-			} else {
-				messageCount++
-				fmt.Printf("  ✓ %s\n", update.Table)
-			}
+		if err := client.ProduceSync(ctx, record).FirstErr(); err != nil {
+			log.Printf("  ✗ Failed to produce batch: %v", err)
+		} else {
+			messageCount++
+			fmt.Printf("  ✓ Sent batch to events topic\n")
 		}
 		fmt.Println()
 	}
@@ -81,6 +75,6 @@ func main() {
 	}
 
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("✓ Produced %d messages from %d batches\n", messageCount, batchCount)
+	fmt.Printf("✓ Produced %d batches\n", messageCount)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }

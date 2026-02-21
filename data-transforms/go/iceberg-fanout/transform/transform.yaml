@@ -1,6 +1,6 @@
-name: transform
+name: events-fanout
 language: tinygo
-description: Route batched events to multiple Iceberg-enabled topics
+description: Parse batch messages and fan out individual updates to multiple Iceberg-enabled topics
 input_topic: events
 output_topics:
   - orders
