@@ -21,7 +21,7 @@ This lab demonstrates how to build a streaming data lakehouse using Redpanda's W
 
 A Go producer parses JSON batches and sends individual messages to an input topic. The transform reads routing headers and fans out messages to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against JSON Schemas in Schema Registry and writes to Iceberg tables.
 
-This approach offers several advantages:
+The multi-topic fanout approach using transforms offers several advantages:
 
 * No external ETL. Routing happens inside Redpanda brokers using Wasm transforms.
 * Low latency. In-broker processing is faster than external routing systems.
@@ -29,7 +29,7 @@ This approach offers several advantages:
 * Iceberg tables are immediately queryable by Spark.
 * Operational simplicity. A single Redpanda cluster handles routing, validation, and storage.
 
-*Use cases:*
+Consider this approach for use cases like:
 
 * Multi-tenant data routing to separate lakehouse tables
 * CDC events routed by table name to analytics destinations
@@ -119,7 +119,7 @@ cd redpanda-labs/data-transforms/go/iceberg-fanout
 
 . Set environment variables for Redpanda and Console versions:
 +
-[,bash]
+[,bash,subs="attributes+"]
 ----
 export REDPANDA_VERSION=v{latest-redpanda-version}
 export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
