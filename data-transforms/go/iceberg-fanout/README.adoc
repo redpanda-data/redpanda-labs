@@ -1,7 +1,7 @@
 = Multi-Topic Fan-Out to Iceberg Tables Using Wasm Transforms
 :env-docker: true
 :page-layout: lab
-:page-categories: Data Transforms, Iceberg, Tiered Storage, Schema Registry, Stream Processing
+:page-categories: Data Transforms, Iceberg
 :description: Route batched events to multiple Iceberg-enabled topics using Wasm transforms with JSON Schema validation, creating a streaming data lakehouse pipeline.
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
@@ -19,12 +19,12 @@ endif::[]
 
 This lab demonstrates how to build a streaming data lakehouse using Redpanda's Wasm data transforms and Iceberg integration. You'll deploy a transform that performs true 1:N fanout, parsing batch messages and routing individual updates from a single input topic to multiple domain-specific output topics, each configured as an Iceberg table for analytics.
 
-A Go producer sends complete JSON batches to an input topic. The transform parses each batch, extracts individual updates, and fans them out to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against JSON Schemas in Schema Registry and writes to Iceberg tables.
+A Go producer sends complete JSON batches to an input topic. The transform dynamically registers JSON schemas in Schema Registry during initialization, then parses each batch, extracts individual updates, and fans them out to the appropriate Iceberg-enabled topics. Redpanda automatically validates messages against the registered schemas and writes to Iceberg tables.
 
 This approach offers several advantages:
 
 * No external ETL. Routing happens inside Redpanda brokers using Wasm transforms.
-* Low latency. In-broker processing is faster than external routing systems.
+* Dynamic schema registration. The transform registers schemas automatically during initialization, eliminating manual setup steps.
 * Schema Registry validates every routed message using JSON Schema.
 * Iceberg tables are immediately queryable by Spark.
 * Operational simplicity. A single Redpanda cluster handles routing, validation, and storage.
@@ -65,6 +65,7 @@ Consider this approach for use cases like:
          ▼
 ┌──────────────────────────────────┐
 │ Wasm Transform (transform.go)    │
+│ • Register schemas (on startup)  │
 │ • Parse batch JSON               │
 │ • Extract individual updates     │
 │ • Fan out to target topics       │
@@ -141,58 +142,6 @@ This starts Redpanda, MinIO (S3-compatible storage), Iceberg REST catalog, Redpa
 rpk profile create iceberg-fanout --from-profile profile.yml
 ----
 
-=== Register schemas in Schema Registry
-
-Redpanda uses Schema Registry with JSON Schema to automatically validate messages routed to output topics.
-
-. Register the JSON Schema for the `orders` topic:
-+
-[,bash]
-----
-rpk registry schema create orders-value --schema schemas/orders.json
-----
-+
-Example output:
-+
-[,role="no-copy"]
-----
-SUBJECT       VERSION  ID    TYPE
-orders-value  1        1     JSON
-----
-
-. Register the schema for the `inventory` topic:
-+
-[,bash]
-----
-rpk registry schema create inventory-value --schema schemas/inventory.json
-----
-
-. Register the schema for the `customers` topic:
-+
-[,bash]
-----
-rpk registry schema create customers-value --schema schemas/customers.json
-----
-
-. Verify all schemas are registered:
-+
-[,bash]
-----
-rpk registry schema list
-----
-+
-Example output:
-+
-[,role="no-copy"]
-----
-SUBJECT          VERSION  ID    TYPE
-customers-value  1        3     JSON
-inventory-value  1        2     JSON
-orders-value     1        1     JSON
-----
-+
-NOTE: With `value_schema_latest` mode, Redpanda automatically uses the latest schema version to validate messages.
-
 === Create topics
 
 . Create the input topic for batched events (no Iceberg configuration):
@@ -222,7 +171,9 @@ rpk topic list
 
 === Build and deploy the transform
 
-NOTE: The transform source code is provided in `transform/transform.go`. If you were creating a new transform from scratch, you would start with `rpk transform init` to scaffold the project.
+The transform automatically registers JSON schemas in Schema Registry during initialization.
+
+NOTE: The transform source code is provided in `transform/transform.go`. It demonstrates how to use the Schema Registry client to register schemas dynamically. If you were creating a new transform from scratch, you would start with `rpk transform init` to scaffold the project.
 
 . Build and deploy the transform:
 +
@@ -232,6 +183,14 @@ cd transform
 rpk transform build
 rpk transform deploy -i events -o orders -o inventory -o customers
 ----
++
+During deployment, the transform registers three JSON schemas with Schema Registry:
++
+* `orders-value` - validates order records
+* `inventory-value` - validates inventory records
+* `customers-value` - validates customer records
++
+The `CreateSchema` method is idempotent, so redeploying the transform is safe and won't create duplicate schemas.
 
 . Verify the transform is deployed:
 +
@@ -247,6 +206,43 @@ Example output:
 NAME           INPUT TOPIC  OUTPUT TOPIC                  RUNNING  LAG
 events-fanout  events       orders, inventory, customers  1 / 1    0
 ----
+
+. Check the transform logs to confirm schema registration:
++
+[,bash]
+----
+rpk transform logs events-fanout
+----
++
+You should see log entries like:
++
+[,role="no-copy"]
+----
+Registering schemas in Schema Registry...
+Registered schema for orders: ID=1
+Registered schema for inventory: ID=2
+Registered schema for customers: ID=3
+Starting multi-topic fanout transform
+----
+
+. Verify schemas are registered in Schema Registry:
++
+[,bash]
+----
+rpk registry schema list
+----
++
+Example output:
++
+[,role="no-copy"]
+----
+SUBJECT          VERSION  ID    TYPE
+customers-value  1        3     JSON
+inventory-value  1        2     JSON
+orders-value     1        1     JSON
+----
++
+TIP: The Iceberg-enabled output topics use `value_schema_latest` mode, which tells Redpanda to automatically validate incoming messages against the latest JSON Schema from Schema Registry before writing to Iceberg tables.
 
 === Build and run the producer
 
