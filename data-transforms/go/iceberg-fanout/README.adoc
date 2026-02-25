@@ -74,13 +74,13 @@ Consider this approach for use cases like:
 └─────┬───────┬────────┬───────────┘
       │       │        │
       ▼       ▼        ▼
-┌─────┴───────┴────────┴──────┐
-│ Iceberg-Enabled Topics         │
-│ • orders                       │
-│ • inventory                    │
-│ • customers                    │
-│ (mode: value_schema_id_prefix) │
-└─────────┬────────────────────┘
+┌─────┴───────┴────────┴───────────┐
+│ Iceberg-Enabled Topics           │
+│ • orders                         │
+│ • inventory                      │
+│ • customers                      │
+│ (mode: value_schema_id_prefix)   │
+└─────────┬────────────────────────┘
           │ Redpanda:
           │ • Validates against Avro Schema
           │ • Writes to Iceberg tables in Tiered Storage
@@ -191,13 +191,11 @@ During deployment, the transform registers three Avro schemas with Schema Regist
 * `inventory-value` - Inventory message schema (product_id, quantity, timestamp)
 * `customers-value` - Customer message schema (customer_id, name, timestamp)
 +
-The `CreateSchema` method is idempotent, so redeploying the transform is safe and won't create duplicate schemas.
-+
 For each routed message, the transform:
 +
-1. Converts JSON data to Avro format using the goavro library
-2. Adds Schema Registry wire format header: `[0x00][schema_id (4 bytes BE)][avro bytes]`
-3. Routes the encoded message to the appropriate output topic
+. Converts JSON data to Avro format using the goavro library
+. Adds Schema Registry wire format header: `[0x00][schema_id (4 bytes BE)][avro bytes]`
+. Routes the encoded message to the appropriate output topic
 
 . Verify the transform is deployed:
 +
@@ -248,8 +246,6 @@ customers-value  1        3     AVRO
 inventory-value  1        2     AVRO
 orders-value     1        1     AVRO
 ----
-+
-TIP: The Iceberg-enabled output topics use `value_schema_id_prefix` mode. Messages include Schema Registry wire format (magic byte + schema ID + Avro payload), which Redpanda uses to validate against the registered Avro schemas before writing to Iceberg tables.
 
 === Build and run the producer
 
