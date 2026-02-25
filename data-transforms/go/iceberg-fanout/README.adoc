@@ -187,15 +187,19 @@ rpk transform deploy -i events -o orders -o inventory -o customers
 +
 During deployment, the transform registers three Avro schemas with Schema Registry:
 +
+--
 * `orders-value` - Order message schema (order_id, amount, timestamp)
 * `inventory-value` - Inventory message schema (product_id, quantity, timestamp)
 * `customers-value` - Customer message schema (customer_id, name, timestamp)
+--
 +
 For each routed message, the transform:
 +
+--
 . Converts JSON data to Avro format using the goavro library
 . Adds Schema Registry wire format header: `[0x00][schema_id (4 bytes BE)][avro bytes]`
 . Routes the encoded message to the appropriate output topic
+--
 
 . Verify the transform is deployed:
 +
@@ -297,8 +301,6 @@ This sends all 10 batches from the file. The transform will fan out these 10 bat
 * `orders`: Output topic containing 10 individual order updates
 * `inventory`: Output topic containing 10 individual inventory updates
 * `customers`: Output topic containing 10 individual customer updates
-+
-Notice the fanout: 10 batch messages became 30 individual messages across the three output topics.
 
 . Check transform logs to verify the fanout processing:
 +
