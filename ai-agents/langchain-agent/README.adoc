@@ -265,5 +265,5 @@ Stop the agent by pressing kbd:[Ctrl+C] in the terminal.
 ifdef::env-site[]
 == Next steps
 
-* xref:ai-agents:ROOT:ai-gateway.adoc[]
+* https://docs.redpanda.com/redpanda-cloud/ai-agents/ai-gateway/[Learn more about the AI Gateway]
 endif::[]
