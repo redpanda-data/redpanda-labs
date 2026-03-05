@@ -1,7 +1,7 @@
 = Build a LangGraph Agent with the Redpanda AI Gateway
 :description: Build a ReAct agent using LangGraph that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling.
 :page-layout: lab
-:page-categories: Development
+:page-categories: Agentic Data Plane
 :page-cloud: true
 :page-topic-type: lab
 :learning-objective-1: Run a LangGraph ReAct agent that connects to the Redpanda AI Gateway
