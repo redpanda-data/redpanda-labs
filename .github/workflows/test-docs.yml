@@ -47,11 +47,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Increase AIO limit for Redpanda
+      - name: Increase AIO limit for envoy shadowing
         if: needs.setup.outputs.envoy-shadowing == 'true'
         run: |
           # Redpanda uses Linux AIO. With 6 brokers each needing ~10000 events,
           # we exceed the default limit of 65536. Increase it.
+          sudo sysctl -w fs.aio-max-nr=1048576
+
+      - name: Increase AIO limit for redpanda migrator
         if: needs.setup.outputs.redpanda-migrator == 'true'
         run: |
           # Redpanda uses Linux AIO. Increase limit to support multiple brokers.
