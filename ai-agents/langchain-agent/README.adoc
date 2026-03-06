@@ -12,7 +12,7 @@ ifndef::env-site[]
 :imagesdir: ../../docs/modules/ai-agents/images/
 endif::[]
 
-This lab demonstrates how to build a Python agent using https://langchain-ai.github.io/langgraph/[LangGraph] that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling, with optional https://www.langchain.com/langsmith[LangSmith] tracing.
+This lab demonstrates how to build a Python agent using https://langchain-ai.github.io/langgraph/[LangGraph^] that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling, with optional https://www.langchain.com/langsmith[LangSmith^] tracing.
 
 After completing this lab, you will be able to:
 
@@ -29,11 +29,11 @@ After completing this lab, you will be able to:
 == Prerequisites
 
 * Python 3.12 or later
-* https://python-poetry.org/[Poetry] for dependency management
+* https://python-poetry.org/[Poetry^] for dependency management
 * A Redpanda Cloud account with:
 ** A cluster that has the AI Gateway enabled
 ** A service account with permissions to access the cluster
-* (Optional) A https://www.langchain.com/langsmith[LangSmith] API key for tracing
+* (Optional) A https://www.langchain.com/langsmith[LangSmith^] API key for tracing
 
 == Get the lab files
 
@@ -71,7 +71,7 @@ REDPANDA_GATEWAY_ID=<your-gateway-id>
 REDPANDA_GATEWAY_URL=<your-gateway-url>
 ----
 +
-You can find these values in the https://cloud.redpanda.com[Redpanda Cloud console].
+You can find these values in the https://cloud.redpanda.com[Redpanda Cloud console^].
 
 == Run the agent
 
