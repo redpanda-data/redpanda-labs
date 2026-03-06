@@ -49,7 +49,7 @@ poetry run redpanda-agent
 ```
 [Python Agent (LangGraph)]
     |
-    |-- OIDC client_credentials flow (authlib) --> Bearer token
+    |-- OIDC client_credentials flow (authlib) --> Redpanda Cloud IdP --> Bearer token
     |
     |-- ChatOpenAI(base_url="https://ai-gateway.d6b2mdhdvf8ruqkbl2mg.clusters.rdpa.co/v1", ...)
     |       |
@@ -118,28 +118,26 @@ llm = ChatOpenAI(
 
 ### OIDC authentication
 
-The identity provider metadata is at:
+Authentication is against the **Redpanda Cloud OIDC identity provider**, not
+the gateway itself. The gateway validates the resulting tokens.
+
+The `GatewayAuth` class uses **OIDC discovery** to resolve the token endpoint
+automatically from the issuer (`https://auth.prd.cloud.redpanda.com`):
+
 ```
 https://auth.prd.cloud.redpanda.com/.well-known/openid-configuration
 ```
 
-The token endpoint (from the discovery document) is:
-```
-POST https://auth.prd.cloud.redpanda.com/oauth/token
-```
-
-Use a plain `client_credentials` grant with no explicit scope:
+It fetches this discovery document on the first token request, then uses a
+`client_credentials` grant with the audience `cloudv2-production.redpanda.cloud`:
 
 ```python
-token_response = await client.fetch_token(
-    url=token_endpoint,
-    grant_type="client_credentials",
-)
+auth = GatewayAuth()  # uses REDPANDA_ISSUER env var or default
+token = await auth.get_token()
 ```
 
-> **Note:** The required scopes depend on the IdP and client configuration.
-> Some gateway deployments may require `scope=openid` — check your IdP's
-> discovery document and client settings if you get `access_denied` errors.
+> **Note:** The AI agent is responsible for refreshing tokens before they expire.
+> `GatewayAuth` handles this automatically with a 30-second buffer.
 
 ### Every request needs two headers
 
