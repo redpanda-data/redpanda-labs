@@ -1,0 +1,271 @@
+= Build a LangGraph Agent with the Redpanda AI Gateway
+:description: Build a ReAct agent using LangGraph that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling.
+:page-layout: lab
+:page-categories: Agentic Data Plane
+:page-cloud: true
+:page-topic-type: lab
+:learning-objective-1: Run a LangGraph ReAct agent that connects to the Redpanda AI Gateway
+:learning-objective-2: Describe the OIDC authentication flow used by the AI Gateway
+:learning-objective-3: Use the AI Gateway's OpenAI-compatible interface to route requests to an upstream LLM provider
+// Set image path for GitHub rendering
+ifndef::env-site[]
+:imagesdir: ../../docs/modules/ai-agents/images/
+endif::[]
+
+This lab demonstrates how to build a Python agent using https://langchain-ai.github.io/langgraph/[LangGraph^] that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling, with optional https://www.langchain.com/langsmith[LangSmith^] tracing.
+
+After completing this lab, you will be able to:
+
+* [ ] {learning-objective-1}
+* [ ] {learning-objective-2}
+* [ ] {learning-objective-3}
+
+== What you'll explore
+
+* *AI Gateway as a unified LLM interface*: The gateway provides an OpenAI-compatible API that routes to any upstream model provider (such as Google Gemini), handling provider-specific authentication and request translation.
+* *OIDC authentication*: Authenticate with the gateway using a Redpanda Cloud service account and the OAuth 2.0 `client_credentials` grant.
+* *Dynamic MCP tool discovery*: Use the gateway's MCP endpoint to discover and call tools at runtime, without hard-coding tool definitions.
+
+== Prerequisites
+
+* Python 3.12 or later
+* https://python-poetry.org/[Poetry^] for dependency management
+* A Redpanda Cloud account with:
+** A cluster that has the AI Gateway enabled
+** A service account with permissions to access the cluster
+* (Optional) A https://www.langchain.com/langsmith[LangSmith^] API key for tracing
+
+== Get the lab files
+
+Clone the repository and navigate to the lab directory:
+
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/ai-agents/langchain-agent
+----
+
+== Configure credentials
+
+. Install the project dependencies:
++
+[,bash]
+----
+poetry install
+----
+
+. Copy the example environment file and fill in your credentials:
++
+[,bash]
+----
+cp .env.example .env.local
+----
+
+. Edit `.env.local` with your Redpanda Cloud service account credentials:
++
+[source,env]
+----
+REDPANDA_CLIENT_ID=<your-client-id>
+REDPANDA_CLIENT_SECRET=<your-client-secret>
+REDPANDA_GATEWAY_ID=<your-gateway-id>
+REDPANDA_GATEWAY_URL=<your-gateway-url>
+----
++
+You can find these values in the https://cloud.redpanda.com[Redpanda Cloud console^].
+
+== Run the agent
+
+Start the agent:
+
+[,bash]
+----
+poetry run redpanda-agent
+----
+
+A terminal UI opens where you can interact with the agent. The agent authenticates with the AI Gateway using your service account credentials, discovers available MCP tools, and routes your requests through the gateway to the configured LLM provider.
+
+== Explore the lab
+
+The following sections walk through the key technical components of this lab, including the agent's architecture, authentication, and dynamic tool discovery.
+
+=== Architecture
+
+The agent uses the following architecture:
+
+[,text]
+----
+Python Agent (LangGraph)
+  |
+  |-- OIDC client_credentials flow --> Redpanda Cloud IdP --> Bearer token
+  |
+  |-- ChatOpenAI (base_url=<gateway-url>/v1)
+  |       |
+  |       +-- OpenAI-compatible API via gateway
+  |
+  |-- MCP tools via gateway (<gateway-url>/mcp/)
+  |       |
+  |       +-- tool_search --> discovers available tools dynamically
+  |       +-- AgentMiddleware --> injects and executes discovered tools
+  |
+  |-- LangSmith tracing (optional)
+----
+
+=== How the AI Gateway works
+
+The AI Gateway is a multi-tenant platform where each user configures their own gateway instance. The gateway translates upstream provider responses into the OpenAI chat completions format, so clients interact with a standard interface regardless of the underlying model provider.
+
+Every request to the gateway requires two headers:
+
+[cols="1,2,2"]
+|===
+| Header | Value | Purpose
+
+| `Authorization`
+| `Bearer <oidc_token>`
+| OIDC authentication
+
+| `rp-aigw-id`
+| `<your-gateway-id>`
+| Identifies the gateway instance
+|===
+
+Because the gateway speaks the OpenAI format, you use `ChatOpenAI` from `langchain-openai`:
+
+[,python]
+----
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url=f"{gateway_url}/v1",
+    api_key="not-used",  # Auth is via OIDC Bearer token
+    model="google/gemini-3-flash-preview",
+    default_headers={
+        "Authorization": f"Bearer {token}",
+        "rp-aigw-id": gateway_id,
+    },
+)
+----
+
+=== OIDC authentication
+
+Authentication is against the *Redpanda Cloud OIDC identity provider*, not the gateway itself. The gateway validates the resulting tokens.
+
+The `GatewayAuth` class uses OIDC discovery to resolve the token endpoint automatically from the issuer:
+
+----
+https://auth.prd.cloud.redpanda.com/.well-known/openid-configuration
+----
+
+It fetches this discovery document on the first token request, then uses a `client_credentials` grant with the audience `cloudv2-production.redpanda.cloud`:
+
+[,python]
+----
+auth = GatewayAuth()  # uses REDPANDA_ISSUER env var or default
+token = await auth.get_token()
+----
+
+NOTE: The AI agent is responsible for refreshing tokens before they expire. `GatewayAuth` handles this automatically with a 30-second buffer before expiry.
+
+=== Dynamic MCP tool discovery
+
+The gateway's MCP endpoint uses a two-level tool discovery pattern:
+
+. `list_tools()` returns a small set of static tools, including `tool_search`.
+. Calling `tool_search` discovers additional tools available on the gateway (such as `redpanda-docs:ask_redpanda_question`).
+. The set of discovered tools can change at any time because they are not static.
+
+The agent uses LangChain's `AgentMiddleware` to inject dynamically discovered tools at runtime:
+
+[,python]
+----
+from langchain.agents import create_agent
+
+graph = create_agent(
+    model=llm,
+    tools=static_tools,       # For example, [tool_search]
+    middleware=[middleware],   # MCPGatewayMiddleware
+)
+----
+
+The `MCPGatewayMiddleware` provides two hooks:
+
+* `awrap_model_call`: Injects discovered tools into the model's tool list before each LLM call.
+* `awrap_tool_call`: Intercepts calls to discovered tools and executes them through the MCP `ClientSession.call_tool()` method.
+
+NOTE: MCP tool names like `redpanda-docs:ask_redpanda_question` contain colons, which are not valid in OpenAI tool names. The middleware sanitizes names by replacing invalid characters with hyphens and maintains a mapping to the original MCP name.
+
+=== MCP transport
+
+Use `streamable_http` as the transport:
+
+[,python]
+----
+client = MultiServerMCPClient({
+    "gateway": {
+        "transport": "streamable_http",
+        "url": f"{gateway_url}/mcp/",
+        "headers": { ... },
+    },
+})
+----
+
+=== Enable LangSmith tracing (optional)
+
+To enable tracing, set these environment variables in your `.env.local` file:
+
+[source,env]
+----
+LANGSMITH_API_KEY=<your-langsmith-api-key>
+LANGSMITH_PROJECT=redpanda-agent
+LANGSMITH_TRACING=true
+----
+
+LangGraph auto-detects these variables and traces all LLM and tool calls.
+
+=== Project structure
+
+[cols="1,2"]
+|===
+| File | Purpose
+
+| `src/agent/auth.py`
+| OIDC token management using `authlib`
+
+| `src/agent/gateway.py`
+| `ChatOpenAI` configured for the AI Gateway
+
+| `src/agent/tools.py`
+| MCP tool loading and `AgentMiddleware` for dynamic discovery
+
+| `src/agent/graph.py`
+| LangGraph agent graph
+
+| `src/agent/main.py`
+| Terminal UI entry point
+|===
+
+=== Key dependencies
+
+[cols="1,2"]
+|===
+| Package | Purpose
+
+| `langchain-openai`
+| Gateway uses OpenAI format regardless of upstream provider
+
+| `langchain-mcp-adapters`
+| MCP client and tool conversion
+
+| `authlib`
+| OIDC `client_credentials` with token caching
+|===
+
+== Clean up
+
+Stop the agent by pressing kbd:[Ctrl+C] in the terminal.
+
+ifdef::env-site[]
+== Next steps
+
+* https://docs.redpanda.com/redpanda-cloud/ai-agents/ai-gateway/[Learn more about the AI Gateway]
+endif::[]
