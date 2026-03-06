@@ -4,15 +4,15 @@
 :page-categories: Agentic Data Plane
 :page-cloud: true
 :page-topic-type: lab
-:learning-objective-1: Run a LangGraph ReAct agent that connects to the Redpanda AI Gateway
-:learning-objective-2: Describe the OIDC authentication flow used by the AI Gateway
-:learning-objective-3: Use the AI Gateway's OpenAI-compatible interface to route requests to an upstream LLM provider
+:learning-objective-1: Build and run a LangGraph ReAct agent that connects to the Redpanda AI Gateway
+:learning-objective-2: Authenticate with the AI Gateway using the OIDC client_credentials flow
+:learning-objective-3: Configure LangGraph to route LLM requests through the AI Gateway's OpenAI-compatible interface
 // Set image path for GitHub rendering
 ifndef::env-site[]
 :imagesdir: ../../docs/modules/ai-agents/images/
 endif::[]
 
-This lab demonstrates how to build a Python agent using https://langchain-ai.github.io/langgraph/[LangGraph^] that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling, with optional https://www.langchain.com/langsmith[LangSmith^] tracing.
+Build a Python agent using https://langchain-ai.github.io/langgraph/[LangGraph^] that connects to the Redpanda AI Gateway for unified LLM access and MCP tool calling, with optional https://www.langchain.com/langsmith[LangSmith^] tracing.
 
 After completing this lab, you will be able to:
 
@@ -45,7 +45,7 @@ git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/ai-agents/langchain-agent
 ----
 
-== Configure credentials
+== Set up the project
 
 . Install the project dependencies:
 +
@@ -82,11 +82,11 @@ Start the agent:
 poetry run redpanda-agent
 ----
 
-A terminal UI opens where you can interact with the agent. The agent authenticates with the AI Gateway using your service account credentials, discovers available MCP tools, and routes your requests through the gateway to the configured LLM provider.
+The agent opens a terminal UI where you can interact with it. The agent authenticates with the AI Gateway using your service account credentials, discovers available MCP tools, and displays a chat prompt. From there, your requests are routed through the gateway to the configured LLM provider.
 
 == Explore the lab
 
-The following sections walk through the key technical components of this lab, including the agent's architecture, authentication, and dynamic tool discovery.
+Key technical components include the agent architecture, authentication flow, and dynamic tool discovery.
 
 === Architecture
 
@@ -152,6 +152,7 @@ Authentication is against the *Redpanda Cloud OIDC identity provider*, not the g
 
 The `GatewayAuth` class uses OIDC discovery to resolve the token endpoint automatically from the issuer:
 
+[,text]
 ----
 https://auth.prd.cloud.redpanda.com/.well-known/openid-configuration
 ----
@@ -267,5 +268,5 @@ Stop the agent by pressing kbd:[Ctrl+C] in the terminal.
 ifdef::env-site[]
 == Next steps
 
-* https://docs.redpanda.com/redpanda-cloud/ai-agents/ai-gateway/[Learn more about the AI Gateway]
+* https://docs.redpanda.com/redpanda-cloud/ai-agents/ai-gateway/[Learn more about the AI Gateway^]
 endif::[]
