@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "redpanda-agent"
+version = "0.1.0"
+description = "LangGraph agent with Redpanda AI Gateway and MCP tools"
+packages = [{include = "agent", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+langchain = ">=1.0,<2.0"
+langchain-core = ">=1.0,<2.0"
+langchain-anthropic = ">=0.3,<1.0"
+langchain-openai = ">=0.3"
+langgraph = ">=1.0,<2.0"
+langsmith = ">=0.3.0"
+langchain-mcp-adapters = ">=0.1"
+mcp = ">=1.9"
+authlib = ">=1.6"
+httpx = ">=0.27"
+python-dotenv = ">=1.0"
+textual = ">=3.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.9"
+vulture = ">=2.14"
+
+[tool.poetry.scripts]
+redpanda-agent = "agent.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["C901", "E", "F", "I", "UP", "ANN", "ARG", "RUF"]
+ignore = []
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
