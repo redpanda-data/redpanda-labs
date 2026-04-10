@@ -1,0 +1,78 @@
+{
+  "type": "record",
+  "name": "syslog",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "type",
+      "type": "string"
+    },
+    {
+      "name": "message",
+      "type": "string"
+    },
+    {
+      "name": "host",
+      "type": "string"
+    },
+    {
+      "name": "version",
+      "type": "string"
+    },
+    {
+      "name": "tag",
+      "type": "string"
+    },
+    {
+      "name": "level",
+      "type": "int"
+    },
+    {
+      "name": "facility",
+      "type": "string"
+    },
+    {
+      "name": "severity",
+      "type": "int"
+    },
+    {
+      "name": "appName",
+      "type": "string"
+    },
+    {
+      "name": "remoteAddress",
+      "type": "string"
+    },
+    {
+      "name": "rawMessage",
+      "type": "string"
+    },
+    {
+      "name": "processId",
+      "type": "string"
+    },
+    {
+      "name": "messageId",
+      "type": "string"
+    },
+    {
+      "name": "deviceVendor",
+      "type": "string"
+    },
+    {
+      "name": "deviceProduct",
+      "type": "string"
+    },
+    {
+      "name": "deviceVersion",
+      "type": "string"
+    },
+    {
+      "name": "ts",
+      "type": "int"
+    }
+  ]
+}

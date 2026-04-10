@@ -1,0 +1,233 @@
+= Explore Shadow Linking for Disaster Recovery
+:env-kubernetes: true
+:page-categories: Disaster Recovery, Replication
+:description: Deploy two Redpanda clusters on Kubernetes and configure shadow linking to continuously replicate topics, consumer group offsets, and Schema Registry data.
+:page-layout: lab
+// Set the image path for GitHub rendering
+ifndef::env-site[]
+:imagesdir: ../../docs/modules/kubernetes/images/
+endif::[]
+
+Shadow linking is a built-in disaster recovery mechanism that continuously replicates topics, consumer group offsets, and Schema Registry data from a source cluster to a shadow cluster running on Kubernetes. This lab demonstrates how shadow linking works and how you can use it to fail over to a shadow cluster.
+
+In this lab, you deploy two single-node Redpanda clusters on Kubernetes and configure a shadow link between them. You then run three demo scenarios to explore basic topic shadowing, Schema Registry shadowing, and consumer group failover.
+
+== Prerequisites
+
+You must have the following:
+
+* A Kubernetes cluster with adequate resources (at least 4 CPUs and 8GB memory)
+* https://kubernetes.io/docs/tasks/tools/[kubectl] CLI installed
+* https://helm.sh/docs/intro/install/[Helm 3+] installed
+* https://docs.redpanda.com/current/get-started/rpk-install/[rpk] CLI installed
+
+== What gets deployed
+
+The setup script installs the following components:
+
+* *cert-manager* (namespace: `cert-manager`): Manages TLS certificates
+* *Redpanda Operator* (namespace: `rp-operator`): Manages Redpanda cluster lifecycle
+* *Source cluster* (namespace: `source`): Primary cluster where you write data
+* *Shadow cluster* (namespace: `shadow`): Replication target cluster
+* *ShadowLink resource*: Defines the replication relationship between clusters
+
+The shadow link configuration mirrors all topics using wildcard filtering, replicates consumer group offsets, and synchronizes the Schema Registry, all at 5-second intervals.
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/kubernetes/shadow-linking
+----
+
+. Run the setup script to deploy both clusters and configure shadow linking:
++
+[,bash]
+----
+./setup.sh
+----
++
+The script does the following:
+
+.. Installs cert-manager for TLS certificate management
+.. Deploys the Redpanda Operator
+.. Creates the source and shadow Redpanda clusters
+.. Configures the shadow link between clusters
+.. Sets up port forwarding for local access
+.. Creates rpk profiles for both clusters
+
+. Verify both clusters are healthy:
++
+[,bash]
+----
+rpk --profile source cluster health
+rpk --profile shadow cluster health
+----
+
+== Explore the demos
+
+This lab includes three demo scenarios that build on each other. Run them in order to understand shadow linking capabilities.
+
+=== Demo 1: Basic topic shadowing
+
+This demo shows how topics and messages automatically replicate from the source to the shadow cluster.
+
+. Create a topic on the source cluster:
++
+[,bash]
+----
+./demos/1-basic-shadowing/1-create-topic-on-source.sh
+----
+
+. Produce a message to the source cluster:
++
+[,bash]
+----
+./demos/1-basic-shadowing/2-produce-record-to-source.sh
+----
+
+. List topics on the shadow cluster to verify replication:
++
+[,bash]
+----
+./demos/1-basic-shadowing/3-list-topics-on-shadow.sh
+----
++
+You should see the `basic` topic appear on the shadow cluster.
+
+. Consume messages from both clusters to verify data replication:
++
+[,bash]
+----
+./demos/1-basic-shadowing/4-consume-messages-on-both.sh
+----
++
+The same message appears on both clusters.
+
+=== Demo 2: Schema Registry shadowing
+
+This demo shows how Avro schemas registered on the source cluster replicate to the shadow cluster, allowing shadow-side message deserialization.
+
+. Register an Avro schema on the source cluster:
++
+[,bash]
+----
+./demos/2-schema-shadowing/1-register-schema.sh
+----
+
+. Create a topic for schema-encoded messages:
++
+[,bash]
+----
+./demos/2-schema-shadowing/2-create-topic.sh
+----
+
+. Produce Avro-encoded syslog records to the source cluster:
++
+[,bash]
+----
+./demos/2-schema-shadowing/3-produce-records.sh
+----
+
+. List schemas on both clusters to verify schema replication:
++
+[,bash]
+----
+./demos/2-schema-shadowing/4-list-schemas-on-both.sh
+----
++
+The `syslog-value` schema appears on both clusters.
+
+. Consume raw (encoded) messages from the shadow cluster:
++
+[,bash]
+----
+./demos/2-schema-shadowing/5-consume-raw-messages-from-shadow.sh
+----
+
+. Consume decoded messages from the shadow cluster using the replicated schema:
++
+[,bash]
+----
+./demos/2-schema-shadowing/6-consume-decoded-messages-from-shadow.sh
+----
++
+The shadow cluster can deserialize messages using the replicated schema.
+
+=== Demo 3: Consumer group failover
+
+This demo shows how consumer group offsets replicate to the shadow cluster, allowing consumers to resume from their exact position after a failover.
+
+. Create a topic on the source cluster:
++
+[,bash]
+----
+./demos/3-failover/1-create-topic-on-source.sh
+----
+
+. Produce records and consume them on the source cluster:
++
+[,bash]
+----
+./demos/3-failover/2-produce-and-consume-on-source.sh
+----
++
+This creates a consumer group and processes some messages.
+
+. View consumer group offsets on both clusters:
++
+[,bash]
+----
+./demos/3-failover/3-show-consumer-groups.sh
+----
++
+The consumer group and its offsets are replicated to the shadow cluster.
+
+. Trigger a failover to the shadow cluster:
++
+[,bash]
+----
+./demos/3-failover/4-failover.sh
+----
++
+This command promotes the shadow cluster to become writable.
+
+. Produce more records and consume on the shadow cluster:
++
+[,bash]
+----
+./demos/3-failover/5-produce-and-consume-on-shadow.sh
+----
++
+The consumer resumes from the last committed offset.
+
+. Verify the consumer group offset on the shadow cluster:
++
+[,bash]
+----
+./demos/3-failover/6-show-consumer-group-on-shadow.sh
+----
+
+== Clean up
+
+To stop port forwarding, terminate the background processes:
+
+[,bash]
+----
+kill $(cat local-port-forward.pid)
+----
+
+To delete all resources, remove the namespaces:
+
+[,bash]
+----
+kubectl delete namespace source shadow rp-operator cert-manager
+----
+
+== Suggested reading
+
+* https://docs.redpanda.com/current/manage/kubernetes/k-shadow-linking/[Shadow linking documentation]
+* https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/kubernetes/[Redpanda on Kubernetes]
