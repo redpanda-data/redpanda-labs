@@ -12,8 +12,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --namespace ${CERT_MANAGER_NAMESPACE} \
   --create-namespace \
-  --wait \
-  --quiet 2>/dev/null
+  --wait > /dev/null 2>&1
 
 echo "Installing Redpanda Operator..."
 helm repo add redpanda https://charts.redpanda.com --force-update > /dev/null 2>&1
@@ -22,8 +21,7 @@ helm upgrade --install redpanda-controller redpanda/operator \
   --create-namespace \
   --version v25.3.1 \
   --set crds.enabled=true \
-  --wait \
-  --quiet 2>/dev/null
+  --wait > /dev/null 2>&1
 
 echo "Deploying source cluster (this may take a few minutes)..."
 kubectl apply -f resources/source-cluster.yaml > /dev/null
