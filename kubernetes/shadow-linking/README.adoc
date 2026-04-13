@@ -3,14 +3,10 @@
 :page-categories: Disaster Recovery, Replication
 :description: Deploy two Redpanda clusters on Kubernetes and configure shadow linking to continuously replicate topics, consumer group offsets, and Schema Registry data.
 :page-layout: lab
-// Set the image path for GitHub rendering
-ifndef::env-site[]
-:imagesdir: ../../docs/modules/kubernetes/images/
-endif::[]
 
 Shadow linking is a built-in disaster recovery mechanism that continuously replicates topics, consumer group offsets, and Schema Registry data from a source cluster to a shadow cluster running on Kubernetes. This lab demonstrates how shadow linking works and how you can use it to fail over to a shadow cluster.
 
-In this lab, you deploy two single-node Redpanda clusters on Kubernetes and configure a shadow link between them. You then run three demo scenarios to explore basic topic shadowing, Schema Registry shadowing, and consumer group failover.
+In this lab, you deploy two single-node Redpanda clusters on Kubernetes and configure a shadow link between them. You then explore basic topic shadowing, Schema Registry shadowing, and consumer group failover.
 
 == Prerequisites
 
@@ -50,14 +46,7 @@ cd redpanda-labs/kubernetes/shadow-linking
 ./setup.sh
 ----
 +
-The script does the following:
-
-.. Installs cert-manager for TLS certificate management
-.. Deploys the Redpanda Operator
-.. Creates the source and shadow Redpanda clusters
-.. Configures the shadow link between clusters
-.. Sets up port forwarding for local access
-.. Creates rpk profiles for both clusters
+The script installs cert-manager, deploys the Redpanda Operator, creates the source and shadow clusters, configures the shadow link, sets up port forwarding for local access, and creates rpk profiles for both clusters.
 
 . Verify both clusters are healthy:
 +
@@ -67,33 +56,29 @@ rpk --profile source cluster health
 rpk --profile shadow cluster health
 ----
 
-== Explore the demos
+== Explore basic topic shadowing
 
-This lab includes three demo scenarios that build on each other. Run them in order to understand shadow linking capabilities.
-
-=== Demo 1: Basic topic shadowing
-
-This demo shows how topics and messages automatically replicate from the source to the shadow cluster.
+This section shows how topics and messages automatically replicate from the source to the shadow cluster.
 
 . Create a topic on the source cluster:
 +
 [,bash]
 ----
-./demos/1-basic-shadowing/1-create-topic-on-source.sh
+rpk --profile source topic create basic -p1 -r1
 ----
 
 . Produce a message to the source cluster:
 +
 [,bash]
 ----
-./demos/1-basic-shadowing/2-produce-record-to-source.sh
+echo "Hello, world" | rpk --profile source topic produce basic
 ----
 
-. List topics on the shadow cluster to verify replication:
+. Wait a few seconds for replication, then list topics on the shadow cluster:
 +
 [,bash]
 ----
-./demos/1-basic-shadowing/3-list-topics-on-shadow.sh
+rpk --profile shadow topic list
 ----
 +
 You should see the `basic` topic appear on the shadow cluster.
@@ -102,86 +87,83 @@ You should see the `basic` topic appear on the shadow cluster.
 +
 [,bash]
 ----
-./demos/1-basic-shadowing/4-consume-messages-on-both.sh
+rpk --profile source topic consume basic -n1
+rpk --profile shadow topic consume basic -n1
 ----
 +
 The same message appears on both clusters.
 
-=== Demo 2: Schema Registry shadowing
+== Explore Schema Registry shadowing
 
-This demo shows how Avro schemas registered on the source cluster replicate to the shadow cluster, allowing shadow-side message deserialization.
+This section shows how Avro schemas registered on the source cluster replicate to the shadow cluster, allowing shadow-side message deserialization.
 
 . Register an Avro schema on the source cluster:
 +
 [,bash]
 ----
-./demos/2-schema-shadowing/1-register-schema.sh
+rpk --profile source registry schema create syslog-value --schema resources/syslog.avsc --type avro
 ----
 
 . Create a topic for schema-encoded messages:
 +
 [,bash]
 ----
-./demos/2-schema-shadowing/2-create-topic.sh
+rpk --profile source topic create syslog -p1 -r1
 ----
 
 . Produce Avro-encoded syslog records to the source cluster:
 +
 [,bash]
 ----
-./demos/2-schema-shadowing/3-produce-records.sh
+cat resources/syslogs.json | rpk --profile source topic produce syslog --schema-id=topic
 ----
 
-. List schemas on both clusters to verify schema replication:
+. Wait a few seconds, then list schemas on both clusters:
 +
 [,bash]
 ----
-./demos/2-schema-shadowing/4-list-schemas-on-both.sh
+rpk --profile source registry subject list
+rpk --profile shadow registry subject list
 ----
 +
 The `syslog-value` schema appears on both clusters.
-
-. Consume raw (encoded) messages from the shadow cluster:
-+
-[,bash]
-----
-./demos/2-schema-shadowing/5-consume-raw-messages-from-shadow.sh
-----
 
 . Consume decoded messages from the shadow cluster using the replicated schema:
 +
 [,bash]
 ----
-./demos/2-schema-shadowing/6-consume-decoded-messages-from-shadow.sh
+rpk --profile shadow topic consume syslog -n1 --use-schema-registry -f'%v\n' | jq
 ----
 +
 The shadow cluster can deserialize messages using the replicated schema.
 
-=== Demo 3: Consumer group failover
+== Explore consumer group failover
 
-This demo shows how consumer group offsets replicate to the shadow cluster, allowing consumers to resume from their exact position after a failover.
+This section shows how consumer group offsets replicate to the shadow cluster, allowing consumers to resume from their exact position after a failover.
 
 . Create a topic on the source cluster:
 +
 [,bash]
 ----
-./demos/3-failover/1-create-topic-on-source.sh
+rpk --profile source topic create foo -p1 -r1
 ----
 
 . Produce records and consume them on the source cluster:
 +
 [,bash]
 ----
-./demos/3-failover/2-produce-and-consume-on-source.sh
+seq 0 2 | rpk --profile source topic produce foo
+rpk --profile source topic consume foo -n3 -g consumer-group-foo
 ----
 +
-This creates a consumer group and processes some messages.
+This creates a consumer group and processes the messages.
 
 . View consumer group offsets on both clusters:
 +
 [,bash]
 ----
-./demos/3-failover/3-show-consumer-groups.sh
+rpk --profile source group describe consumer-group-foo
+rpk --profile shadow group describe consumer-group-foo
 ----
 +
 The consumer group and its offsets are replicated to the shadow cluster.
@@ -190,7 +172,8 @@ The consumer group and its offsets are replicated to the shadow cluster.
 +
 [,bash]
 ----
-./demos/3-failover/4-failover.sh
+rpk --profile shadow shadow failover shadow-link --all --no-confirm
+rpk --profile shadow shadow status shadow-link
 ----
 +
 This command promotes the shadow cluster to become writable.
@@ -199,17 +182,11 @@ This command promotes the shadow cluster to become writable.
 +
 [,bash]
 ----
-./demos/3-failover/5-produce-and-consume-on-shadow.sh
+seq 3 5 | rpk --profile shadow topic produce foo
+rpk --profile shadow topic consume foo -n3 -g consumer-group-foo
 ----
 +
-The consumer resumes from the last committed offset.
-
-. Verify the consumer group offset on the shadow cluster:
-+
-[,bash]
-----
-./demos/3-failover/6-show-consumer-group-on-shadow.sh
-----
+The consumer resumes from the last committed offset (3) and consumes the new messages.
 
 == Clean up
 
