@@ -12,10 +12,11 @@ In this lab, you deploy two single-node Redpanda clusters on Kubernetes and conf
 
 You must have the following:
 
-* A Kubernetes cluster with adequate resources (at least 4 CPUs and 8GB memory)
 * https://kubernetes.io/docs/tasks/tools/[kubectl^] CLI installed
 * https://helm.sh/docs/intro/install/[Helm 3+^] installed
 * xref:ROOT:get-started:rpk-install.adoc[rpk] CLI installed
+* https://kind.sigs.k8s.io/docs/user/quick-start/#installation[kind^] installed (for local testing)
+* https://docs.docker.com/get-docker/[Docker^] installed and running
 
 == What gets deployed
 
@@ -37,6 +38,13 @@ The shadow link configuration mirrors all topics using wildcard filtering, repli
 ----
 git clone https://github.com/redpanda-data/redpanda-labs.git
 cd redpanda-labs/kubernetes/shadow-linking
+----
+
+. Create a local Kubernetes cluster using kind:
++
+[,bash]
+----
+kind create cluster --name redpanda-shadow
 ----
 
 . Run the setup script to deploy both clusters and configure shadow linking:
@@ -197,11 +205,11 @@ To stop port forwarding, terminate the background processes:
 kill $(cat local-port-forward.pid)
 ----
 
-To delete all resources, remove the namespaces:
+To delete the kind cluster and all resources:
 
 [,bash]
 ----
-kubectl delete namespace source shadow rp-operator cert-manager
+kind delete cluster --name redpanda-shadow
 ----
 
 == Suggested reading
