@@ -8,7 +8,7 @@ source ./config
 
 echo "Installing cert-manager..."
 helm repo add jetstack https://charts.jetstack.io --force-update > /dev/null 2>&1
-helm install cert-manager jetstack/cert-manager \
+helm upgrade --install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --namespace ${CERT_MANAGER_NAMESPACE} \
   --create-namespace \
