@@ -1,0 +1,4 @@
+export CERT_MANAGER_NAMESPACE=cert-manager
+export OPERATOR_NAMESPACE=rp-operator
+export SOURCE_REDPANDA_NAMESPACE=source
+export SHADOW_REDPANDA_NAMESPACE=shadow
