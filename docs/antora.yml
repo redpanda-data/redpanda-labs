@@ -4,8 +4,10 @@ version: ~
 asciidoc:
   attributes:
     page-header-data:
+      title: "Labs"
+      description: "Hands-on tutorials and example applications."
+      color: "#227093"
       order: 4
-      color: '#227093'
     full-version: 24.2.2
 
 
