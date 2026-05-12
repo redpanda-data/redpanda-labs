@@ -431,7 +431,7 @@ If you encounter issues logging in to Redpanda Console, check the following in y
 * Verify the `oidc_principal_mapping`  matches the claim you want to use for user mapping.
 * Check the `oidc_token_audience` in your Redpanda configuration matches the client ID from the application registration.
 
-include::ROOT:manage:partial$security/oidc/limitations.adoc[]
+include::streaming:manage:partial$security/oidc/limitations.adoc[]
 
 == Suggested reading
 

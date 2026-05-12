@@ -1,0 +1,30 @@
+# Stretch Cluster Configuration
+# This file contains configuration variables for the lab
+
+# Redpanda versions
+REDPANDA_VERSION="v26.1.6"
+OPERATOR_VERSION="v26.1.2"
+
+# Cluster names
+CLUSTER_1_NAME="stretch-east"
+CLUSTER_2_NAME="stretch-west"
+
+# Kubernetes contexts (update these to match your environment)
+CLUSTER_1_CONTEXT="cluster-1"
+CLUSTER_2_CONTEXT="cluster-2"
+
+# Namespace
+NAMESPACE="redpanda"
+
+# Stretch cluster name
+STRETCH_CLUSTER_NAME="redpanda-stretch"
+
+# NodePool names
+NODEPOOL_EAST_NAME="redpanda-stretch-east"
+NODEPOOL_WEST_NAME="redpanda-stretch-west"
+
+# Networking mode: mesh, flat, or mcs
+NETWORKING_MODE="mesh"
+
+# License file path (you must provide your own license)
+LICENSE_FILE="./license.jwt"

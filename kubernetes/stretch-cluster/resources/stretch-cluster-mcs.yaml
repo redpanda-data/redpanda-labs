@@ -1,0 +1,65 @@
+---
+# Example: Stretch Cluster with Multi-Cluster Services (MCS) Mode
+#
+# This configuration uses the "mcs" networking mode, which requires:
+# - Multi-Cluster Services API implementation (Submariner, Lighthouse, or GKE MCS)
+# - ServiceExport resources created for each per-pod service
+# - Uses clusterset.local DNS domain for cross-cluster service discovery
+#
+# Use this mode when:
+# - You have an MCS controller installed (Submariner, Lighthouse)
+# - You want standardized multi-cluster service discovery
+# - You're on GKE with multi-cluster services enabled
+
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: StretchCluster
+metadata:
+  name: redpanda-stretch-mcs
+  namespace: redpanda
+spec:
+  enterprise:
+    licenseSecretRef:
+      name: redpanda-license
+      key: license
+
+  image:
+    repository: docker.redpanda.com/redpandadata/redpanda
+    tag: v26.1.6
+
+  # Multi-Cluster Services mode
+  networking:
+    crossClusterMode: mcs
+
+  auth:
+    sasl:
+      enabled: true
+      secretRef: redpanda-superusers
+
+  tls:
+    enabled: true
+    certs:
+      default:
+        caEnabled: true
+
+  storage:
+    persistentVolume:
+      enabled: true
+      size: 100Gi
+
+  resources:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "2"
+      memory: 4Gi
+
+  # When using MCS mode, the operator will:
+  # 1. Create per-pod Services with selectors in the owning cluster
+  # 2. Create ServiceExport resources alongside each Service
+  # 3. Use clusterset.local DNS domain for seed server addresses
+  # 4. Rely on the MCS controller to sync service endpoints across clusters
+
+  config:
+    cluster:
+      default_topic_replications: 3

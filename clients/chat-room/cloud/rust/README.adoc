@@ -1,6 +1,6 @@
 = Build a Chat Room Application with Redpanda Cloud and Rust
 :description: Create a basic chat room application with Redpanda Cloud and Kafka clients developed with rust-rdkafka.
-:page-context-links: [{"name": "Docker", "to": "redpanda-labs:clients:docker-rust.adoc" },{"name": "Cloud", "to": "redpanda-labs:clients:cloud-rust.adoc" } ]
+:page-context-links: [{"name": "Docker", "to": "labs:clients:docker-rust.adoc" },{"name": "Cloud", "to": "labs:clients:cloud-rust.adoc" } ]
 :page-cloud: true
 :page-categories: Development, Clients
 :page-layout: lab

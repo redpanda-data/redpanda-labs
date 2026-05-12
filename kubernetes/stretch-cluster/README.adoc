@@ -1,0 +1,692 @@
+= Deploy a Stretch Cluster Across Multiple Kubernetes Clusters
+:env-kubernetes: true
+:page-categories: High Availability, Multi-Cluster, Disaster Recovery
+:description: Deploy a single Redpanda cluster across multiple Kubernetes clusters using the Stretch Cluster feature for high availability and disaster recovery.
+:page-layout: lab
+
+A Stretch Cluster allows you to deploy a single logical Redpanda cluster across multiple Kubernetes clusters (e.g., in different availability zones or regions). This provides resilience against Kubernetes cluster failures while maintaining a single, unified Redpanda cluster.
+
+In this lab, you learn about Stretch Cluster architecture, set up the required infrastructure locally using two kind clusters, and understand the configurations needed for cross-cluster deployment.
+
+[IMPORTANT]
+====
+**This is an educational lab demonstrating Stretch Cluster concepts and infrastructure setup.**
+
+The lab automatically sets up:
+
+* 2 kind clusters with cross-cluster pod networking (flat network mode)
+* Redpanda Operator with experimental CRDs and v2 NodePool controller
+* StretchCluster and NodePool custom resources
+* All required Kubernetes configurations
+
+**Current Limitation**: Full Stretch Cluster deployment requires additional operator configuration for multicluster coordination (TLS certificates for inter-operator communication). This lab focuses on infrastructure setup and architecture understanding.
+
+**No Enterprise license needed** - Redpanda includes a 30-day trial license automatically.
+
+⏱️ **Setup time:** ~10-15 minutes
+====
+
+[TIP]
+====
+For production Stretch Cluster deployments, see the https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/kubernetes/[official Redpanda Kubernetes documentation^], which includes full multicluster operator configuration with proper TLS certificate management.
+====
+
+== What is a Stretch Cluster?
+
+A Stretch Cluster deploys Redpanda brokers across multiple Kubernetes clusters while forming a single logical cluster:
+
+* **Resilience**: Survives Kubernetes cluster failures
+* **Geographic distribution**: Brokers in different availability zones or regions
+* **Unified management**: Single cluster configuration across all sites
+* **Consistent data**: All brokers part of the same Raft consensus group
+
+.Stretch Cluster Architecture
+[ditaa]
+....
++------------------+              +------------------+
+|  K8s Cluster 1   |              |  K8s Cluster 2   |
+|                  |              |                  |
+|  +-----------+   |              |  +-----------+   |
+|  | NodePool  |   |              |  | NodePool  |   |
+|  | (3 pods)  |   |<------------>|  | (3 pods)  |   |
+|  +-----------+   |  Cross-      |  +-----------+   |
+|                  |  Cluster Net |                  |
++------------------+              +------------------+
+         |                                 |
+         +---------> Single Logical <------+
+                   Redpanda Cluster
+....
+
+== Key Components
+
+=== StretchCluster CRD
+
+The `StretchCluster` custom resource defines cluster-wide configuration:
+
+* Image versions
+* Enterprise license
+* Authentication (SASL)
+* TLS certificates
+* Listeners (Kafka, Admin, Schema Registry)
+* Storage settings
+* Cross-cluster networking mode
+
+=== NodePool CRD
+
+Each Kubernetes cluster has one or more `NodePool` resources that define:
+
+* Replica count
+* Cluster affinity
+* Node selectors
+* Resource requirements
+* Image overrides (for staged rollouts)
+
+=== Cross-Cluster Networking Modes
+
+Stretch Clusters support three networking modes via `spec.networking.crossClusterMode`:
+
+[cols="1,3,2"]
+|===
+|Mode |Description |Requirements
+
+|`mesh` (default)
+|Uses a service mesh to mirror endpoints across clusters
+|Cilium, Istio, or similar mesh
+
+|`flat`
+|Flat pod network with operator-managed endpoints
+|Pod IPs routable across clusters
+
+|`mcs`
+|Multi-Cluster Services API
+|Submariner, Lighthouse, or GKE MCS
+|===
+
+== Prerequisites
+
+You must have the following:
+
+* https://kubernetes.io/docs/tasks/tools/[kubectl^] CLI installed
+* https://helm.sh/docs/intro/install/[Helm 3+^] installed
+* https://kind.sigs.k8s.io/docs/user/quick-start/#installation[kind^] installed (for local Kubernetes clusters)
+* https://docs.docker.com/get-docker/[Docker^] installed and running
+* At least 8GB RAM available for Docker
+
+[TIP]
+====
+* **No Enterprise license needed** - Redpanda includes a 30-day trial
+* **No rpk CLI needed** - rpk runs inside the Redpanda pods
+* **No cloud infrastructure needed** - Everything runs locally with kind
+====
+
+== Example Configurations
+
+=== Minimal Stretch Cluster (Mesh Mode)
+
+This example creates a stretch cluster across two Kubernetes clusters using the default mesh networking mode:
+
+.stretch-cluster.yaml
+[,yaml]
+----
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: StretchCluster
+metadata:
+  name: redpanda-stretch
+  namespace: redpanda
+spec:
+  # Enterprise license (required)
+  enterprise:
+    licenseSecretRef:
+      name: redpanda-license
+      key: license
+
+  # Image configuration
+  image:
+    repository: docker.redpanda.com/redpandadata/redpanda
+    tag: v26.1.6
+
+  # Authentication
+  auth:
+    sasl:
+      enabled: true
+      secretRef: redpanda-superusers
+
+  # TLS configuration
+  tls:
+    enabled: true
+    certs:
+      default:
+        caEnabled: true
+      external:
+        caEnabled: true
+
+  # Storage
+  storage:
+    persistentVolume:
+      enabled: true
+      size: 100Gi
+      storageClass: fast-ssd
+
+  # Networking mode (mesh is default)
+  networking:
+    crossClusterMode: mesh
+----
+
+.nodepool-east.yaml (Kubernetes Cluster 1)
+[,yaml]
+----
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: NodePool
+metadata:
+  name: redpanda-stretch-east
+  namespace: redpanda
+spec:
+  clusterRef:
+    group: cluster.redpanda.com
+    kind: StretchCluster
+    name: redpanda-stretch
+
+  replicas: 3
+
+  # Sidecar image for operator integration
+  sidecarImage:
+    repository: docker.redpanda.com/redpandadata/redpanda-operator
+    tag: v26.1.2
+
+  # Node affinity for this region/AZ
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-east-1a
+----
+
+.nodepool-west.yaml (Kubernetes Cluster 2)
+[,yaml]
+----
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: NodePool
+metadata:
+  name: redpanda-stretch-west
+  namespace: redpanda
+spec:
+  clusterRef:
+    group: cluster.redpanda.com
+    kind: StretchCluster
+    name: redpanda-stretch
+
+  replicas: 3
+
+  sidecarImage:
+    repository: docker.redpanda.com/redpandadata/redpanda-operator
+    tag: v26.1.2
+
+  # Node affinity for this region/AZ
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-west-2a
+----
+
+=== Flat Network Mode
+
+For environments with a flat pod network (routable IPs across clusters):
+
+[,yaml]
+----
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: StretchCluster
+metadata:
+  name: redpanda-stretch
+spec:
+  # ... other configuration ...
+
+  networking:
+    crossClusterMode: flat
+----
+
+=== Multi-Cluster Services (MCS) Mode
+
+For environments using the Multi-Cluster Services API:
+
+[,yaml]
+----
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: StretchCluster
+metadata:
+  name: redpanda-stretch
+spec:
+  # ... other configuration ...
+
+  networking:
+    crossClusterMode: mcs
+----
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/kubernetes/stretch-cluster
+----
+
+. Run the automated setup script:
++
+[,bash]
+----
+./setup.sh
+----
++
+The script will:
++
+* Create 2 kind clusters (`stretch-east` and `stretch-west`)
+* Configure cross-cluster pod networking
+* Install cert-manager and Redpanda Operator
+* Deploy the Stretch Cluster with one broker per cluster
+* Wait for everything to be ready
++
+This takes approximately 10-15 minutes.
+
+. Verify the infrastructure setup:
++
+[,bash]
+----
+# Check that both kind clusters are running
+kind get clusters
+
+# Verify cross-cluster networking
+kubectl --context kind-stretch-east get nodes
+kubectl --context kind-stretch-west get nodes
+
+# Check operator installation
+kubectl --context kind-stretch-east get pods -n redpanda-system
+kubectl --context kind-stretch-west get pods -n redpanda-system
+
+# View installed CRDs (including StretchCluster and NodePool)
+kubectl --context kind-stretch-east get crd | grep cluster.redpanda.com
+----
+
+. Inspect the Stretch Cluster configuration:
++
+[,bash]
+----
+# View the StretchCluster resource
+kubectl --context kind-stretch-east get stretchcluster -n redpanda -o yaml
+
+# Check NodePool status in both clusters
+kubectl --context kind-stretch-east get nodepool -n redpanda
+kubectl --context kind-stretch-west get nodepool -n redpanda
+
+# Examine NodePool details
+kubectl --context kind-stretch-east describe nodepool redpanda-stretch-east -n redpanda
+----
++
+**Expected Status**: You'll see the StretchCluster and NodePool resources created, but in a "NotBound" state. This is expected - full deployment requires additional operator multicluster configuration.
+
+. Explore the cross-cluster networking:
++
+[,bash]
+----
+# View pod network configuration
+docker network inspect stretch-network
+
+# Check routing configuration on kind nodes
+docker exec stretch-east-control-plane ip route
+
+# Verify pods can reach across clusters (if any test pods exist)
+kubectl --context kind-stretch-east run test --image=busybox --rm -it -- ping <pod-ip-from-cluster-2>
+----
+
+== Understanding the Architecture
+
+This lab demonstrates the foundational infrastructure for a Stretch Cluster:
+
+=== What's Configured
+
+✅ **Cross-cluster networking**: Pods in different clusters can communicate via direct IP routing
+
+✅ **Flat network mode**: `crossClusterMode: flat` configured in StretchCluster spec
+
+✅ **CRD installation**: StretchCluster and NodePool custom resources properly installed
+
+✅ **Operator deployment**: Redpanda Operator running with v2 NodePool controller enabled
+
+✅ **Resource definitions**: StretchCluster and NodePool manifests created and applied
+
+=== What's Missing for Full Deployment
+
+For a production-ready Stretch Cluster, you would also need:
+
+❌ **Multicluster operator mode**: Operators configured to communicate with each other across clusters
+
+❌ **TLS certificates**: Certificates for secure inter-operator communication
+
+❌ **Service mesh or ingress**: For production-grade cross-cluster service discovery (when not using flat networking)
+
+❌ **Proper authentication**: SASL and TLS enabled for Redpanda brokers (disabled in this lab for simplicity)
+
+=== Status Conditions Reference
+
+In a fully deployed Stretch Cluster, you would monitor these conditions:
+
+[cols="1,3"]
+|===
+|Condition |Description
+
+|`Ready`
+|Overall cluster readiness
+
+|`Healthy`
+|All brokers are healthy
+
+|`LicenseValid`
+|Enterprise license is valid
+
+|`ResourcesSynced`
+|Kubernetes resources applied
+
+|`ConfigurationApplied`
+|Redpanda configuration synchronized
+
+|`BootstrapUserSynced`
+|Bootstrap credentials configured
+|===
+
+In this lab, the StretchCluster will show "Waiting for controller" status, and NodePools will show "NotBound" - this is expected without the full multicluster operator configuration.
+
+== What You Learned
+
+By completing this lab, you now understand:
+
+1. **Stretch Cluster Architecture**: How a single Redpanda cluster can span multiple Kubernetes clusters for high availability
+
+2. **Cross-Cluster Networking**: Setting up flat pod networking between Kubernetes clusters using shared Docker networks and static routes
+
+3. **Custom Resources**: The StretchCluster and NodePool CRDs and their relationship
+
+4. **Operator Configuration**: Installing the Redpanda Operator with experimental CRDs and v2 NodePool controller enabled
+
+5. **Networking Modes**: The differences between mesh, flat, and mcs (Multi-Cluster Services) networking modes
+
+6. **Infrastructure Requirements**: The foundational setup needed before deploying a Stretch Cluster
+
+== Next Steps for Production Deployment
+
+To deploy a fully functional Stretch Cluster in production, follow these additional steps:
+
+=== 1. Configure Multicluster Operator Mode
+
+Install the operator on each cluster with multicluster configuration:
+
+[,bash]
+----
+helm install redpanda-operator redpanda/operator \
+  --namespace redpanda-system \
+  --create-namespace \
+  --set multicluster.enabled=true \
+  --set multicluster.name="<cluster-name>" \
+  --set multicluster.apiServerExternalAddress="<api-server-url>" \
+  --set "multicluster.peers[0].name=<peer-cluster-name>" \
+  --set "multicluster.peers[0].address=<peer-api-server-url>"
+----
+
+=== 2. Set Up TLS Certificates
+
+Generate and configure TLS certificates for inter-operator communication. The operator expects certificates in a secret named `redpanda-operator-multicluster-certificates`.
+
+=== 3. Configure Service Discovery
+
+For production environments, consider using:
+
+* **Service Mesh** (Cilium, Istio): For automatic service mirroring across clusters
+* **Multi-Cluster Services API**: Using Submariner or GKE Multi-Cluster Services
+* **Flat Networking**: Ensure BGP or VPN connectivity between cluster pod networks
+
+=== 4. Enable Security Features
+
+Update the StretchCluster configuration to enable:
+
+[,yaml]
+----
+spec:
+  tls:
+    enabled: true
+    certs:
+      default:
+        caEnabled: true
+
+  auth:
+    sasl:
+      enabled: true
+      secretRef: redpanda-superusers
+----
+
+=== 5. Configure External Access
+
+For client connectivity from outside the clusters:
+
+[,yaml]
+----
+spec:
+  external:
+    enabled: true
+    type: LoadBalancer
+    domain: redpanda.example.com
+----
+
+For complete production deployment guides, see the https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/kubernetes/[official Redpanda Kubernetes documentation^].
+
+== Operational Tasks (Conceptual)
+
+The following operations show how you would manage a fully deployed Stretch Cluster:
+
+=== Scaling NodePools
+
+To add more brokers to a NodePool:
+
+[,bash]
+----
+kubectl --context cluster-1 patch nodepool redpanda-stretch-east \
+  --type=merge \
+  -p '{"spec":{"replicas":5}}'
+----
+
+=== Upgrading the Cluster
+
+The operator coordinates rolling updates across all NodePools:
+
+[,bash]
+----
+kubectl patch stretchcluster redpanda-stretch \
+  --type=merge \
+  -p '{"spec":{"image":{"tag":"v26.2.0"}}}'
+----
+
+=== Handling Cluster Failures
+
+If a Kubernetes cluster fails:
+
+. Brokers in the failed cluster become unavailable
+. Brokers in healthy clusters continue serving traffic
+. Raft quorum is maintained if more than half the brokers remain
+. When the failed cluster recovers, brokers rejoin automatically
+
+== Networking Considerations
+
+=== Latency
+
+* **Intra-cluster**: Sub-millisecond latency
+* **Cross-cluster**: Depends on network topology (typically 1-100ms)
+* **Impact**: Higher latency affects replication and client operations
+
+=== Bandwidth
+
+* **Replication**: All writes must replicate across clusters
+* **Estimate**: 2-3x the ingress bandwidth for cross-cluster traffic
+* **Optimization**: Use rack awareness to prefer local replicas
+
+=== Firewall Rules
+
+Required connectivity between clusters:
+
+* **Kafka API**: Port 9093 (or configured port)
+* **RPC**: Port 33145 (internal replication)
+* **Admin API**: Port 9644 (optional, for management)
+
+== Troubleshooting
+
+=== NodePool Shows "NotBound" Status (Expected in This Lab)
+
+If you see NodePools with `Bound: False` and the message "Node pool not bound to cluster", this is expected behavior in this lab setup.
+
+**Why**: Full Stretch Cluster deployment requires operators running in multicluster mode with TLS certificates for inter-operator communication. This lab focuses on infrastructure setup and doesn't configure the multicluster operator mode.
+
+**To resolve** (for production deployment):
+
+. Configure the operator with `multicluster.enabled=true` and peer information
+. Set up TLS certificates for inter-operator communication
+. Ensure operators can reach each other's API servers
+
+See the "Next Steps for Production Deployment" section above for details.
+
+=== Brokers Not Forming Cluster (In Production Deployments)
+
+. Verify cross-cluster networking:
++
+[,bash]
+----
+# From a pod in cluster 1, try to reach a pod in cluster 2
+kubectl --context cluster-1 exec -it redpanda-stretch-east-0 \
+  -- ping redpanda-stretch-west-0.<service>
+----
+
+. Check operator logs:
++
+[,bash]
+----
+kubectl --context cluster-1 logs -n redpanda-system \
+  -l app.kubernetes.io/name=operator
+----
+
+=== License Errors
+
+Verify the license secret exists and is valid:
+
+[,bash]
+----
+kubectl get secret redpanda-license -o jsonpath='{.data.license}' | base64 -d
+----
+
+=== NodePool Not Binding
+
+Check the NodePool status:
+
+[,bash]
+----
+kubectl get nodepool redpanda-stretch-east -o yaml
+----
+
+Look for conditions indicating why binding failed.
+
+== Advanced Configuration
+
+=== Rack Awareness
+
+Configure rack awareness to spread replicas across sites:
+
+[,yaml]
+----
+spec:
+  rackAwareness:
+    enabled: true
+    nodeAnnotation: topology.kubernetes.io/zone
+----
+
+=== Tiered Storage
+
+Enable Tiered Storage for long-term data retention:
+
+[,yaml]
+----
+spec:
+  storage:
+    tiered:
+      config:
+        cloud_storage_enabled: true
+        cloud_storage_bucket: my-bucket
+        cloud_storage_region: us-east-1
+----
+
+=== External Access
+
+Configure external listeners for client access:
+
+[,yaml]
+----
+spec:
+  external:
+    enabled: true
+    type: LoadBalancer
+    domain: redpanda.example.com
+----
+
+== Comparison with Single-Cluster Deployment
+
+[cols="1,2,2"]
+|===
+|Aspect |Single Cluster |Stretch Cluster
+
+|Availability
+|Limited to K8s cluster availability
+|Survives K8s cluster failures
+
+|Latency
+|Sub-millisecond
+|Depends on cross-cluster network
+
+|Complexity
+|Simple setup
+|Requires multicluster networking
+
+|Use Case
+|Single datacenter/AZ
+|Multi-AZ/region DR
+|===
+
+== Learn More
+
+* https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/kubernetes/[Redpanda Kubernetes Deployment Guide^]
+* https://docs.redpanda.com/current/manage/kubernetes/[Managing Redpanda on Kubernetes^]
+* xref:ROOT:kubernetes/k-high-availability.adoc[Rack Awareness for High Availability^]
+
+== Clean Up
+
+To delete the stretch cluster:
+
+[,bash]
+----
+# Delete NodePools first
+kubectl --context cluster-1 delete nodepool redpanda-stretch-east
+kubectl --context cluster-2 delete nodepool redpanda-stretch-west
+
+# Delete StretchCluster
+kubectl delete stretchcluster redpanda-stretch
+
+# Optionally delete the operator
+helm uninstall redpanda-operator --namespace redpanda-system
+----
+
+== Next Steps
+
+* Explore link:../shadow-linking/README.adoc[Shadow Linking for Disaster Recovery]
+* Learn about xref:ROOT:kubernetes/k-manage-connectors.adoc[Running Redpanda Connectors on Kubernetes]
+* Configure xref:ROOT:manage/kubernetes/security/authentication/k-authentication.adoc[Authentication and Authorization]

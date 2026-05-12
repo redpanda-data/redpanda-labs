@@ -1,0 +1,117 @@
+---
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: StretchCluster
+metadata:
+  name: redpanda-stretch
+  namespace: redpanda
+spec:
+  # Enterprise license (required)
+  enterprise:
+    licenseSecretRef:
+      name: redpanda-license
+      key: license
+
+  # Image configuration
+  image:
+    repository: docker.redpanda.com/redpandadata/redpanda
+    tag: v26.1.6
+
+  # Common labels applied to all resources
+  commonLabels:
+    app: redpanda-stretch
+    environment: production
+
+  # Authentication
+  auth:
+    sasl:
+      enabled: true
+      mechanism: SCRAM-SHA-512
+      secretRef: redpanda-superusers
+
+  # TLS configuration
+  tls:
+    enabled: true
+    certs:
+      default:
+        caEnabled: true
+        issuerRef:
+          name: redpanda-issuer
+          kind: ClusterIssuer
+      external:
+        caEnabled: true
+        issuerRef:
+          name: redpanda-issuer
+          kind: ClusterIssuer
+
+  # Rack awareness for high availability
+  rackAwareness:
+    enabled: true
+    nodeAnnotation: topology.kubernetes.io/zone
+
+  # Storage configuration
+  storage:
+    persistentVolume:
+      enabled: true
+      size: 100Gi
+      storageClass: fast-ssd
+
+    # Tiered Storage (optional)
+    tiered:
+      config:
+        cloud_storage_enabled: false
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "2"
+      memory: 4Gi
+
+  # Listeners configuration
+  listeners:
+    kafka:
+      port: 9093
+      tls:
+        enabled: true
+        cert: default
+
+    admin:
+      port: 9644
+      tls:
+        enabled: true
+        cert: default
+
+    http:
+      port: 8082
+      tls:
+        enabled: true
+        cert: default
+
+    schemaRegistry:
+      port: 8081
+      tls:
+        enabled: true
+        cert: default
+
+  # External access configuration
+  external:
+    enabled: true
+    type: LoadBalancer
+    domain: redpanda.example.com
+
+  # Networking mode (mesh is default)
+  # Options: mesh, flat, mcs
+  networking:
+    crossClusterMode: mesh
+
+  # Cluster configuration properties
+  config:
+    cluster:
+      default_topic_replications: 3
+      default_topic_partitions: 3
+      log_segment_size: 1073741824
+      retention_bytes: 107374182400
+      group_topic_partitions: 16
+      auto_create_topics_enabled: false

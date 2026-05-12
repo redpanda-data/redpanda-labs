@@ -1,0 +1,4 @@
+license.jwt
+*.pid
+*.log
+.DS_Store

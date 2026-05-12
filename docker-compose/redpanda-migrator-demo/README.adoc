@@ -29,7 +29,7 @@ ifndef::env-site[]
 endif::[]
 
 ifdef::env-site[]
-This lab demonstrates how to use xref:redpanda-connect:components:inputs/redpanda_migrator.adoc[Redpanda Migrator] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
+This lab demonstrates how to use xref:connect:components:inputs/redpanda_migrator.adoc[Redpanda Migrator] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
 endif::[]
 ifndef::env-site[]
 This lab demonstrates how to use https://docs.redpanda.com/redpanda-connect/components/inputs/redpanda_migrator/[Redpanda Migrator^] to migrate data from a source Kafka-compatible cluster to a target Redpanda cluster.
@@ -273,7 +273,7 @@ ifndef::env-site[]
 * Explore https://docs.redpanda.com/current/manage/security/authentication/[Redpanda authentication^] options
 endif::[]
 ifdef::env-site[]
-* Read the xref:redpanda-connect:cookbooks:redpanda_migrator.adoc[Redpanda Migrator documentation]
+* Read the xref:connect:cookbooks:redpanda_migrator.adoc[Redpanda Migrator documentation]
 * Learn about xref:ROOT:manage:schema-reg/schema-reg-overview.adoc[Schema Registry] configuration
 * Explore xref:ROOT:manage:security/authentication.adoc[Redpanda authentication] options
 endif::[]
