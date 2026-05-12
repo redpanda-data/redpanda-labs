@@ -666,7 +666,7 @@ spec:
 
 * https://docs.redpanda.com/current/deploy/deployment-option/self-hosted/kubernetes/[Redpanda Kubernetes Deployment Guide^]
 * https://docs.redpanda.com/current/manage/kubernetes/[Managing Redpanda on Kubernetes^]
-* xref:ROOT:kubernetes/k-high-availability.adoc[Rack Awareness for High Availability^]
+* xref:streaming:kubernetes/k-high-availability.adoc[Rack Awareness for High Availability^]
 
 == Clean Up
 
@@ -688,5 +688,5 @@ helm uninstall redpanda-operator --namespace redpanda-system
 == Next Steps
 
 * Explore link:../shadow-linking/README.adoc[Shadow Linking for Disaster Recovery]
-* Learn about xref:ROOT:kubernetes/k-manage-connectors.adoc[Running Redpanda Connectors on Kubernetes]
-* Configure xref:ROOT:manage/kubernetes/security/authentication/k-authentication.adoc[Authentication and Authorization]
+* Learn about xref:streaming:kubernetes/k-manage-connectors.adoc[Running Redpanda Connectors on Kubernetes]
+* Configure xref:streaming:manage/kubernetes/security/authentication/k-authentication.adoc[Authentication and Authorization]

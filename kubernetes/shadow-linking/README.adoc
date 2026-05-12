@@ -14,7 +14,7 @@ You must have the following:
 
 * https://kubernetes.io/docs/tasks/tools/[kubectl^] CLI installed
 * https://helm.sh/docs/intro/install/[Helm 3+^] installed
-* xref:ROOT:get-started:rpk-install.adoc[rpk] CLI installed
+* xref:streaming:get-started:rpk-install.adoc[rpk] CLI installed
 * https://kind.sigs.k8s.io/docs/user/quick-start/#installation[kind^] installed (for local testing)
 * https://docs.docker.com/get-docker/[Docker^] installed and running
 
@@ -214,5 +214,5 @@ kind delete cluster --name redpanda-shadow
 
 == Suggested reading
 
-* xref:ROOT:manage:disaster-recovery/shadowing/index.adoc[Shadowing for Disaster Recovery]
-* xref:ROOT:deploy:deployment-option/self-hosted/kubernetes/index.adoc[Redpanda on Kubernetes]
+* xref:streaming:manage:disaster-recovery/shadowing/index.adoc[Shadowing for Disaster Recovery]
+* xref:streaming:deploy:deployment-option/self-hosted/kubernetes/index.adoc[Redpanda on Kubernetes]

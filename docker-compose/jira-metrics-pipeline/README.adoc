@@ -411,7 +411,7 @@ ifdef::env-site[]
 - xref:connect:components:processors/jira.adoc[Jira Processor Reference]
 - https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/[Jira REST API Documentation^]
 - https://www.atlassian.com/software/jira/guides/jql[JQL Query Guide^]
-- xref:ROOT:get-started:quick-start.adoc[Redpanda Quickstart]
+- xref:streaming:get-started:quick-start.adoc[Redpanda Quickstart]
 endif::[]
 // For GitHub, use direct links
 ifndef::env-site[]
