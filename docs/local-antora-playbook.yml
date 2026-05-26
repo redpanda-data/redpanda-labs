@@ -1,6 +1,6 @@
 site:
   title: Redpanda Docs
-  start_page: redpanda-labs:ROOT:index.adoc
+  start_page: labs:ROOT:index.adoc
   url: http://localhost:5002
   robots: disallow
   keys:
@@ -52,7 +52,7 @@ antora:
     data:
       sets:
         docker_labs:
-          component: redpanda-labs
+          component: labs
           family: page
           filter: docker-compose
           env_type: Docker
@@ -69,7 +69,7 @@ antora:
       replacements:
         - components:
             - 'ROOT'
-            - 'redpanda-labs'
+            - 'labs'
           file_patterns:
             - '**/docker-compose.yaml'
             - '**/docker-compose.yml'
