@@ -66,7 +66,7 @@ antora:
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/archive-attachments'
     data:
       archives:
-        - component: 'ROOT'
+        - component: 'streaming'
           output_archive: 'redpanda-quickstart.tar.gz'
           file_patterns:
             - '**/test-resources/**/docker-compose/**'
@@ -74,7 +74,7 @@ antora:
     data:
       replacements:
         - components:
-            - 'ROOT'
+            - 'streaming'
             - 'labs'
           file_patterns:
             - '**/docker-compose.yaml'
