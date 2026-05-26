@@ -274,4 +274,4 @@ This announcement was made on May 21, 2024.
 
 == Next steps
 
-Learn more about xref:redpanda-connect:ROOT:about.adoc[Redpanda Connect] and explore the other xref:redpanda-connect:components:catalog.adoc[available connectors].
+Learn more about xref:connect:get-started:about.adoc[Redpanda Connect] and explore the other xref:connect:components:catalog.adoc[available connectors].

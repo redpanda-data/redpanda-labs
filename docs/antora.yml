@@ -1,11 +1,13 @@
-name: redpanda-labs
+name: labs
 title: Labs
 version: ~
 asciidoc:
   attributes:
-    page-header-data:
-      order: 4
-      color: '#227093'
+    component-metadata:
+      title: "Labs"
+      description: "Hands-on tutorials and example applications."
+      color: "#227093"
+      icon: "flask"
     full-version: 24.2.2
 
 

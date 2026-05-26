@@ -167,7 +167,7 @@ The pipeline performs the following steps:
    - Raw timestamps: created, updated, resolved (preserved in original Jira format)
    - Extracted component names from component objects
    - Computed boolean flags: `is_completed`, `is_high_priority`
-   - Generated issue URL: `{JIRA_BASE_URL}/browse/{key}`
+   - Generated issue URL: `\{JIRA_BASE_URL\}/browse/\{key\}`
    - Pipeline processing timestamp
 . **Route messages**: Issues are intelligently routed to topics based on computed flags:
    - High priority (Highest/High) → `jira.issues.high-priority`
@@ -368,9 +368,9 @@ After you have Jira issues streaming into Redpanda, you can extend this pipeline
 
 // For docs site, use xrefs
 ifdef::env-site[]
-- **Slack**: Post issue updates to channels using the xref:redpanda-connect:components:outputs/slack_post.adoc[`slack_post` output]
-- **Discord**: Send notifications with the xref:redpanda-connect:components:outputs/discord.adoc[`discord` output]
-- **HTTP/Webhooks**: Trigger PagerDuty, Opsgenie, or custom webhooks using the xref:redpanda-connect:components:outputs/http_client.adoc[`http_client` output]
+- **Slack**: Post issue updates to channels using the xref:connect:components:outputs/slack_post.adoc[`slack_post` output]
+- **Discord**: Send notifications with the xref:connect:components:outputs/discord.adoc[`discord` output]
+- **HTTP/Webhooks**: Trigger PagerDuty, Opsgenie, or custom webhooks using the xref:connect:components:outputs/http_client.adoc[`http_client` output]
 endif::[]
 // For GitHub, use direct links
 ifndef::env-site[]
@@ -383,9 +383,9 @@ endif::[]
 
 // For docs site, use xrefs
 ifdef::env-site[]
-- **Snowflake**: Load issues into Snowflake with the xref:redpanda-connect:components:outputs/snowflake_streaming.adoc[`snowflake_streaming` output]
-- **BigQuery**: Stream to Google BigQuery using the xref:redpanda-connect:components:outputs/gcp_bigquery.adoc[`gcp_bigquery` output]
-- **PostgreSQL/MySQL**: Store in relational databases with xref:redpanda-connect:components:outputs/sql_insert.adoc[`sql_insert`] or xref:redpanda-connect:components:outputs/sql_raw.adoc[`sql_raw` outputs]
+- **Snowflake**: Load issues into Snowflake with the xref:connect:components:outputs/snowflake_streaming.adoc[`snowflake_streaming` output]
+- **BigQuery**: Stream to Google BigQuery using the xref:connect:components:outputs/gcp_bigquery.adoc[`gcp_bigquery` output]
+- **PostgreSQL/MySQL**: Store in relational databases with xref:connect:components:outputs/sql_insert.adoc[`sql_insert`] or xref:connect:components:outputs/sql_raw.adoc[`sql_raw` outputs]
 endif::[]
 // For GitHub, use direct links
 ifndef::env-site[]
@@ -408,10 +408,10 @@ Use the raw timestamp fields (`created`, `updated`, `resolved`) to calculate:
 
 // For docs site, use xrefs
 ifdef::env-site[]
-- xref:redpanda-connect:components:processors/jira.adoc[Jira Processor Reference]
+- xref:connect:components:processors/jira.adoc[Jira Processor Reference]
 - https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/[Jira REST API Documentation^]
 - https://www.atlassian.com/software/jira/guides/jql[JQL Query Guide^]
-- xref:ROOT:get-started:quick-start.adoc[Redpanda Quickstart]
+- xref:streaming:get-started:quick-start.adoc[Redpanda Quickstart]
 endif::[]
 // For GitHub, use direct links
 ifndef::env-site[]
