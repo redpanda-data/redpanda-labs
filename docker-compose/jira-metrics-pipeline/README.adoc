@@ -167,7 +167,7 @@ The pipeline performs the following steps:
    - Raw timestamps: created, updated, resolved (preserved in original Jira format)
    - Extracted component names from component objects
    - Computed boolean flags: `is_completed`, `is_high_priority`
-   - Generated issue URL: `{JIRA_BASE_URL}/browse/{key}`
+   - Generated issue URL: `\{JIRA_BASE_URL\}/browse/\{key\}`
    - Pipeline processing timestamp
 . **Route messages**: Issues are intelligently routed to topics based on computed flags:
    - High priority (Highest/High) → `jira.issues.high-priority`
