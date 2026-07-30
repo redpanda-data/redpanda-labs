@@ -1,0 +1,206 @@
+# Confluent Schema Registry Migration via Shadowing
+# =====================================================
+#
+# Demonstrates Redpanda Shadowing's API-mode Schema Registry replication
+# (`shadow_schema_registry_api`), which continuously replicates subjects,
+# versions, and compatibility settings from a real Confluent Schema Registry
+# into the Schema Registry built into a Redpanda shadow cluster.
+#
+# NOTE: `shadow_schema_registry_api` ships in Redpanda v26.2. This lab was
+# originally written against pre-GA v26.2.1 release candidates (the `paused`
+# control used in the migration cutover step wasn't wired into the rpk CLI
+# until rc4, even though schema replication itself worked on earlier RCs).
+# v26.2.1 is now GA, so this compose file defaults to the stable image. If
+# you need to pin to a specific patch/newer minor, override REDPANDA_VERSION.
+#
+# ARCHITECTURE:
+#   confluent-kafka (real Confluent Platform, KRaft mode)
+#     -> confluent-schema-registry (real Confluent Schema Registry, REST API)
+#          -> [HTTP polling via shadow link] -> redpanda-shadow (Schema Registry)
+#
+# Topic data is NOT replicated in this lab: Shadowing's topic-data engine
+# replicates Redpanda-to-Redpanda, so a plain Confluent Kafka broker can't be
+# a topic-data source. This lab isolates the schema migration piece, which
+# is the part that works against a real Confluent source today. A python
+# client is included so you can still produce/consume real Avro-encoded
+# topic data on the Confluent side, using the schemas registered above -
+# that data just stays on confluent-kafka rather than replicating.
+#
+# ENVIRONMENT VARIABLES:
+#   CONFLUENT_VERSION       - Confluent Platform image tag (default: 8.3.0)
+#   REDPANDA_VERSION        - Redpanda image tag (default: v26.2.1, GA)
+#   REDPANDA_CONSOLE_VERSION - Redpanda Console image tag (default: v3.9.0)
+#
+# PORTS:
+#   9092  - Confluent Kafka (direct access)
+#   8081  - Confluent Schema Registry REST API (source) - manage via CLI/curl
+#   8080  - Redpanda Console (browse the shadow cluster's replicated schemas)
+#   28081 - Redpanda shadow cluster's Schema Registry REST API (destination)
+#   29092 - Redpanda shadow cluster Kafka API (direct access)
+#   29644 - Redpanda shadow cluster Admin API
+#
+# UI vs. CLI:
+#   The source Confluent Schema Registry has no UI in this lab - manage its
+#   contents with curl/rpk (see scripts/). Redpanda Console is wired up only
+#   against the shadow cluster, to visually verify what Shadowing replicated.
+#
+# TOPIC DATA:
+#   python-client runs produce_topic_data.py / consume_topic_data.py to
+#   read/write real Avro-encoded records against confluent-kafka, using the
+#   schemas already registered in confluent-schema-registry.
+
+services:
+  # ============================================
+  # SOURCE: Confluent Kafka (KRaft mode, single node)
+  # ============================================
+  confluent-kafka:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-8.3.0}
+    hostname: confluent-kafka
+    container_name: confluent-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_LISTENERS: "PLAINTEXT://confluent-kafka:29092,CONTROLLER://confluent-kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://confluent-kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@confluent-kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      # Any fixed base64 UUID works for a single-node lab cluster.
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    ports:
+      - "9092:9092"
+    networks:
+      - confluent-shadow-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # SOURCE: Confluent Schema Registry (real Confluent Platform)
+  # ============================================
+  confluent-schema-registry:
+    image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-8.3.0}
+    hostname: confluent-schema-registry
+    container_name: confluent-schema-registry
+    depends_on:
+      confluent-kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: confluent-schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "confluent-kafka:29092"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+    ports:
+      - "8081:8081"
+    networks:
+      - confluent-shadow-network
+    healthcheck:
+      # cp-schema-registry 8.x images are built on a minimal ubi9-micro base
+      # and don't reliably ship curl/wget, so this checks the port directly
+      # with a bash-only /dev/tcp probe instead of an HTTP client.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # DESTINATION: Redpanda shadow cluster
+  # ============================================
+  redpanda-shadow:
+    # shadow_schema_registry_api requires Redpanda v26.2+, GA as of v26.2.1.
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v26.2.1}
+    hostname: redpanda-shadow
+    container_name: redpanda-shadow
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda-shadow:9092,external://localhost:29092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr redpanda-shadow:33145
+      - --advertise-rpc-addr redpanda-shadow:33145
+      - --mode dev-container
+      - --smp 1
+      - --set redpanda.enable_shadow_linking=true
+    ports:
+      - "29092:29092"
+      - "28081:28081"
+      - "29644:9644"
+    volumes:
+      - ./config:/config
+    networks:
+      - confluent-shadow-network
+    depends_on:
+      confluent-schema-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # Redpanda Console, pointed at the shadow cluster only.
+  # Use this to visually verify replicated schemas/versions/compatibility.
+  # The source Confluent Schema Registry is managed via CLI (see scripts/),
+  # not through a UI in this lab.
+  # ============================================
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v3.9.0}
+    hostname: redpanda-console
+    container_name: redpanda-console
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda-shadow:9092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda-shadow:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda-shadow:9644"]
+        kafkaConnect:
+          enabled: false
+    ports:
+      - "8080:8080"
+    networks:
+      - confluent-shadow-network
+    depends_on:
+      redpanda-shadow:
+        condition: service_healthy
+
+  # ============================================
+  # Python client for producing/consuming real Avro-encoded topic data
+  # on the Confluent source, using the schemas already registered in
+  # confluent-schema-registry (see scripts/produce_topic_data.py and
+  # scripts/consume_topic_data.py).
+  # ============================================
+  python-client:
+    image: python:3.11-slim
+    container_name: python-client
+    command: ["/bin/bash", "-c", "pip install --quiet confluent-kafka fastavro requests && tail -f /dev/null"]
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - confluent-shadow-network
+    depends_on:
+      confluent-schema-registry:
+        condition: service_healthy
+
+networks:
+  confluent-shadow-network:
+    driver: bridge
