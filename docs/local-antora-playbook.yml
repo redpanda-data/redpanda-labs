@@ -21,7 +21,7 @@ content:
     branches: [main]
   - url: https://github.com/redpanda-data/docs-site
     branches: 'main'
-    start_paths: [home]
+    start_paths: [home, data-platform, self-managed]
   - url: https://github.com/redpanda-data/cloud-docs
     branches: [main]
   # https://docs.antora.org/antora/latest/playbook/content-source-url/#local-urls
