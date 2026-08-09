@@ -42,7 +42,7 @@ Redpanda offers several features that make it ideal for building a fast, scalabl
 
 - Download and install Go from https://go.dev/doc/install[go.dev^].
 
-- Complete the link:https://docs.redpanda.com/current/get-started/quick-start-cloud/[Redpanda Cloud Quickstart] before continuing. This example expands on the quickstart.
+- Complete the link:https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/create-dedicated-cloud-cluster/[Redpanda Cloud Dedicated quickstart] before continuing. This example expands on the quickstart.
 
 NOTE: Redpanda Cloud uses TLS certificates signed by https://letsencrypt.org/[Let's Encrypt^]. Most programming languages will load their root certificate authority (CA), `ISRG Root X1`, by default so you shouldn't need to provide a custom CA certificate.
 

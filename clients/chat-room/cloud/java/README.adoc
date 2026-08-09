@@ -40,7 +40,7 @@ Redpanda offers several features that make it ideal for building a fast, scalabl
 
 == Prerequisites
 
-- Complete the link:https://docs.redpanda.com/current/get-started/quick-start-cloud/[Redpanda Cloud Quickstart] before continuing. This example expands on the quickstart.
+- Complete the link:https://docs.redpanda.com/cloud-data-platform/get-started/cluster-types/create-dedicated-cloud-cluster/[Redpanda Cloud Dedicated quickstart] before continuing. This example expands on the quickstart.
 
 - Install the following:
 +
