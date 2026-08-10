@@ -216,8 +216,6 @@ The web server's host URL is printed to the console.
 
 == Documentation guidelines
 
-For rules and recommendations as well as help with Asciidoc syntax, see the link:https://github.com/redpanda-data/docs-site/blob/main/meta-docs/STYLE-GUIDE.adoc[Redpanda docs style guide].
-
 In general:
 
 * Keep your language simple and accessible.
