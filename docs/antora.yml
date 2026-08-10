@@ -8,6 +8,7 @@ asciidoc:
       description: "Hands-on tutorials and example applications."
       color: "#227093"
       icon: "flask"
+    page-contribution: 'true'
     full-version: 24.2.2
 
 
