@@ -16,7 +16,10 @@ runtime:
 content:
   sources:
   - url: https://github.com/redpanda-data/docs
-    branches: [main, v/*, site-search, shared]
+    branches: [main, v/*, site-search]
+  - url: https://github.com/redpanda-data/docs
+    branches: main
+    start_path: shared
   - url: https://github.com/redpanda-data/rp-connect-docs
     branches: [main]
   - url: https://github.com/redpanda-data/docs-site
