@@ -186,8 +186,11 @@ services:
     networks:
       - confluent-shadow-network
     depends_on:
+      # service_started, not service_healthy: the scripts here only need the
+      # registry when they run, and waiting for it would put this container's
+      # pip install at the end of the health chain instead of alongside it.
       confluent-schema-registry:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       # The pip install above runs at container start, so without a
       # healthcheck `docker compose up -d --wait` returns while the Python

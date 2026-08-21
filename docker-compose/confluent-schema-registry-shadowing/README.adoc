@@ -67,7 +67,12 @@ cd redpanda-labs/docker-compose/confluent-schema-registry-shadowing
 ----
 docker compose up -d --wait
 ----
-// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "timeout": 300000})
+// Test-only step. The Confluent images are large (around 1 GB compressed for
+// cp-kafka and cp-schema-registry together), and on a cold CI runner the pull
+// alone can outlast the timeout on `docker compose up`. Pull first, on its own
+// budget, so the step below only has to wait for the services to come up.
+// (step {"action":"runShell", "command": "docker compose pull", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "timeout": 900000})
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "timeout": 600000})
 
 . Verify the source Confluent Schema Registry is up:
 +
