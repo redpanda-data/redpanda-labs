@@ -6,10 +6,9 @@
 :page-topic-type: lab
 :personas: platform_operator, streaming_developer
 // Learning objectives
-:learning-objective-1: Configure a shadow link that replicates schemas from a Confluent Schema Registry
-:learning-objective-2: Replicate schema references, JSON Schema and Protobuf subjects, and compatibility settings
-:learning-objective-3: Produce and consume Avro-encoded records and confirm schema IDs resolve identically after migration
-:learning-objective-4: Cut applications over to Redpanda by pausing replication
+:learning-objective-1: Configure a shadow link that replicates schemas and topic data from a Confluent deployment
+:learning-objective-2: Verify that replicated subjects, versions, references, and compatibility settings match the source
+:learning-objective-3: Cut applications over to Redpanda by pausing schema replication
 
 // (test start {"id":"confluent-schema-registry-shadowing", "description": "Confluent migration via Shadowing"})
 // (step {"action":"runShell", "command": "docker compose down -v 2>/dev/null || true", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing"})
@@ -31,12 +30,11 @@ Shadowing supports two Schema Registry replication modes:
 * *Topic mode* (`shadow_schema_registry_topic`) shadows the internal `_schemas` topic byte-for-byte. It only works when the source is another Redpanda cluster.
 * *API mode* (`shadow_schema_registry_api`) polls a source Schema Registry's REST API and imports subjects, versions, and compatibility settings into the shadow cluster's own Schema Registry. This is the mode to use when the source is a Confluent Schema Registry, and it's what this lab configures.
 
-In this lab, you will:
+After completing this lab, you will be able to:
 
-* {learning-objective-1}
-* {learning-objective-2}
-* {learning-objective-3}
-* {learning-objective-4}
+* [ ] {learning-objective-1}
+* [ ] {learning-objective-2}
+* [ ] {learning-objective-3}
 
 NOTE: `shadow_schema_registry_api` requires Redpanda v26.2 or later. Override `REDPANDA_VERSION` to pin a different patch or a newer minor.
 
@@ -121,6 +119,7 @@ docker exec redpanda-shadow rpk shadow describe confluent-schema-migration \
 +
 `rpk shadow describe` prints only the overview and client sections by default. Pass `--print-registry` to see the Schema Registry settings, or `--print-all` for every section:
 +
+.Expected output
 ----
 SCHEMA REGISTRY SYNC
 ====================
@@ -297,7 +296,7 @@ Expect `200`, where the same request returned `412` while replication was active
 
 . Point your producers and consumers at the Redpanda cluster's Kafka and Schema Registry endpoints. New schemas registered after cutover go directly to the now writable Redpanda Schema Registry.
 
-=== Resuming replication
+=== Resume replication
 
 To reverse the cutover, set `paused` back to `false`. Resuming re-establishes the write block on the destination context, so if you registered any schemas directly against the shadow cluster while it was paused, check `rpk shadow status` afterward for sync errors on that context.
 
