@@ -23,6 +23,7 @@ import json
 import os
 import struct
 import sys
+import uuid
 
 import fastavro
 import requests
@@ -31,6 +32,11 @@ from confluent_kafka import Consumer
 SR_URL = os.environ.get("SR_URL", "http://confluent-schema-registry:8081")
 BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "confluent-kafka:29092")
 TOPICS = ["orders", "customers", "shipping"]
+# A fresh group per run by default, so re-running this script always reads the
+# topics from the beginning. With a fixed group ID, the first run commits its
+# offsets and every later run reads nothing. Set GROUP_ID to pin a group and
+# resume from committed offsets instead.
+GROUP_ID = os.environ.get("GROUP_ID", f"topic-data-verify-{uuid.uuid4()}")
 IDLE_POLLS_BEFORE_EXIT = 5
 
 
@@ -66,12 +72,13 @@ def decode(raw_bytes, schema_cache):
 def main():
     print(f"Reading from Schema Registry: {SR_URL}")
     print(f"Reading from Kafka bootstrap: {BOOTSTRAP_SERVERS}")
+    print(f"Consumer group: {GROUP_ID}")
     print()
 
     consumer = Consumer(
         {
             "bootstrap.servers": BOOTSTRAP_SERVERS,
-            "group.id": "topic-data-verify",
+            "group.id": GROUP_ID,
             "auto.offset.reset": "earliest",
         }
     )

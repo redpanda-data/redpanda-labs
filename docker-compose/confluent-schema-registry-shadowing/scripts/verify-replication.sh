@@ -6,33 +6,36 @@ set -e
 SOURCE_SR="${SOURCE_SR:-http://localhost:8081}"
 DEST_SR="${DEST_SR:-http://localhost:28081}"
 
-echo "=== Source (Confluent Schema Registry) ==="
-echo "Subjects:"
-curl -s "${SOURCE_SR}/subjects"
-echo
-for subject in orders-value customers-value; do
-  echo "Versions for ${subject}:"
-  curl -s "${SOURCE_SR}/subjects/${subject}/versions"
-  echo
-  echo "Compatibility for ${subject}:"
-  curl -s "${SOURCE_SR}/config/${subject}"
-  echo
-done
+# Print a subject's compatibility setting, or note that it inherits the global
+# one. A subject with no subject-level override returns HTTP 404 with error
+# code 40408, which is expected and not a replication failure.
+compatibility() {
+  local base="$1" subject="$2" body
+  body=$(curl -s "${base}/config/${subject}")
+  if echo "${body}" | grep -q '"error_code":40408'; then
+    echo "(none set; inherits the global default)"
+  else
+    echo "${body}"
+  fi
+}
 
-echo
-echo "=== Destination (Redpanda shadow cluster Schema Registry) ==="
-echo "Subjects:"
-curl -s "${DEST_SR}/subjects"
-echo
-for subject in orders-value customers-value; do
-  echo "Versions for ${subject}:"
-  curl -s "${DEST_SR}/subjects/${subject}/versions"
+report() {
+  local label="$1" base="$2" subject
+  echo "=== ${label} ==="
+  echo "Subjects:"
+  curl -s "${base}/subjects"
   echo
-  echo "Compatibility for ${subject}:"
-  curl -s "${DEST_SR}/config/${subject}"
+  for subject in orders-value customers-value; do
+    echo "${label} versions for ${subject}:"
+    curl -s "${base}/subjects/${subject}/versions"
+    echo
+    echo "${label} compatibility for ${subject}: $(compatibility "${base}" "${subject}")"
+  done
   echo
-done
+}
 
-echo
-echo "If replication has caught up, both sides should list the same subjects,"
+report "SOURCE" "${SOURCE_SR}"
+report "DESTINATION" "${DEST_SR}"
+
+echo "If replication has caught up, both sides list the same subjects,"
 echo "the same version numbers, and the same compatibility setting."

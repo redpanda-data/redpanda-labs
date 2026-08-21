@@ -12,6 +12,7 @@ jobs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
       envoy-shadowing: ${{ steps.filter.outputs.envoy-shadowing }}
       redpanda-migrator: ${{ steps.filter.outputs.redpanda-migrator }}
+      confluent-schema-registry-shadowing: ${{ steps.filter.outputs.confluent-schema-registry-shadowing }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,6 +28,8 @@ jobs:
               - 'docker-compose/envoy-shadowing/**'
             redpanda-migrator:
               - 'docker-compose/redpanda-migrator-demo/**'
+            confluent-schema-registry-shadowing:
+              - 'docker-compose/confluent-schema-registry-shadowing/**'
   run-tests:
     needs: setup
     strategy:
@@ -72,6 +75,9 @@ jobs:
       - name: Test redpanda migrator
         if: needs.setup.outputs.redpanda-migrator == 'true'
         run: npm run test-migrator
+      - name: Test confluent schema registry shadowing
+        if: needs.setup.outputs.confluent-schema-registry-shadowing == 'true'
+        run: npm run test-confluent-schema-registry-shadowing
 
       - name: Upload debug artifacts
         if: failure()

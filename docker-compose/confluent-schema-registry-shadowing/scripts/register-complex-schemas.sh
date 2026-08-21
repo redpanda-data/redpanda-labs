@@ -61,6 +61,6 @@ echo "Subjects on the source registry:"
 curl -s "${SR_URL}/subjects"
 echo
 echo
-echo "References for 'shipping-value' version 1:"
-curl -s "${SR_URL}/subjects/shipping-value/versions/1/referencedby"
+echo "References declared by 'shipping-value' version 1:"
+curl -s "${SR_URL}/subjects/shipping-value/versions/1" | jq -c '.references'
 echo

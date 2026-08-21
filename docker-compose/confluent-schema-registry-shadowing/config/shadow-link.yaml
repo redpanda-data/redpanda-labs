@@ -1,20 +1,18 @@
-# Shadow link: Confluent Schema Registry -> Redpanda shadow cluster
-# ====================================================================
+# Shadow link: Confluent Kafka + Schema Registry -> Redpanda shadow cluster
+# =========================================================================
 #
-# Uses API-mode Schema Registry replication (`shadow_schema_registry_api`),
-# which polls a source Schema Registry's REST API and imports subjects,
-# versions, and compatibility settings into the shadow cluster's own
-# Schema Registry. This is the mode to use when the source is a Confluent
-# Schema Registry (as opposed to `shadow_schema_registry_topic`, which
-# shadows the `_schemas` topic byte-for-byte and only works when the source
-# is itself a Redpanda cluster).
+# Replicates two things from the Confluent source into the shadow cluster:
 #
-# EXPERIMENT: topic_metadata_sync_options below points at confluent-kafka to
-# test whether topic-data shadowing works against a non-Redpanda source.
-# Redpanda's docs are explicit that both clusters must be Redpanda v25.3+
-# for Shadowing overall, so this is expected to fail (most likely at the
-# source cluster ID / capability handshake), but the only way to know for
-# sure against a real build is to try it and read the actual error.
+#   1. Schemas, using API-mode Schema Registry replication
+#      (`shadow_schema_registry_api`), which polls the source Schema
+#      Registry's REST API and imports subjects, versions, and compatibility
+#      settings. This is the mode to use when the source is a Confluent
+#      Schema Registry, as opposed to `shadow_schema_registry_topic`, which
+#      shadows the `_schemas` topic byte-for-byte and only works when the
+#      source is itself a Redpanda cluster.
+#
+#   2. Topic data, using `topic_metadata_sync_options`, so the records that
+#      reference those schemas migrate alongside them.
 name: confluent-schema-migration
 
 client_options:
@@ -25,11 +23,10 @@ client_options:
   tls_settings:
     enabled: false
 
-# EXPERIMENTAL: attempts to shadow real topic data from confluent-kafka.
-# Only includes the topics produce_topic_data.py writes to, as literal
-# filters (no wildcards/prefixes needed for three known topic names).
 topic_metadata_sync_options:
   interval: 10s
+  # Only the topics produce_topic_data.py writes to, as literal filters
+  # (no wildcards or prefixes needed for three known topic names).
   auto_create_shadow_topic_filters:
     - pattern_type: LITERAL
       filter_type: INCLUDE
@@ -52,8 +49,16 @@ schema_registry_sync_options:
 
     # How often to poll for incremental changes.
     tail_interval: 10s
+
     # How often to run a full reconciliation scan of all selected subjects.
-    full_sync_interval: 5m
+    #
+    # Lowered from the 5m default so this lab stays interactive: subjects you
+    # register on the source appear on the shadow cluster within seconds
+    # rather than minutes. Leave the default in production, where a 5-minute
+    # reconciliation scan is the right trade-off against load on the source
+    # registry.
+    full_sync_interval: 20s
+
     # Rate limit for requests to the source registry.
     max_source_requests_per_second: 30
 

@@ -23,6 +23,7 @@ scripts/register-complex-schemas.sh, so the subjects it depends on exist.
 """
 import io
 import json
+import os
 import struct
 import sys
 
@@ -30,8 +31,8 @@ import fastavro
 import requests
 from confluent_kafka import Producer
 
-SR_URL = "http://confluent-schema-registry:8081"
-BOOTSTRAP_SERVERS = "confluent-kafka:29092"
+SR_URL = os.environ.get("SR_URL", "http://confluent-schema-registry:8081")
+BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "confluent-kafka:29092")
 
 MAGIC_BYTE = 0
 
