@@ -12,6 +12,7 @@ jobs:
       data-transforms: ${{ steps.filter.outputs.data-transforms }}
       envoy-shadowing: ${{ steps.filter.outputs.envoy-shadowing }}
       redpanda-migrator: ${{ steps.filter.outputs.redpanda-migrator }}
+      confluent-schema-registry-shadowing: ${{ steps.filter.outputs.confluent-schema-registry-shadowing }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,6 +28,8 @@ jobs:
               - 'docker-compose/envoy-shadowing/**'
             redpanda-migrator:
               - 'docker-compose/redpanda-migrator-demo/**'
+            confluent-schema-registry-shadowing:
+              - 'docker-compose/confluent-schema-registry-shadowing/**'
   run-tests:
     needs: setup
     strategy:
@@ -34,6 +37,18 @@ jobs:
       matrix:
         os: [ubuntu-latest] # Only using Linux for now since macOS takes a long time
     runs-on: ${{ matrix.os }}
+    # Doc Detective has been seen to finish its run and then not exit, leaving the
+    # job to spin until the six-hour default. Fail in minutes instead.
+    timeout-minutes: 45
+    env:
+      # doc-tools reads this (see cli-utils/github-token.js) to authenticate its
+      # release lookups. Without it the version fetch is anonymous and shares a
+      # 60 request/hour limit with everything else on the runner's IP. This is
+      # the repo-scoped Actions token deliberately: it lifts the limit without
+      # granting push access to redpanda-data/redpanda, and push access is what
+      # makes GitHub return that repo's draft releases. Draft releases have no
+      # git tag, which doc-tools 5.12.0 and earlier cannot handle.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,7 +57,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
   
       - name: Install dependencies
         run: npm install
@@ -60,6 +75,12 @@ jobs:
           # Redpanda uses Linux AIO. Increase limit to support multiple brokers.
           sudo sysctl -w fs.aio-max-nr=1048576
 
+      - name: Increase AIO limit for confluent schema registry shadowing
+        if: needs.setup.outputs.confluent-schema-registry-shadowing == 'true'
+        run: |
+          # Redpanda uses Linux AIO. Increase limit for the shadow cluster.
+          sudo sysctl -w fs.aio-max-nr=1048576
+
       - name: Test data transforms
         if: needs.setup.outputs.data-transforms == 'true'
         run: |
@@ -72,6 +93,9 @@ jobs:
       - name: Test redpanda migrator
         if: needs.setup.outputs.redpanda-migrator == 'true'
         run: npm run test-migrator
+      - name: Test confluent schema registry shadowing
+        if: needs.setup.outputs.confluent-schema-registry-shadowing == 'true'
+        run: npm run test-confluent-schema-registry-shadowing
 
       - name: Upload debug artifacts
         if: failure()
