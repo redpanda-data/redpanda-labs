@@ -40,6 +40,15 @@ jobs:
     # Doc Detective has been seen to finish its run and then not exit, leaving the
     # job to spin until the six-hour default. Fail in minutes instead.
     timeout-minutes: 45
+    env:
+      # doc-tools reads this (see cli-utils/github-token.js) to authenticate its
+      # release lookups. Without it the version fetch is anonymous and shares a
+      # 60 request/hour limit with everything else on the runner's IP. This is
+      # the repo-scoped Actions token deliberately: it lifts the limit without
+      # granting push access to redpanda-data/redpanda, and push access is what
+      # makes GitHub return that repo's draft releases. Draft releases have no
+      # git tag, which doc-tools 5.12.0 and earlier cannot handle.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
