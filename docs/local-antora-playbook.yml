@@ -12,7 +12,12 @@ output:
   clean: true
 runtime:
   log:
-    failure_level: error
+    # Only fatal problems (an unreachable content source, an invalid playbook)
+    # fail the build. This playbook aggregates five repositories that this one
+    # does not control, so an error-level issue in their content - a broken
+    # xref in cloud-docs, for example - should not fail a labs preview.
+    # Errors are still logged.
+    failure_level: fatal
 content:
   sources:
   - url: https://github.com/redpanda-data/docs
