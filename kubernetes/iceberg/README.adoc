@@ -245,7 +245,7 @@ kubectl apply -f minio-nodeport.yaml --namespace iceberg-lab
 
 The NodePort service exposes MinIO console on port 32090 of all cluster nodes. In a kind cluster, you can access it directly at: http://localhost:32090
 
-NOTE: This approach avoids the known port-forwarding issues with MinIO console (see https://github.com/minio/object-browser/issues/2539[issue #2539]). The MinIO Console UI requires websockets which don't work reliably through `kubectl port-forward` tunnels. NodePort provides direct access without websocket connectivity issues.
+NOTE: This approach avoids the known port-forwarding issues with MinIO console. The MinIO Console UI requires websockets which don't work reliably through `kubectl port-forward` tunnels. NodePort provides direct access without websocket connectivity issues.
 
 ==== Set up port forwarding for other services
 
