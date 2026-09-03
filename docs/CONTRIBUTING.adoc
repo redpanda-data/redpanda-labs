@@ -128,7 +128,7 @@ image::some-image.png[]
 
 When contributing documentation, make sure to add the following attributes to your pages to categorize and identify your content:
 
-- `page-categories`: Assigns <<categories, categories>> to your page. Use a comma-separated list for multiple categories. Categories are validated against a https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[centralized list]. These categories are used to generate links to related docs and related labs as well as provide filters on the Redpanda Labs landing page.
+- `page-categories`: Assigns <<categories, categories>> to your page. Use a comma-separated list for multiple categories. Categories are validated against a centralized list that the documentation team maintains. These categories are used to generate links to related docs and related labs as well as provide filters on the Redpanda Labs landing page.
 - `env-kubernetes`, `env-docker`, `page-cloud`: Indicates the deployment environment or platform your lab is designed for.
 - `page-layout: lab`: Specifies the page layout template to be used, indicating that the page is part of Redpanda Labs.
 
@@ -149,21 +149,15 @@ Documentation categories are a crucial part of organizing content in a way that 
 
 ==== Central repository for categories
 
-The categories for Redpanda docs are centrally managed in a YAML file located in the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[Redpanda docs repository].
+The categories for Redpanda docs are centrally managed in a YAML file that the documentation team maintains.
 
 This centralized approach allows the documentation team to maintain a coherent structure across all documentation, ensuring that every topic is appropriately categorized.
 
 ==== Contribute to category definitions
 
-The Redpanda docs team welcomes contributions and suggestions for improving or expanding the category definitions. If you have ideas for new categories or adjustments to existing ones that could enhance the organization and discoverability of content, we encourage you to contribute in the following ways:
+The Redpanda docs team welcomes contributions and suggestions for improving or expanding the category definitions. If you have ideas for new categories or adjustments to existing ones that could enhance the organization and discoverability of content, https://github.com/redpanda-data/redpanda-labs/issues/new/choose[open an issue^] in this repository.
 
-. Open a pull request.
-+
-If you're familiar with the structure of the YAML file and have a specific change in mind, the most direct way to propose a category update is by opening a pull request against the https://github.com/redpanda-data/docs/blob/shared/modules/ROOT/partials/valid-categories.yml[`valid-categories.yml` file]. Include a brief explanation of your proposed changes and how they improve the documentation structure.
-
-. Create an issue.
-+
-If you're less comfortable making direct changes or if your suggestion requires broader discussion, you can https://github.com/redpanda-data/documentation-private/issues/new/choose[open an issue] in the private Redpanda docs repository. In your issue, describe the proposed category addition or modification, providing context on why the change is beneficial and how it fits within the overall documentation strategy.
+Describe the proposed category addition or modification, providing context on why the change is beneficial and how it fits within the overall documentation strategy. If you are unsure whether an existing category already covers what you need, say so in the issue. The docs team maintains the category list and makes the change.
 
 ==== Guidelines for proposing categories
 
