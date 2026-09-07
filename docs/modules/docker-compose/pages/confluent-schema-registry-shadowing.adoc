@@ -1,0 +1,1 @@
+../../../../docker-compose/confluent-schema-registry-shadowing/README.adoc

@@ -6,7 +6,7 @@
 // Set the path to content in this lab for both the docs site and the local GitHub README
 :content-url: ./
 ifdef::env-site[]
-:content-url: https://github.com/redpanda-data/redpanda-labs/blob/main/data-transforms/iss_demo/
+:content-url: https://github.com/redpanda-data/redpanda-labs/tree/main/data-transforms/go/iss_demo/
 endif::[]
 ifndef::env-site[]
 :imagesdir: ../docs/modules/data-transforms/images/

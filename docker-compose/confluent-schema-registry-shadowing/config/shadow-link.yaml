@@ -1,0 +1,81 @@
+# Shadow link: Confluent Kafka + Schema Registry -> Redpanda shadow cluster
+# =========================================================================
+#
+# Replicates two things from the Confluent source into the shadow cluster:
+#
+#   1. Schemas, using API-mode Schema Registry replication
+#      (`shadow_schema_registry_api`), which polls the source Schema
+#      Registry's REST API and imports subjects, versions, and compatibility
+#      settings. This is the mode to use when the source is a Confluent
+#      Schema Registry, as opposed to `shadow_schema_registry_topic`, which
+#      shadows the `_schemas` topic byte-for-byte and only works when the
+#      source is itself a Redpanda cluster.
+#
+#   2. Topic data, using `topic_metadata_sync_options`, so the records that
+#      reference those schemas migrate alongside them.
+name: confluent-schema-migration
+
+client_options:
+  # Bootstrap brokers for the shadow link's Kafka connection - the real
+  # Confluent Kafka broker backing confluent-schema-registry.
+  bootstrap_servers:
+    - confluent-kafka:29092
+  tls_settings:
+    enabled: false
+
+topic_metadata_sync_options:
+  interval: 10s
+  # Only the topics produce_topic_data.py writes to, as literal filters
+  # (no wildcards or prefixes needed for three known topic names).
+  auto_create_shadow_topic_filters:
+    - pattern_type: LITERAL
+      filter_type: INCLUDE
+      name: orders
+    - pattern_type: LITERAL
+      filter_type: INCLUDE
+      name: customers
+    - pattern_type: LITERAL
+      filter_type: INCLUDE
+      name: shipping
+  # Replicate full topic history, not just new records going forward.
+  start_at_earliest: {}
+
+schema_registry_sync_options:
+  shadow_schema_registry_api:
+    # Source Schema Registry REST endpoint (the real Confluent SR).
+    source_url: http://confluent-schema-registry:8081
+    tls_settings:
+      enabled: false
+
+    # How often to poll for incremental changes.
+    tail_interval: 10s
+
+    # How often to run a full reconciliation scan of all selected subjects.
+    #
+    # Lowered from the 5m default so this lab stays interactive: subjects you
+    # register on the source appear on the shadow cluster within seconds
+    # rather than minutes. Leave the default in production, where a 5-minute
+    # reconciliation scan is the right trade-off against load on the source
+    # registry.
+    full_sync_interval: 20s
+
+    # Rate limit for requests to the source registry.
+    max_source_requests_per_second: 30
+
+    # Replicate every subject in the default context ("."). To migrate only
+    # part of a registry, list specific contexts and/or subjects here instead.
+    source_filter:
+      contexts:
+        - "."
+      subjects: []
+
+    # Keep the same context name(s) on the shadow cluster.
+    destination:
+      identity: {}
+
+    # REMOVE strips schema features the Redpanda Schema Registry doesn't
+    # support (Confluent rule sets, metadata tags, compatibility groups) and
+    # imports the rest. The default, FAIL, skips any schema that uses those
+    # features and reports an error instead. Use FAIL if you need to know
+    # about every incompatibility before cutting over.
+    unsupported_schema_feature_policy: REMOVE

@@ -1,0 +1,368 @@
+= Migrate from Confluent with Shadowing
+:env-docker: true
+:page-categories: Schema Registry, Kafka Migration, Disaster Recovery, Integration
+:description: Use Redpanda Shadowing to continuously migrate schemas and topic data from a real Confluent deployment into a Redpanda shadow cluster.
+:page-layout: lab
+:page-topic-type: lab
+:personas: platform_operator, streaming_developer
+// Learning objectives
+:learning-objective-1: Configure a shadow link that replicates schemas and topic data from a Confluent deployment
+:learning-objective-2: Verify that replicated subjects, versions, references, and compatibility settings match the source
+:learning-objective-3: Cut applications over to Redpanda by pausing schema replication
+
+// (test start {"id":"confluent-schema-registry-shadowing", "description": "Confluent migration via Shadowing"})
+// (step {"action":"runShell", "command": "docker compose down -v 2>/dev/null || true", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing"})
+
+ifdef::env-site[]
+This lab demonstrates how to migrate off a real https://docs.confluent.io/platform/current/schema-registry/index.html[Confluent Schema Registry^] using xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[Redpanda Shadowing], without any separate migration tooling.
+endif::[]
+ifndef::env-site[]
+This lab demonstrates how to migrate off a real https://docs.confluent.io/platform/current/schema-registry/index.html[Confluent Schema Registry^] using https://docs.redpanda.com/current/manage/disaster-recovery/shadowing/overview/[Redpanda Shadowing^], without any separate migration tooling.
+endif::[]
+
+A single shadow link carries both halves of the migration:
+
+* *Schemas*, through API-mode Schema Registry replication, which imports subjects, versions, and compatibility settings over the source registry's REST API.
+* *Topic data*, through topic metadata sync, so the records that reference those schemas migrate alongside them.
+
+Shadowing supports two Schema Registry replication modes:
+
+* *Topic mode* (`shadow_schema_registry_topic`) shadows the internal `_schemas` topic byte-for-byte. It only works when the source is another Redpanda cluster.
+* *API mode* (`shadow_schema_registry_api`) polls a source Schema Registry's REST API and imports subjects, versions, and compatibility settings into the shadow cluster's own Schema Registry. This is the mode to use when the source is a Confluent Schema Registry, and it's what this lab configures.
+
+After completing this lab, you will be able to:
+
+* [ ] {learning-objective-1}
+* [ ] {learning-objective-2}
+* [ ] {learning-objective-3}
+
+NOTE: `shadow_schema_registry_api` requires Redpanda v26.2 or later. Override `REDPANDA_VERSION` to pin a different patch or a newer minor.
+
+== Prerequisites
+
+You need https://docs.docker.com/compose/install/[Docker and Docker Compose^], and `jq`.
+
+This lab is for Linux and macOS users. If you are using Windows, you must use the Windows Subsystem for Linux (WSL) to run the commands in this lab.
+
+== Limitations
+
+* Schema replication is one way. While the link is active, the destination contexts it owns are read-only, so the shadow cluster rejects client writes to them until you pause replication for cutover.
+* Schema replication and topic data replication are not coordinated with each other. Records can arrive on the shadow cluster before the schema IDs they carry have been replicated. Consumers that look up those IDs on the shadow cluster fail until the schemas catch up, so wait for schema replication before consuming schema-dependent shadow topics.
+* Schemas that use Confluent features the Redpanda Schema Registry does not support are not replicated as-is. This lab sets `unsupported_schema_feature_policy: REMOVE`, which strips those features and imports the rest. The default, `FAIL`, skips the schema and reports an error instead.
+* This lab lowers `full_sync_interval` to `20s` so it stays interactive. The production default is `5m`.
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/docker-compose/confluent-schema-registry-shadowing
+----
+
+. Start the environment:
++
+[,bash]
+----
+docker compose up -d --wait
+----
+// Test-only step. The Confluent images are large (around 1 GB compressed for
+// cp-kafka and cp-schema-registry together), and on a cold CI runner the pull
+// alone can outlast the timeout on `docker compose up`. Pull first, on its own
+// budget, so the step below only has to wait for the services to come up.
+// (step {"action":"runShell", "command": "docker compose pull", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "timeout": 900000})
+// (step {"action":"runShell", "command": "docker compose up -d --wait", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "timeout": 600000})
+
+. Verify the source Confluent Schema Registry is up:
++
+[,bash]
+----
+curl -s http://localhost:8081/subjects
+----
++
+An empty registry returns `[]`.
+// (step {"action":"runShell", "command": "curl -s http://localhost:8081/subjects", "output": "/\\[\\]/"})
+
+. Verify the Redpanda shadow cluster is healthy:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk cluster health
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk cluster health", "output": "/Healthy/"})
+
+. Register sample schemas and a compatibility setting on the source Confluent Schema Registry:
++
+[,bash]
+----
+./scripts/register-schemas.sh
+----
++
+This registers two subjects, `orders-value` and `customers-value`, sets `BACKWARD` compatibility on `orders-value`, then adds a second, compatible version of it.
+// (step {"action":"runShell", "command": "./scripts/register-schemas.sh", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "output": "/customers-value/"})
+
+. Create the shadow link:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow create \
+  --config-file /config/shadow-link.yaml \
+  --no-confirm \
+  -X admin.hosts=redpanda-shadow:9644
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow create --config-file /config/shadow-link.yaml --no-confirm -X admin.hosts=redpanda-shadow:9644", "output": "/Successfully created/"})
+
+. Verify the link is configured for API-mode schema replication:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow describe confluent-schema-migration \
+  --print-registry \
+  -X admin.hosts=redpanda-shadow:9644
+----
++
+`rpk shadow describe` prints only the overview and client sections by default. Pass `--print-registry` to see the Schema Registry settings, or `--print-all` for every section:
++
+.Expected output
+----
+SCHEMA REGISTRY SYNC
+====================
+SHADOWING MODE                     shadow schema registry api
+PAUSED                             false
+SOURCE URL                         http://confluent-schema-registry:8081
+TAIL INTERVAL                      10s
+FULL SYNC INTERVAL                 20s
+MAX SOURCE REQUESTS PER SECOND     30
+UNSUPPORTED SCHEMA FEATURE POLICY  REMOVE
+----
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow describe confluent-schema-migration --print-registry -X admin.hosts=redpanda-shadow:9644", "output": "/shadow schema registry api/"})
+
+. Check schema replication progress:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk shadow status confluent-schema-migration \
+  -X admin.hosts=redpanda-shadow:9644
+----
++
+Look at the Schema Registry section of the output. The inventory counts on the destination climb toward the source counts as replication catches up. A full sync runs immediately when the link is created, so the two subjects registered above replicate within a few seconds.
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk shadow status confluent-schema-migration -X admin.hosts=redpanda-shadow:9644", "output": "/SCHEMA REGISTRY/"})
+// (step {"action":"wait", "duration": 15000})
+
+. Verify both registries agree on subjects, versions, and compatibility:
++
+[,bash]
+----
+./scripts/verify-replication.sh
+----
++
+Both the source (port 8081) and destination (port 28081) should list the same subjects, the same version numbers for each subject, and `BACKWARD` compatibility on `orders-value`.
+// (step {"action":"runShell", "command": "./scripts/verify-replication.sh", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "output": "/DESTINATION compatibility for orders-value: .*BACKWARD/"})
+
+. Confirm the destination context is read-only while the link is active:
++
+[,bash]
+----
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:28081/subjects/blocked-test/versions \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  -d '{"schema": "{\"type\":\"string\"}"}'
+----
++
+Expect `412`. The shadow cluster rejects writes to contexts owned by an active schema replication task, with the message `Writes to Schema Registry are disabled`.
+// (step {"action":"runShell", "command": "curl -s -o /dev/null -w \"%{http_code}\\n\" -X POST http://localhost:28081/subjects/blocked-test/versions -H \"Content-Type: application/vnd.schemaregistry.v1+json\" -d '{\"schema\": \"{\\\"type\\\":\\\"string\\\"}\"}'", "output": "/412/"})
+
+== Add more complex schema settings
+
+Beyond simple standalone Avro schemas, verify that replication also handles schema references, other schema types, and compatibility overrides. The source Confluent Schema Registry has no UI in this lab, so everything below goes through its REST API using curl. Redpanda Console gives you a UI to inspect the _destination_ side.
+
+. Register the additional subjects on the source:
++
+[,bash]
+----
+./scripts/register-complex-schemas.sh
+----
++
+This adds:
++
+* `address-value` (Avro) and `shipping-value` (Avro), where `shipping-value` *references* `address-value`. Shadowing imports referenced schemas in dependency order.
+* `shipping-value` compatibility set to `FULL_TRANSITIVE`
+* `warehouse-events-value`, a *JSON Schema* subject
+* `inventory-events-value`, a *Protobuf* subject
+// (step {"action":"runShell", "command": "./scripts/register-complex-schemas.sh", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "output": "/inventory-events-value/"})
+
+. Wait for the next sync cycle, then confirm the reference resolved on the destination:
++
+[,bash]
+----
+curl -s http://localhost:8081/subjects/shipping-value/versions/1 | jq .references
+curl -s http://localhost:28081/subjects/shipping-value/versions/1 | jq .references
+----
++
+Both should show the same reference to `address-value`.
++
+New subjects appear on the destination after a full sync, not a tail sync, so allow up to `full_sync_interval` (`20s` in this lab, `5m` by default) for them to show up.
+// (step {"action":"wait", "duration": 30000})
+// (step {"action":"runShell", "command": "curl -s http://localhost:28081/subjects/shipping-value/versions/1", "output": "/address-value/"})
+
+. Open Redpanda Console at http://localhost:8080[] and browse to the Schema Registry section. You should see all six subjects on the shadow cluster, with the correct type for each (`AVRO`, `JSON`, `PROTOBUF`) and `FULL_TRANSITIVE` compatibility on `shipping-value`. Select `shipping-value` to see its reference to `address-value`, which the list view doesn't show.
+
+== Migrate topic data using the registered schemas
+
+So far, the source registry has schemas but no actual Kafka records. This step writes real Avro-encoded messages to `confluent-kafka` using the schemas registered above, then watches the shadow link replicate those records to Redpanda.
+
+The `python-client` container encodes and decodes records by hand: it fetches each schema from the registry over REST, then frames the payload in the standard Confluent wire format (a `0x00` magic byte followed by a 4-byte big-endian schema ID, then the Avro binary body). This makes the wire format explicit, since that format is exactly what has to stay portable for a migration to work at all.
+
+. Produce to three topics, `orders`, `customers`, and `shipping` (the last one uses `shipping-value`, which references `address-value`):
++
+[,bash]
+----
+docker exec python-client python3 /scripts/produce_topic_data.py
+----
+// (step {"action":"runShell", "command": "docker exec python-client python3 /scripts/produce_topic_data.py", "output": "/delivered to shipping/"})
+
+. Consume and decode the records from the source, resolving each schema (including the `shipping-value` reference) from the source registry:
++
+[,bash]
+----
+docker exec python-client python3 /scripts/consume_topic_data.py
+----
+// (step {"action":"runShell", "command": "docker exec python-client python3 /scripts/consume_topic_data.py", "output": "/ord-1001/"})
+
+. Point the same consumer at the *shadow cluster's* Schema Registry, to prove that a schema ID embedded in a message produced against Confluent resolves identically after migration. The ID doesn't change just because the schema got replicated:
++
+[,bash]
+----
+docker exec -e SR_URL=http://redpanda-shadow:8081 python-client python3 /scripts/consume_topic_data.py
+----
++
+This still reads the Kafka records from `confluent-kafka`, but resolves the embedded schema IDs against `redpanda-shadow`'s Schema Registry. Decoding succeeds exactly the same way.
+// (step {"action":"runShell", "command": "docker exec -e SR_URL=http://redpanda-shadow:8081 python-client python3 /scripts/consume_topic_data.py", "output": "/ord-1001/"})
+
+. Confirm the records themselves replicated to the shadow cluster:
++
+[,bash]
+----
+docker exec redpanda-shadow rpk topic list
+docker exec redpanda-shadow rpk shadow status confluent-schema-migration \
+  -X admin.hosts=redpanda-shadow:9644
+----
++
+The Topics section shows each shadow topic `ACTIVE` with the destination high watermark matching the source and `LAG` at `0`.
+// (step {"action":"wait", "duration": 20000})
+// (step {"action":"runShell", "command": "docker exec redpanda-shadow rpk topic list", "output": "/shipping/"})
+
+. Read the migrated records using only the shadow cluster, for both Kafka and Schema Registry:
++
+[,bash]
+----
+docker exec \
+  -e SR_URL=http://redpanda-shadow:8081 \
+  -e BOOTSTRAP_SERVERS=redpanda-shadow:9092 \
+  python-client python3 /scripts/consume_topic_data.py
+----
++
+This is the end state of the migration: the data and the schemas needed to decode it both live on Redpanda.
+// (step {"action":"runShell", "command": "docker exec -e SR_URL=http://redpanda-shadow:8081 -e BOOTSTRAP_SERVERS=redpanda-shadow:9092 python-client python3 /scripts/consume_topic_data.py", "output": "/ord-1001/"})
+
+== Migration cutover
+
+When you're ready to cut applications over to Redpanda, pause schema replication so the destination context becomes writable.
+
+`rpk shadow update` takes no flags for individual fields. It opens the link's current configuration in your editor (like `kubectl edit`), you make changes, and it applies them on save.
+
+. Pause replication:
++
+[,bash]
+----
+./scripts/set-paused.sh true
+----
++
+The script supplies a non-interactive editor so this step can be scripted and tested. To do it by hand instead, run the command below, add `paused: true` under `shadow_schema_registry_api`, then save and exit. The field is absent from the configuration when it is false, so you are adding a line rather than changing one. The image sets `EDITOR=nano`, so save with kbd:[Ctrl+O], kbd:[Enter], then kbd:[Ctrl+X]:
++
+[,bash]
+----
+docker exec -it redpanda-shadow rpk shadow update confluent-schema-migration \
+  -X admin.hosts=redpanda-shadow:9644
+----
+// (step {"action":"runShell", "command": "./scripts/set-paused.sh true", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "output": "/replication paused: true/"})
+
+. Confirm the destination Schema Registry now accepts writes:
++
+[,bash]
+----
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:28081/subjects/cutover-test/versions \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  -d '{"schema": "{\"type\":\"string\"}"}'
+----
++
+Expect `200`, where the same request returned `412` while replication was active.
+// (step {"action":"runShell", "command": "curl -s -o /dev/null -w \"%{http_code}\\n\" -X POST http://localhost:28081/subjects/cutover-test/versions -H \"Content-Type: application/vnd.schemaregistry.v1+json\" -d '{\"schema\": \"{\\\"type\\\":\\\"string\\\"}\"}'", "output": "/200/"})
+
+. Point your producers and consumers at the Redpanda cluster's Kafka and Schema Registry endpoints. New schemas registered after cutover go directly to the now writable Redpanda Schema Registry.
+
+=== Resume replication
+
+To reverse the cutover, set `paused` back to `false`. Resuming re-establishes the write block on the destination context, so if you registered any schemas directly against the shadow cluster while it was paused, check `rpk shadow status` afterward for sync errors on that context.
+
+[,bash]
+----
+./scripts/set-paused.sh false
+----
+// (step {"action":"runShell", "command": "./scripts/set-paused.sh false", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing", "output": "/replication paused: false/"})
+
+== Clean up
+
+Stop and remove the demo environment:
+
+[,bash]
+----
+docker compose down -v
+----
+// (step {"action":"runShell", "command": "docker compose down -v", "workingDirectory": "../docker-compose/confluent-schema-registry-shadowing"})
+
+// (test end)
+
+== What you explored
+
+In this lab, you:
+
+* Ran a real Confluent Kafka broker and Confluent Schema Registry as the migration source
+* Configured a shadow link that replicates schemas over the Schema Registry REST API and topic data over the Kafka API
+* Replicated subjects, versions, schema references, JSON Schema and Protobuf subjects, and compatibility overrides
+* Produced and consumed Avro-encoded records, decoding the Confluent wire format by hand
+* Verified that a schema ID embedded in a message resolves identically against both registries
+* Read the migrated records using only the Redpanda shadow cluster
+* Confirmed that replicated contexts are read-only until you pause replication for cutover
+
+The following table summarizes the two Schema Registry replication modes:
+
+|===
+| Mode | Config field | Source requirement | Use case
+
+| Topic mode
+| `shadow_schema_registry_topic`
+| Source must be Redpanda
+| Byte-for-byte replica of a Redpanda cluster's entire Schema Registry, no filtering
+
+| API mode
+| `shadow_schema_registry_api`
+| Any Schema Registry with a REST API (including Confluent)
+| Migrating from Confluent, or replicating a filtered or remapped subset of subjects
+|===
+
+== Suggested reading
+
+ifdef::env-site[]
+* xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[Shadowing Overview]
+* xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[Configure Shadowing]
+* xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc[Migrate Schemas from Confluent Schema Registry]
+* xref:streaming:manage:schema-reg/schema-reg-contexts.adoc[Schema Registry Contexts]
+endif::[]
+ifndef::env-site[]
+* https://docs.redpanda.com/current/manage/disaster-recovery/shadowing/overview/[Shadowing Overview^]
+* https://docs.redpanda.com/current/manage/disaster-recovery/shadowing/setup/[Configure Shadowing^]
+* https://docs.redpanda.com/current/manage/disaster-recovery/shadowing/migrate-schemas-confluent/[Migrate Schemas from Confluent Schema Registry^]
+* https://docs.redpanda.com/current/manage/schema-reg/schema-reg-contexts/[Schema Registry Contexts^]
+endif::[]
+* https://docs.confluent.io/platform/current/schema-registry/index.html[Confluent Schema Registry^]
