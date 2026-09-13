@@ -9,63 +9,84 @@ Redpanda Connect has been writing Postgres since the simulator started in xref:p
 
 . Count the finished matches and look at one:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T postgres psql -U game -d game \
-  -c "SELECT COUNT(*) FROM match_history" \
-  -c "SELECT match_id, winner_player_id, duration_seconds, player_ids FROM match_history ORDER BY match_id LIMIT 3"
+include::example$steps/persist-match-history/commands.sh[tag=history]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/history.txt[]
 ----
 
 . Check that the sink agrees with the source. Every `game.player-events` record is a row, grouped by type:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T postgres psql -U game -d game \
-  -c "SELECT event_type, COUNT(*) FROM player_events GROUP BY 1 ORDER BY 1"
+include::example$steps/persist-match-history/commands.sh[tag=counts-by-type]
 ----
 +
-The counts equal `events_by_type` at http://localhost:8090/stats: 761 `item_acquired`, 216 `player_joined`, 192 `player_left`, 1729 `score_changed`.
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/counts-by-type.txt[]
+----
++
+The counts equal `events_by_type` at http://localhost:8090/stats.
 
 . Produce a poison record. The simulator writes one record to `game.player-events` whose schema ID, `2147483647`, is registered nowhere:
 +
-[,bash]
+[source,bash]
 ----
-curl -s -X POST http://localhost:8090/poison
+include::example$steps/persist-match-history/commands.sh[tag=poison]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/poison.txt[]
 ----
 
-. Find it on the dead-letter topic:
+. Find it on the dead-letter topic (`rpk` waits for the record, which arrives once the fallback output flushes its batch):
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic consume game.player-events.dlq -o start -n 1
+include::example$steps/persist-match-history/commands.sh[tag=dlq]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/dlq.txt[]
 ----
 +
 The record keeps its key `poison`, its `event_type` header, and gains `error`, `kafka_topic`, `kafka_partition`, and `kafka_offset` headers: everything needed to inspect it and replay it after a fix.
 
 The pipeline, in three parts. The input joins its own consumer group on both topics:
 
-[,yaml]
+[source,yaml]
 ----
 include::example$connect/match-history.yaml[tags=input]
 ----
 
 The processors decode and flatten:
 
-[,yaml]
+[source,yaml]
 ----
 include::example$connect/match-history.yaml[tags=pipeline]
 ----
 
 The output inserts into one of two tables, refusing any message that carries a processing error:
 
-[,yaml]
+[source,yaml]
 ----
 include::example$connect/match-history.yaml[tags=output]
 ----
 
 The refused messages fall through to the second output, the dead-letter topic, with the error attached:
 
-[,yaml]
+[source,yaml]
 ----
 include::example$connect/match-history.yaml[tags=dlq]
 ----
@@ -76,12 +97,12 @@ Analysts want match history in a database, and that requirement should cost noth
 
 The `mapping` flattens the Protobuf `oneof` into two row shapes, one per table, because a relational table wants columns, not a nested `scoreChanged` object. `match_started` records are dropped (`root = deleted()`): the history table is about finished matches, and the `match_ended` event carries the start time. Both inserts end with `ON CONFLICT DO NOTHING` on the event's natural key, so a redelivered record (Connect is at-least-once, like the Go services) inserts nothing twice. The tables:
 
-[,sql]
+[source,sql]
 ----
 include::example$postgres/init.sql[tags=match_history]
 ----
 
-[,sql]
+[source,sql]
 ----
 include::example$postgres/init.sql[tags=player_events]
 ----
@@ -103,7 +124,7 @@ Complete sources for building along:
 .Complete source: connect/match-history.yaml
 [%collapsible]
 ====
-[,yaml]
+[source,yaml]
 ----
 include::example$connect/match-history.yaml[]
 ----
@@ -112,7 +133,7 @@ include::example$connect/match-history.yaml[]
 .Complete source: postgres/init.sql
 [%collapsible]
 ====
-[,sql]
+[source,sql]
 ----
 include::example$postgres/init.sql[]
 ----
@@ -122,17 +143,17 @@ include::example$postgres/init.sql[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T postgres psql -U game -d game -tA -c "SELECT COUNT(*) FROM match_history"
+include::example$steps/persist-match-history/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-48
+include::example$steps/persist-match-history/expected/verify.txt[]
 ----
 
 48 is the number of `match_ended` events in the seeded 3000 (`events_by_type` at http://localhost:8090/stats). If the count is lower, the pipeline is behind: `docker compose exec -T rpk rpk group describe connect-history` shows the lag, and `docker compose logs connect` shows Postgres errors. If the dead-letter topic is empty after the poison request, wait a few seconds; the fallback output batches like the primary one.

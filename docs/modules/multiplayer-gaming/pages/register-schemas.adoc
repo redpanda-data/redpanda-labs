@@ -9,44 +9,41 @@ You register the `GameEvent` Protobuf schema under one subject per event topic, 
 
 . Register version 1 for each of the three event subjects, set `BACKWARD` compatibility, then register version 2, and register the current file under `game.leaderboard-value`. `make schemas` does all of it and is safe to repeat:
 +
-[,bash]
+[source,bash]
 ----
-make schemas
+include::example$steps/register-schemas/commands.sh[tag=schemas]
 ----
 +
-[,makefile]
+[source,makefile]
 ----
 include::example$Makefile[tags=schemas]
 ----
 
 . Compare the two versions. Version 2 adds one optional field, `region`, to the envelope, and one new top-level message, `LeaderboardEntry`, that xref:build-leaderboard.adoc[] publishes:
 +
-[,protobuf]
+[source,protobuf]
 ----
 include::example$proto/game_events.proto[tags=envelope]
 ----
 
 . Ask Schema Registry whether a breaking change would be accepted. `proto/history/game_events.breaking.proto` changes `player_id` from `string` to `int64`:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk registry schema check-compatibility game.player-events-value \
-  --schema /proto/history/game_events.breaking.proto --type protobuf --schema-version latest
+include::example$steps/register-schemas/commands.sh[tag=check-compatibility]
 ----
 +
-The first lines of the output:
-+
-[,text]
+.Expected output
+[source,text]
 ----
-Schema is not compatible.
-{errorType:"FIELD_SCALAR_KIND_CHANGED", description:"The kind of a SCALAR field at path '#/GameEvent/2' in the new schema does not match its kind in the old schema"}
+include::example$steps/register-schemas/expected/check-compatibility.txt[]
 ----
 
 . Watch the simulator wake up:
 +
-[,bash]
+[source,bash]
 ----
-docker compose logs simulator --tail 5
+include::example$steps/register-schemas/commands.sh[tag=simulator-logs]
 ----
 +
 It logs `game.player-events-value -> schema id 2`, the same for `game.match-events-value`, and starts producing.
@@ -57,7 +54,7 @@ The schema is the contract between the game servers and every consumer, and it w
 
 The payload messages are the rest of the file:
 
-[,protobuf]
+[source,protobuf]
 ----
 include::example$proto/game_events.proto[tags=payloads]
 ----
@@ -72,7 +69,7 @@ Schema Registry is part of the broker, stores its state in the `_schemas` topic 
 
 The simulator has been polling `POST /subjects/game.player-events-value` with the exact text of `proto/game_events.proto`, a lookup that answers only when that schema is registered:
 
-[,go]
+[source,go]
 ----
 include::example$services/internal/schema/schema.go[tags=lookup]
 ----
@@ -84,7 +81,7 @@ Complete sources for building along:
 .Complete source: proto/game_events.proto
 [%collapsible]
 ====
-[,protobuf]
+[source,protobuf]
 ----
 include::example$proto/game_events.proto[]
 ----
@@ -93,7 +90,7 @@ include::example$proto/game_events.proto[]
 .Complete source: services/internal/schema/schema.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/schema/schema.go[]
 ----
@@ -103,19 +100,17 @@ include::example$services/internal/schema/schema.go[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk registry schema list game.player-events-value
+include::example$steps/register-schemas/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-CONTEXT  SUBJECT                   VERSION  ID    TYPE      ERROR
-default  game.player-events-value  1        1     PROTOBUF
-default  game.player-events-value  2        2     PROTOBUF
+include::example$steps/register-schemas/expected/verify.txt[]
 ----
 
 If version 2 is missing, the compatibility check rejected it. `rpk registry compatibility-level get game.player-events-value` should print `BACKWARD`; `make schemas` sets it before registering version 2. If the IDs differ from `1` and `2`, other schemas were registered first; nothing depends on the exact numbers.

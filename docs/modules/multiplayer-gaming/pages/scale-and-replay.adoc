@@ -9,42 +9,81 @@ Three experiments that only a log makes cheap. You push the producer past what o
 
 . Keep the dashboard at http://localhost:3000 open and burst the simulator at 2000 events per second for 5 seconds:
 +
-[,bash]
+[source,bash]
 ----
-curl -s -X POST 'http://localhost:8090/burst?rate=2000&seconds=5'
+include::example$steps/scale-and-replay/commands.sh[tag=burst]
 ----
 +
-The `consumer lag` counter on the dashboard rises for a moment and returns to 0 once the group catches up. The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged.
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/burst.txt[]
+----
++
+The `consumer lag` counter on the dashboard rises for a moment and returns to 0 once the group catches up. `make wait` blocks until it has:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=wait-burst]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/wait-burst.txt[]
+----
++
+The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged.
 
-. Scale the leaderboard to three instances:
+. Scale the leaderboard to three instances and wait for the group to settle:
 +
-[,bash]
+[source,bash]
 ----
-docker compose up -d --scale leaderboard-service=3 --no-recreate --wait leaderboard-service
-docker compose exec -T rpk rpk group describe leaderboard
+include::example$steps/scale-and-replay/commands.sh[tag=scale]
+----
++
+Then look at the group:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=members]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/members.txt[]
 ----
 +
 `MEMBERS 3`, and the partition table shows two partitions per member. The dashboard at http://localhost:3000 now shows `members 3`; it did not move, because it is not a group member. Each instance reports the partitions it owns: `docker compose exec -T --index 2 leaderboard-service wget -qO- http://localhost:8080/healthz` shows the second one's. Its log shows what it did when the partitions arrived: `resumes at offset <n>: loaded <k> player totals from game.leaderboard`.
 
 . Snapshot the board, then send the group back to the start of every partition. Stop the consumers, seek the group, start the consumers again:
 +
-[,bash]
+[source,bash]
 ----
-curl -s http://localhost:3000/api/top > before.txt
-docker compose stop leaderboard-service
-docker compose exec -T rpk rpk group seek leaderboard --to start
-docker compose start leaderboard-service
+include::example$steps/scale-and-replay/commands.sh[tag=snapshot-seek]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/snapshot-seek.txt[]
 ----
 +
 `rpk group seek` needs the group to have no active members, which is why the services are stopped first. `rpk group describe leaderboard` now shows a `TOTAL-LAG` equal to every record on `game.player-events`.
 
-. Watch the replay, then compare. On the dashboard the totals drop and climb back as the instances recompute from the first record; `records read` counts every republished entry. Wait for the lag to return to 0, then:
+. Watch the replay, then compare. On the dashboard the totals drop and climb back as the instances recompute from the first record; `records read` counts every republished entry. Wait for the lag to return to 0 and the dashboard to catch up:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk group describe leaderboard | grep TOTAL-LAG
-curl -s http://localhost:3000/api/top > after.txt
-diff before.txt after.txt && echo "leaderboard identical after replay"
+include::example$steps/scale-and-replay/commands.sh[tag=wait-replay]
+----
++
+Then compare:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=verify]
 ----
 
 == Why
@@ -71,19 +110,12 @@ Meanwhile `game.leaderboard` has thousands more records than players. Run `docke
 
 == Verify
 
-Run:
-
-[,bash]
-----
-diff before.txt after.txt && echo "leaderboard identical after replay"
-----
-
-Expected output:
+The comparison above is the check:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-leaderboard identical after replay
+include::example$steps/scale-and-replay/expected/verify.txt[]
 ----
 
 If `diff` prints differences, the group had not finished replaying when `after.txt` was taken, or the dashboard was a second behind the last entries: wait for `TOTAL-LAG 0` and take `after.txt` again. If `rpk group seek` reports `seeking a non-empty group is not allowed`, a leaderboard instance was still in the group; `docker compose stop leaderboard-service` and repeat.

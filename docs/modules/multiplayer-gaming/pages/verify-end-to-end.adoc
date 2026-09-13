@@ -9,14 +9,20 @@ One script asserts everything the previous steps claimed, against the running sy
 
 . Run the checks:
 +
-[,bash]
+[source,bash]
 ----
-make verify
+include::example$steps/verify-end-to-end/commands.sh[tag=verify-all]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify-all.txt[]
 ----
 
 . Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `retry`) and runs nine checks; the complete script is at the end of _What happens inside_. The two that read `game.leaderboard` reduce the topic the way compaction does, last record per key, before comparing:
 +
-[,bash]
+[source,bash]
 ----
 include::example$scripts/verify.sh[tags=board]
 ----
@@ -40,7 +46,7 @@ The complete script, for building along (it sources `scripts/verify-lib.sh`, an 
 .Complete source: scripts/verify.sh
 [%collapsible]
 ====
-[,bash]
+[source,bash]
 ----
 include::example$scripts/verify.sh[]
 ----
@@ -50,26 +56,17 @@ include::example$scripts/verify.sh[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-make verify
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
 ----
 
-Expected output (the counts in parentheses depend on whether you ran the burst and poison steps):
+Expected output (the counts in parentheses in the full output above depend on whether you ran the burst and poison steps):
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-ok    topics and partitions
-ok    high watermarks match the simulator (SIM_EVENTS_MAX=3000, burst=0, poison=0)
-ok    consumer groups leaderboard, achievements, connect-history have lag 0
-ok    game.leaderboard has one live entry per scoring player (last record per key)
-ok    top 10 totals on game.leaderboard equal SUM(delta) in Postgres and the dashboard's /api/top
-ok    match_history rows equal match_ended events
-ok    achievements: hot_streak fired (374) and all 396 unlocks are on game.achievements
-ok    game.player-events.dlq holds exactly the poison records (0)
-ok    leaderboard dashboard and Connect /ready answer
-PASS (9/9)
+include::example$steps/verify-end-to-end/expected/verify.txt[]
 ----
 
 A failed check names what it compared. The most likely one after xref:scale-and-replay.adoc[] is the lag check, if a replay is still running: wait for `rpk group describe leaderboard` to show `TOTAL-LAG 0` and run `make verify` again.

@@ -136,43 +136,40 @@ Two directions the steps leave open. Neither is required, and `make verify` does
 
 `game.player-events` keeps seven days on local disk. A season of a live game is months of events, and the replay in xref:scale-and-replay.adoc[] is only as deep as the retention. Tiered Storage moves closed segments to object storage and reads them back on demand, so retention becomes a setting instead of a disk size. The compose file carries a `tiered` profile with MinIO as the object store, and one target turns it on for the local broker:
 
-[,bash]
+[source,bash]
 ----
-make tiered-up
+include::example$steps/overview/commands.sh[tag=tiered-up]
 ----
 
-[,makefile]
+[source,makefile]
 ----
 include::example$Makefile[tags=tiered]
 ----
 
-[,yaml]
+[source,yaml]
 ----
 include::example$docker-compose.yml[tags=tiered]
 ----
 
 Then make the topic write to and read from the bucket, give it a season of retention, and let a segment roll so there is something to upload (one minute here; production values are far larger):
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic alter-config game.player-events \
-  --set redpanda.remote.write=true --set redpanda.remote.read=true \
-  --set retention.ms=7776000000 --set segment.ms=60000
+include::example$steps/overview/commands.sh[tag=tiered-archive]
 ----
 
 About two minutes later, Redpanda has uploaded the closed segments:
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic describe-storage game.player-events
+include::example$steps/overview/commands.sh[tag=tiered-describe]
 ----
 
 The summary shows `CLOUD-STORAGE-MODE  full` and `LAST-UPLOAD` as milliseconds since the last upload; the size section shows non-zero `CLOUD-BYTES` and `CLOUD-SEGMENTS` for every partition. The same segments are objects in the bucket:
 
-[,bash]
+[source,bash]
 ----
-COMPOSE_PROFILES=local,tiered docker compose run --rm --entrypoint sh minio-init -c \
-  'mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls -r local/redpanda-tiered'
+include::example$steps/overview/commands.sh[tag=tiered-bucket]
 ----
  From here on a replay (`rpk group seek leaderboard --to start`) reads anything that has aged off local disk from the bucket, transparently to the consumers, so rebuilding the leaderboard from a whole season costs object storage reads and nothing else.
 
@@ -186,9 +183,9 @@ xref:streaming:develop:manage-topics/cloud-topics.adoc[Cloud Topics] go one step
 
 Stop the stack and delete its volumes, including MinIO's if you started the `tiered` profile:
 
-[,bash]
+[source,bash]
 ----
-make clean
+include::example$steps/overview/commands.sh[tag=clean]
 ----
 
 == Related docs

@@ -9,33 +9,44 @@ The simulator is already producing. In this step you let it run to its cap of ex
 
 . Wait for the simulator to stop at `SIM_EVENTS_MAX`:
 +
-[,bash]
+[source,bash]
 ----
-make seed
+include::example$steps/produce-player-events/commands.sh[tag=seed]
 ----
 +
-`make seed` runs `make topics` and `make schemas` first (both are no-ops now), then polls the simulator until its state is `capped` and prints the counters. At 100 events per second this takes about 30 seconds.
+`make seed` runs `make topics` and `make schemas` first (both are no-ops now), polls the simulator until its state is `capped` and prints the counters, then waits until the three consumer groups have caught up. At 100 events per second this takes about 30 seconds.
++
+.Expected output
+[source,text]
+----
+include::example$steps/produce-player-events/expected/seed.txt[]
+----
 
 . Open Console at http://localhost:8080/topics/game.player-events and select a record. Console shows the Protobuf payload as JSON, with `scoreChanged`, `itemAcquired`, or `playerJoined` as the populated `oneof` case and the `event_type` header alongside.
 
 . Read one partition with `rpk`, decoding through Schema Registry:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic consume game.player-events -p 1 -o start -n 2 \
-  --use-schema-registry=value
+include::example$steps/produce-player-events/commands.sh[tag=consume-partition]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/produce-player-events/expected/consume-partition.txt[]
 ----
 
 The producer configuration is a few lines of franz-go:
 
-[,go]
+[source,go]
 ----
 include::example$services/simulator/main.go[tags=producer]
 ----
 
 And the pacing loop, which is what makes `SIM_EVENTS_MAX` exact:
 
-[,go]
+[source,go]
 ----
 include::example$services/simulator/main.go[tags=loop]
 ----
@@ -46,7 +57,7 @@ Three settings on the producer carry the design. Idempotence gives every partiti
 
 The generator is deterministic on purpose. It seeds a random source from `SIM_SEED`, keeps its own simulated clock (200 simulated milliseconds per event), and returns exactly one event per call, queuing the several events of a match start or match end so a hard stop at 3000 never leaves half a match on the log. Same seed, same 3000 records, same timestamps, which is what lets `scripts/verify.sh` assert exact numbers and lets you compare a replay with the original in xref:scale-and-replay.adoc[].
 
-[,go]
+[source,go]
 ----
 include::example$services/simulator/sim/generator.go[tags=next]
 ----
@@ -67,7 +78,7 @@ Complete sources for building along: the generator, the main program, and the sh
 .Complete source: services/simulator/sim/generator.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/simulator/sim/generator.go[]
 ----
@@ -76,7 +87,7 @@ include::example$services/simulator/sim/generator.go[]
 .Complete source: services/simulator/main.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/simulator/main.go[]
 ----
@@ -85,7 +96,7 @@ include::example$services/simulator/main.go[]
 .Complete source: services/internal/schema/schema.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/schema/schema.go[]
 ----
@@ -94,7 +105,7 @@ include::example$services/internal/schema/schema.go[]
 .Complete source: services/internal/envvar/env.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/envvar/env.go[]
 ----
@@ -103,7 +114,7 @@ include::example$services/internal/envvar/env.go[]
 .Complete source: services/Dockerfile
 [%collapsible]
 ====
-[,dockerfile]
+[source,dockerfile]
 ----
 include::example$services/Dockerfile[]
 ----
@@ -113,18 +124,17 @@ include::example$services/Dockerfile[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-curl -s http://localhost:8090/stats | grep -E '"state"|"acked_total"'
+include::example$steps/produce-player-events/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-  "state": "capped",
-  "acked_total": 3000,
+include::example$steps/produce-player-events/expected/verify.txt[]
 ----
 
 If the state is still `producing`, wait and repeat; if it is `waiting_for_schema`, `make schemas` did not complete. If `acked_total` is lower than `generated_total`, the simulator is still receiving acknowledgements or logged produce errors; `docker compose logs simulator` shows them.

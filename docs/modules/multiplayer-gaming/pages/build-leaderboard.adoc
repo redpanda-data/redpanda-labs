@@ -11,46 +11,58 @@ The leaderboard service has been consuming since the simulator started in xref:p
 
 . Look at the topic the dashboard reads. It is compacted, and it rolls a new segment every minute:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic describe game.leaderboard -c
+include::example$steps/build-leaderboard/commands.sh[tag=describe]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/build-leaderboard/expected/describe.txt[]
 ----
 +
 `cleanup.policy` is `compact` and `segment.ms` is `60000`. Each record is one `LeaderboardEntry`, keyed by `player_id`:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic consume game.leaderboard -o start -n 24 --use-schema-registry=value
+include::example$steps/build-leaderboard/commands.sh[tag=consume-start]
 ----
 +
 Every value carries an absolute `score`, not a delta, plus the `game.player-events` partition and offset it was computed from.
 
 . Count the players on the board the way compaction sees them, one live record per key:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic consume game.leaderboard -o :end -f '%k\n' | sort -u | wc -l
+include::example$steps/build-leaderboard/commands.sh[tag=count-players]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/build-leaderboard/expected/count-players.txt[]
 ----
 +
 `24`: every player scored at least once in 3000 events. Run the command without `sort -u` and the count is the number of records still on the log. Right after seeding it is 1729, one per `score_changed`. Within a minute or two it drops to 24: compaction keeps the newest record of each key and deletes the rest. Records produced since the last segment rolled are still uncompacted, so the total is usually 24 plus a short tail.
 
 The consumer loop:
 
-[,go]
+[source,go]
 ----
 include::example$services/leaderboard/main.go[tags=consumer]
 ----
 
 What it does with each record:
 
-[,go]
+[source,go]
 ----
 include::example$services/leaderboard/main.go[tags=apply]
 ----
 
 And what it publishes:
 
-[,protobuf]
+[source,protobuf]
 ----
 include::example$proto/game_events.proto[tags=leaderboard]
 ----
@@ -73,7 +85,7 @@ Compaction is a topic property, `cleanup.policy=compact`, and the broker does th
 
 On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. The first record of each partition triggers `seed`:
 
-[,go]
+[source,go]
 ----
 include::example$services/leaderboard/main.go[tags=seed]
 ----
@@ -84,7 +96,7 @@ On `game.leaderboard`, the producer hashes `player_id` to one of three partition
 
 The dashboard's reader and the map it fills:
 
-[,go]
+[source,go]
 ----
 include::example$services/dashboard/main.go[tags=read]
 ----
@@ -95,7 +107,7 @@ Complete sources for building along. The dashboard page `services/dashboard/stat
 .Complete source: services/leaderboard/main.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/leaderboard/main.go[]
 ----
@@ -104,7 +116,7 @@ include::example$services/leaderboard/main.go[]
 .Complete source: services/internal/board/board.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/board/board.go[]
 ----
@@ -113,7 +125,7 @@ include::example$services/internal/board/board.go[]
 .Complete source: services/dashboard/main.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/dashboard/main.go[]
 ----
@@ -122,7 +134,7 @@ include::example$services/dashboard/main.go[]
 .Complete source: services/internal/topics/topics.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/topics/topics.go[]
 ----
@@ -131,7 +143,7 @@ include::example$services/internal/topics/topics.go[]
 .Complete source: proto/game_events.proto
 [%collapsible]
 ====
-[,protobuf]
+[source,protobuf]
 ----
 include::example$proto/game_events.proto[]
 ----
@@ -141,38 +153,17 @@ include::example$proto/game_events.proto[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-curl -s 'http://localhost:3000/api/top?n=3'
+include::example$steps/build-leaderboard/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-{
-  "top": [
-    {
-      "rank": 1,
-      "player_id": "p014",
-      "display_name": "Sable",
-      "score": 795
-    },
-    {
-      "rank": 2,
-      "player_id": "p021",
-      "display_name": "Corvid",
-      "score": 715
-    },
-    {
-      "rank": 3,
-      "player_id": "p024",
-      "display_name": "Zephyr",
-      "score": 715
-    }
-  ]
-}
+include::example$steps/build-leaderboard/expected/verify.txt[]
 ----
 
 These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`; ties are ordered by `player_id`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (xref:scale-and-replay.adoc[]). An empty `top` means the dashboard has not caught up with the topic yet, or the service has not published: `curl -s http://localhost:3000/api/status` shows `records_read` and `caught_up`, and `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/healthz` shows the partitions a service instance owns and how many entries it has published.

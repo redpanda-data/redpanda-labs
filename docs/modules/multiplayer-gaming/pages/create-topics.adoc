@@ -9,28 +9,28 @@ You create five topics with `rpk`. Each has a deliberate partition count and a s
 
 . Create the topics. `make topics` runs these five commands and is safe to repeat:
 +
-[,bash]
+[source,bash]
 ----
-make topics
+include::example$steps/create-topics/commands.sh[tag=topics]
 ----
 +
-[,makefile]
+[source,makefile]
 ----
 include::example$Makefile[tags=topics]
 ----
 
 . Look at one of them:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic describe game.player-events -c
+include::example$steps/create-topics/commands.sh[tag=describe-player-events]
 ----
 +
 `retention.ms` is `604800000` (7 days) and `cleanup.policy` is `delete`. Compare with the leaderboard topic:
 +
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic describe game.leaderboard -c
+include::example$steps/create-topics/commands.sh[tag=describe-leaderboard]
 ----
 +
 `cleanup.policy` is `compact` and `segment.ms` is `60000`.
@@ -90,7 +90,7 @@ The complete `Makefile`, for building along:
 .Complete source: Makefile
 [%collapsible]
 ====
-[,makefile]
+[source,makefile]
 ----
 include::example$Makefile[]
 ----
@@ -100,23 +100,17 @@ include::example$Makefile[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic list
+include::example$steps/create-topics/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-NAME                    PARTITIONS  REPLICAS
-_schemas                1           1
-game.achievements       3           1
-game.leaderboard        3           1
-game.match-events       3           1
-game.player-events      6           1
-game.player-events.dlq  1           1
+include::example$steps/create-topics/expected/verify.txt[]
 ----
 
 `_schemas` is Schema Registry's own storage topic. If a topic shows a different partition count, you created it earlier with other settings: `rpk topic delete <name>` and run `make topics` again.

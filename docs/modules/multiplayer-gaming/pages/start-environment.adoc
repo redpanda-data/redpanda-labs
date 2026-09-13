@@ -11,11 +11,12 @@ Choose one of two paths. Both end with the same running stack.
 
 . *Download the complete example* (sign in required). Unzip it and change into `multiplayer-gaming/`.
 +
-*Or build along.* Create a directory `multiplayer-gaming/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Go sources are shown in full in xref:produce-player-events.adoc[], xref:build-leaderboard.adoc[], and xref:detect-achievements.adoc[]; the Postgres schema and the Connect pipeline in xref:persist-match-history.adoc[]. Save each into the path its heading names. Then regenerate the Protobuf code once:
+*Or build along.* Create a directory `multiplayer-gaming/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Go sources are shown in full in xref:produce-player-events.adoc[], xref:build-leaderboard.adoc[], and xref:detect-achievements.adoc[]; the Postgres schema and the Connect pipeline in xref:persist-match-history.adoc[]. Save each into the path its heading names. Then regenerate the Protobuf code once (only needed when you build along, so this command is not part of the test run):
 +
-[,bash]
+[.manual]
+[source,bash]
 ----
-make proto
+include::example$steps/start-environment/commands.sh[tag=proto]
 ----
 
 . Choose where Redpanda runs. Every client in this solution (the Go services, the `rpk` helper, and the Redpanda Connect pipeline) reads one set of connection variables from `.env`, so the choice is a few lines in that file.
@@ -35,18 +36,11 @@ The local `redpanda` and `console` containers are skipped; Postgres, Redpanda Co
 . Create a Serverless cluster and wait for it to be ready: xref:cloud-data-platform:get-started:cluster-types/serverless.adoc[].
 . Create a user (SCRAM-SHA-256) and give it ACLs: all operations on topics with the prefix `game.`, read on the consumer groups `leaderboard`, `achievements`, and `connect-history`, and describe on the cluster. Users and ACLs are on the cluster's *Security* page, or use xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-user-create.adoc[`rpk security user create`] and xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-acl-create.adoc[`rpk security acl create`]. See xref:cloud-data-platform:security:authorization/acl.adoc[].
 . On the cluster's *Overview* page, open *How to connect* and copy the bootstrap server URL and the Schema Registry URL. xref:cloud-data-platform:manage:cluster-maintenance/configure-client-connections.adoc[] describes the settings a client needs.
-. Copy `.env.example` to `.env` and set:
+. Copy `.env.example` to `.env` and replace these lines with your cluster's values (`env.cloud.example` under _Files for this step_ has them ready to paste):
 +
-[,bash]
+[source,bash]
 ----
-COMPOSE_PROFILES=
-REDPANDA_BROKERS=<bootstrap-server-url>
-REDPANDA_TLS_ENABLED=true
-REDPANDA_SASL_MECHANISM=SCRAM-SHA-256
-REDPANDA_SASL_USERNAME=<user>
-REDPANDA_SASL_PASSWORD=<password>
-REDPANDA_SCHEMA_REGISTRY_URL=<schema-registry-url>
-REDPANDA_TOPIC_REPLICAS=3
+include::example$env.cloud.example[]
 ----
 +
 Schema Registry accepts the same user, so the `REDPANDA_SCHEMA_REGISTRY_USERNAME` and `PASSWORD` lines stay empty. `REDPANDA_TOPIC_REPLICAS=3` is the replication factor `make topics` uses in xref:create-topics.adoc[].
@@ -57,9 +51,9 @@ Two things differ afterwards. Redpanda Console is the one in Redpanda Cloud, not
 
 . Start everything and wait for the healthchecks:
 +
-[,bash]
+[source,bash]
 ----
-make up
+include::example$steps/start-environment/commands.sh[tag=up]
 ----
 +
 The first run builds the four Go program images and pulls Redpanda, Console, Postgres, and Redpanda Connect. It takes one to three minutes. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every simulator setting.
@@ -68,7 +62,7 @@ The first run builds the four Go program images and pulls Redpanda, Console, Pos
 
 The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all nine containers pass (seven on the Cloud path):
 
-[,yaml]
+[source,yaml]
 ----
 include::example$docker-compose.yml[tags=redpanda]
 ----
@@ -77,7 +71,7 @@ include::example$docker-compose.yml[tags=redpanda]
 
 The stack is nine containers, and the interesting ones are the three that read the same topic. All of them read the same eight `REDPANDA_*` variables (the `x-redpanda-env` block in `docker-compose.yml` hands them to every service, `rpk` gets them as `RPK_*`, and the Connect pipeline interpolates them), which is what makes the Cloud tab a `.env` edit and not a fork of the stack. The Go side is one small package:
 
-[,go]
+[source,go]
 ----
 include::example$services/internal/conn/conn.go[tags=config]
 ----
@@ -98,7 +92,7 @@ Complete sources for building along:
 .Complete source: docker-compose.yml
 [%collapsible]
 ====
-[,yaml]
+[source,yaml]
 ----
 include::example$docker-compose.yml[]
 ----
@@ -107,7 +101,7 @@ include::example$docker-compose.yml[]
 .Complete source: console-config.yaml
 [%collapsible]
 ====
-[,yaml]
+[source,yaml]
 ----
 include::example$console-config.yaml[]
 ----
@@ -116,7 +110,7 @@ include::example$console-config.yaml[]
 .Complete source: services/internal/conn/conn.go
 [%collapsible]
 ====
-[,go]
+[source,go]
 ----
 include::example$services/internal/conn/conn.go[]
 ----
@@ -126,17 +120,17 @@ include::example$services/internal/conn/conn.go[]
 
 Run:
 
-[,bash]
+[source,bash]
 ----
-curl -s http://localhost:8090/stats | grep state
+include::example$steps/start-environment/commands.sh[tag=verify]
 ----
 
 Expected output:
 
 [.solution-verify]
-[,text]
+[source,text]
 ----
-  "state": "waiting_for_topics",
+include::example$steps/start-environment/expected/verify.txt[]
 ----
 
 If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `18081`, or `19092` already in use on the host (move a port with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
@@ -148,7 +142,7 @@ In production, the broker cluster, the sinks, and the services are deployed and 
 
 .Files for this step
 * link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
-* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`) and link:{attachmentsdir}/env.cloud.example[env.cloud.example] (the lines to change for Redpanda Cloud)
 * link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
 * link:{attachmentsdir}/console-config.yaml[console-config.yaml]
 * link:{attachmentsdir}/buf.yaml[buf.yaml] and link:{attachmentsdir}/buf.gen.yaml[buf.gen.yaml] (for `make proto`)
