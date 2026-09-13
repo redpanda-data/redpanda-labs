@@ -16,29 +16,18 @@ updates:
       npm:
         patterns: ["*"]
 
-  # Per-solution code. Directory globs match every solution without listing
-  # them; an ecosystem with no matching manifest is skipped.
-  - package-ecosystem: docker
-    directories: ["/solutions/*", "/solutions/*/services/*"]
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: docker-compose
-    directories: ["/solutions/*"]
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: gomod
-    directories: ["/solutions/*", "/solutions/*/services/*"]
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: npm
-    directories: ["/solutions/*/services/*"]
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: pip
-    directories: ["/solutions/*", "/solutions/*/services/*"]
-    schedule:
-      interval: weekly
+  # Per-solution code. Add entries when the first solution lands, using
+  # directory globs so no solution is listed by hand, for example:
+  #
+  #   - package-ecosystem: docker
+  #     directories: ["/solutions/*", "/solutions/*/services/*"]
+  #     schedule: { interval: weekly }
+  #   - package-ecosystem: docker-compose
+  #     directories: ["/solutions/*"]
+  #     schedule: { interval: weekly }
+  #   - package-ecosystem: gomod
+  #     directories: ["/solutions/*/services/*"]
+  #     schedule: { interval: weekly }
+  #
+  # They are left out until then: a glob that matches no manifest makes
+  # Dependabot report an error for the whole update run.

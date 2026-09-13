@@ -10,6 +10,8 @@ on:
 permissions:
   contents: read
   issues: write
+  # The report job lists this run's jobs to name the failed solutions.
+  actions: read
 
 concurrency:
   group: nightly

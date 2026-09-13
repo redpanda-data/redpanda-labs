@@ -18,7 +18,7 @@ solutions/<slug>/        the code of one solution: compose stack, services, Make
 tools/                   shared harness: scaffolding, metadata checks, CI matrix, verify helpers, local playbook
 templates/solution/      the scaffold that tools/new-solution.sh copies
 .github/workflows/       ci (run changed solutions), docs (metadata, Antora build, Doc Detective, links),
-                         release (tag + bundle per version), nightly (latest images), build-docs (Netlify hook)
+                         release (bundle per published version + the Netlify build hook), nightly (latest images)
 labs-docs/ and the legacy directories (docker-compose/, clients/, data-transforms/, kubernetes/,
 connect-plugins/, setup-tests/)   frozen Redpanda Labs content awaiting migration
 ```
@@ -42,9 +42,11 @@ the workflow from proposal to release. Agents read [CLAUDE.md](CLAUDE.md) or
 - A pull request runs `ci` (every solution it touches, end to end) and `docs`
   (metadata, a real Antora build, Doc Detective for the touched solutions, an
   offline link check).
-- On merge to `main`, `release` tags `<slug>/<version>` and publishes
-  `<slug>-<version>.zip` for every solution whose authored
-  `:page-solution-version:` has no tag yet, then triggers the docs site build.
+- On merge to `main`, `release` publishes `<slug>-<version>.zip` under the
+  tag `<slug>/<version>` for every `published` or `deprecated` solution whose
+  authored `:page-solution-version:` has no release yet, then posts the
+  Netlify build hook once. That hook call is the only site-build trigger, so
+  every merge to `main` rebuilds the site.
 - `nightly` runs every solution against the latest Redpanda, Console, and
   Connect images and opens an issue on failure.
 

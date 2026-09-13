@@ -1,10 +1,16 @@
-# Publishes a bundle for every solution whose authored version has no tag yet.
+# Publishes a bundle for every solution whose authored version has no release
+# yet, then triggers the docs site build. This is the only Netlify trigger:
+# every run on main posts the hook once at the end, so a docs change without
+# a version bump still rebuilds the site.
 #
 # For each docs/modules/<slug>/pages/index.adoc with :page-solution-version:
-# vX.Y.Z and no tag <slug>/vX.Y.Z: zip solutions/<slug> (plus LICENSE and
-# tools/verify-lib.sh) as <slug>-vX.Y.Z.zip, create the annotated tag and a
-# GitHub Release with the asset, then trigger one Netlify build so the docs
-# site sees the release. Nothing is tagged by hand.
+# vX.Y.Z, status published or deprecated, and no GitHub Release <slug>/vX.Y.Z:
+# zip solutions/<slug> (plus LICENSE and tools/verify-lib.sh) as
+# <slug>-vX.Y.Z.zip and create the release with `gh release create`, which
+# creates the tag at the merged commit. Drafts are never released, so a
+# version is first released when the solution is published. Nothing is
+# tagged by hand, and no tag exists without its release: the "already
+# released" test is the release itself, so a failed run can be re-run.
 name: release
 
 on:
@@ -20,26 +26,22 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Same hook as build-docs.yml. Not a secret: it can only start a build.
+  # Not a secret: it can only start a build.
   NETLIFY_BUILD_HOOK: https://api.netlify.com/build_hooks/65c0cd2e63853f0b159cdbc6
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Tag and release new versions
+      - name: Release new versions
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git fetch --tags --force --quiet
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           attr() { sed -nE "s/^:$2:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p" "$1" | head -1; }
 
@@ -47,18 +49,24 @@ jobs:
           for overview in docs/modules/*/pages/index.adoc; do
             [ -f "$overview" ] || continue
             slug=$(basename "$(dirname "$(dirname "$overview")")")
-            [ "$slug" = "ROOT" ] && continue
+            case "$slug" in ROOT|examples) continue ;; esac
             [ -d "solutions/$slug" ] || { echo "::notice::$slug has no solutions/$slug directory; skipped"; continue; }
+
+            status=$(attr "$overview" page-solution-status)
+            case "$status" in
+              published|deprecated) ;;
+              *) echo "$slug is $status; not released"; continue ;;
+            esac
 
             version=$(attr "$overview" page-solution-version)
             if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::warning file=$overview::page-solution-version '$version' is not vX.Y.Z; skipped"
               continue
             fi
-            status=$(attr "$overview" page-solution-status)
+
             tag="$slug/$version"
-            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "$tag already exists"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "$tag already released"
               continue
             fi
 
@@ -71,20 +79,19 @@ jobs:
             (cd "$stage" && zip -qr "$GITHUB_WORKSPACE/$name.zip" "$name")
             rm -rf "$stage"
 
-            git tag -a "$tag" -m "$slug $version" HEAD
-            git push origin "refs/tags/$tag"
-
+            # Extra flags per status go here; the expansion below is safe when empty.
             flags=()
-            [ "$status" = "published" ] || flags+=(--prerelease)
             gh release create "$tag" "$name.zip" \
+              --target "$GITHUB_SHA" \
               --title "$slug $version" \
+              --latest=false \
               --notes "Bundle for the $slug solution, $version ($status). Docs: https://docs.redpanda.com/solutions/$slug/" \
-              "${flags[@]}"
+              ${flags[@]+"${flags[@]}"}
             echo "released $tag with $name.zip"
             released=$((released + 1))
           done
           echo "count=$released" | tee -a "$GITHUB_OUTPUT"
 
       - name: Trigger the docs site build
-        if: steps.release.outputs.count != '0'
+        if: always()
         run: curl -fsS -X POST -d '{}' "$NETLIFY_BUILD_HOOK"

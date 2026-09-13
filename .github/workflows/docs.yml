@@ -3,17 +3,11 @@
 # the PR touched, and an offline link check of the built site.
 name: docs
 
+# No paths filter: this is a required check, so it must always run. The
+# Doc Detective matrix is empty when no solution changed.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'tools/**'
-      - 'templates/**'
-      - 'solutions/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/docs.yml'
 
 permissions:
   contents: read
@@ -58,10 +52,21 @@ jobs:
       - name: Build the site
         env:
           SOLUTIONS_INCLUDE_DRAFTS: 'true'
-        run: npm run build
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee antora.log
       - name: Remove git credentials
         if: always()
         run: rm -f ~/.git-credentials
+      - name: Fail on unresolved includes and missing images
+        # Antora logs these at error level and, with failure_level fatal, still
+        # exits 0. A page that lost its include or diagram must not merge.
+        run: |
+          if grep -E 'Unresolved (include|directive)|target of image not found|include file not found' antora.log; then
+            echo "::error::the Antora build logged unresolved includes or missing images (see above)"
+            exit 1
+          fi
+          echo "no unresolved includes or missing images"
       - name: Check links offline
         uses: lycheeverse/lychee-action@v2
         with:
@@ -70,7 +75,7 @@ jobs:
             --no-progress
             --root-dir ${{ github.workspace }}/local-docs
             --fallback-extensions html
-            --exclude-path 'local-docs/redpanda-labs'
+            --exclude-path 'local-docs/labs'
             'local-docs/solutions/**/*.html'
           fail: true
       - name: Upload the built site
