@@ -8,7 +8,15 @@
 # tag::input[]
 input:
   redpanda:
-    seed_brokers: [ "${KAFKA_BROKERS:redpanda:9092}" ]
+    seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+    # Local broker: TLS off, mechanism none. Redpanda Cloud: TLS on and the
+    # SCRAM user from .env. The same variables drive the Go services and rpk.
+    tls:
+      enabled: ${REDPANDA_TLS_ENABLED:false}
+    sasl:
+      - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+        username: "${REDPANDA_SASL_USERNAME:}"
+        password: "${REDPANDA_SASL_PASSWORD:}"
     topics:
       - game.player-events
       - game.match-events
@@ -23,7 +31,11 @@ pipeline:
         # Bytes in, JSON out: the schema ID in the record selects the Protobuf
         # schema, the registry supplies it, the processor decodes.
         - schema_registry_decode:
-            url: "${SCHEMA_REGISTRY_URL:http://redpanda:8081}"
+            url: "${REDPANDA_SCHEMA_REGISTRY_URL:http://redpanda:8081}"
+            basic_auth:
+              enabled: ${REDPANDA_SCHEMA_REGISTRY_BASIC_AUTH:false}
+              username: "${REDPANDA_SCHEMA_REGISTRY_USERNAME:}"
+              password: "${REDPANDA_SCHEMA_REGISTRY_PASSWORD:}"
         # Flatten the oneof into one row shape per table. event_type comes from
         # the record header the producer set.
         - mapping: |
@@ -97,7 +109,13 @@ output:
         - mapping: |
             meta error = @fallback_error
       redpanda:
-        seed_brokers: [ "${KAFKA_BROKERS:redpanda:9092}" ]
+        seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+        tls:
+          enabled: ${REDPANDA_TLS_ENABLED:false}
+        sasl:
+          - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+            username: "${REDPANDA_SASL_USERNAME:}"
+            password: "${REDPANDA_SASL_PASSWORD:}"
         topic: game.player-events.dlq
         key: ${! @kafka_key }
         metadata:

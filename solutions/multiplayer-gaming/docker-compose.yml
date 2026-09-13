@@ -5,7 +5,25 @@
 # with `make verify`, tear down with `make clean`. Versions and settings come
 # from .env (copied from .env.example on first `make up`). Run one stack at a
 # time, or give each its own host ports in .env.
+#
+# Profiles (COMPOSE_PROFILES in .env):
+#   local   the redpanda and console containers; the default. Leave it empty
+#           and point REDPANDA_BROKERS at a Redpanda Cloud cluster instead.
+#   tiered  MinIO as the object store for the Tiered Storage extension
+#           (`make tiered-up`); never needed by the steps or by `make verify`.
 name: multiplayer-gaming
+
+# One connection block for every client. The defaults are the local broker;
+# .env overrides them for a remote cluster (see "Connection" in .env.example).
+x-redpanda-env: &redpanda-env
+  REDPANDA_BROKERS: ${REDPANDA_BROKERS:-redpanda:9092}
+  REDPANDA_TLS_ENABLED: ${REDPANDA_TLS_ENABLED:-false}
+  REDPANDA_SASL_MECHANISM: ${REDPANDA_SASL_MECHANISM:-}
+  REDPANDA_SASL_USERNAME: ${REDPANDA_SASL_USERNAME:-}
+  REDPANDA_SASL_PASSWORD: ${REDPANDA_SASL_PASSWORD:-}
+  REDPANDA_SCHEMA_REGISTRY_URL: ${REDPANDA_SCHEMA_REGISTRY_URL:-http://redpanda:8081}
+  REDPANDA_SCHEMA_REGISTRY_USERNAME: ${REDPANDA_SCHEMA_REGISTRY_USERNAME:-${REDPANDA_SASL_USERNAME:-}}
+  REDPANDA_SCHEMA_REGISTRY_PASSWORD: ${REDPANDA_SCHEMA_REGISTRY_PASSWORD:-${REDPANDA_SASL_PASSWORD:-}}
 
 networks:
   redpanda:
@@ -14,12 +32,14 @@ networks:
 volumes:
   redpanda-data: {}
   postgres-data: {}
+  minio-data: {}
 
 services:
   # tag::redpanda[]
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: multiplayer-gaming-redpanda
+    profiles: ["local"]
     command:
       - redpanda
       - start
@@ -59,6 +79,7 @@ services:
   console:
     image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
     container_name: multiplayer-gaming-console
+    profiles: ["local"]
     environment:
       CONFIG_FILEPATH: /etc/console/config.yaml
     volumes:
@@ -70,6 +91,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
       interval: 10s
@@ -81,23 +103,32 @@ services:
   # tag::rpk[]
   # Helper container so the Makefile, scripts/verify.sh, and the Doc Detective
   # specs can run rpk without a host install: docker compose exec -T rpk rpk ...
-  # It also carries the .proto files that `make schemas` registers.
+  # It also carries the .proto files that `make schemas` registers. rpk reads
+  # the same connection variables as everything else, through its RPK_* names.
   rpk:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: multiplayer-gaming-rpk
     entrypoint: ["/bin/sh", "-c", "sleep infinity"]
     environment:
-      RPK_BROKERS: redpanda:9092
+      RPK_BROKERS: ${REDPANDA_BROKERS:-redpanda:9092}
+      RPK_TLS_ENABLED: ${REDPANDA_TLS_ENABLED:-false}
+      RPK_SASL_MECHANISM: ${REDPANDA_SASL_MECHANISM:-}
+      RPK_USER: ${REDPANDA_SASL_USERNAME:-}
+      RPK_PASS: ${REDPANDA_SASL_PASSWORD:-}
+      RPK_REGISTRY_HOSTS: ${REDPANDA_SCHEMA_REGISTRY_URL:-http://redpanda:8081}
+      RPK_REGISTRY_TLS_ENABLED: ${REDPANDA_TLS_ENABLED:-false}
       RPK_ADMIN_HOSTS: redpanda:9644
-      RPK_REGISTRY_HOSTS: redpanda:8081
     volumes:
       - ./sample-data:/sample-data:ro
       - ./proto:/proto:ro
+      # Drops empty RPK_* variables before calling the real rpk (see the script).
+      - ./scripts/rpk.sh:/usr/local/bin/rpk:ro
     networks:
       - redpanda
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
       interval: 10s
@@ -134,8 +165,11 @@ services:
     container_name: multiplayer-gaming-connect
     command: ["run", "/connect/match-history.yaml"]
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      <<: *redpanda-env
+      # Connect wants a mechanism name and a boolean, so the empty local
+      # values become "none" and "false" here.
+      REDPANDA_SASL_MECHANISM: ${REDPANDA_SASL_MECHANISM:-none}
+      REDPANDA_SCHEMA_REGISTRY_BASIC_AUTH: ${REDPANDA_SASL_USERNAME:+true}
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-game}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -149,6 +183,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
       postgres:
         condition: service_healthy
     healthcheck:
@@ -167,8 +202,7 @@ services:
         SERVICE: simulator
     container_name: multiplayer-gaming-simulator
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      <<: *redpanda-env
       SCHEMA_FILE: /proto/game_events.proto
       PLAYERS_FILE: /sample-data/players.json
       HTTP_ADDR: ":8090"
@@ -188,6 +222,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8090/healthz >/dev/null || exit 1"]
       interval: 5s
@@ -205,8 +240,7 @@ services:
       args:
         SERVICE: leaderboard
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      <<: *redpanda-env
       SCHEMA_FILE: /proto/game_events.proto
       GROUP: leaderboard
       TOPIC: game.player-events
@@ -219,6 +253,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     # A batch that cannot be published exits the process; the restart replays
     # it from the last committed offset.
     restart: on-failure
@@ -236,8 +271,7 @@ services:
         SERVICE: dashboard
     container_name: multiplayer-gaming-leaderboard-dashboard
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      <<: *redpanda-env
       TOPIC: game.leaderboard
       GROUP: leaderboard
       HTTP_ADDR: ":8080"
@@ -248,6 +282,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null || exit 1"]
       interval: 5s
@@ -262,8 +297,7 @@ services:
         SERVICE: achievements
     container_name: multiplayer-gaming-achievements
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      <<: *redpanda-env
       SCHEMA_FILE: /proto/game_events.proto
       GROUP: achievements
       TOPIC: game.player-events
@@ -278,6 +312,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null || exit 1"]
       interval: 5s
@@ -285,3 +320,46 @@ services:
       retries: 12
       start_period: 5s
   # end::services[]
+
+  # tag::tiered[]
+  # Object store for the Tiered Storage extension on the overview page. Only
+  # started by `make tiered-up` (profile `tiered`); the steps never need it.
+  minio:
+    image: quay.io/minio/minio:${MINIO_VERSION:-latest}
+    container_name: multiplayer-gaming-minio
+    profiles: ["tiered"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_PORT:-19000}:9000"
+      - "${MINIO_CONSOLE_PORT:-19001}:9001"
+    networks:
+      - redpanda
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Creates the bucket once, then exits 0.
+  minio-init:
+    image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
+    container_name: multiplayer-gaming-minio-init
+    profiles: ["tiered"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing "local/$$TIERED_BUCKET" && mc ls local
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      TIERED_BUCKET: ${TIERED_BUCKET:-redpanda-tiered}
+    networks:
+      - redpanda
+    depends_on:
+      minio:
+        condition: service_healthy
+  # end::tiered[]
