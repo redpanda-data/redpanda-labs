@@ -14,13 +14,16 @@
     }
   },
   {
+    "wait": 1500
+  },
+  {
     "record": {
-      "path": "../../docs/modules/multiplayer-gaming/images/leaderboard-burst.gif",
+      "path": "../../docs/modules/multiplayer-gaming/images/leaderboard-burst.mp4",
       "overwrite": "true"
     }
   },
   {
-    "wait": 1500
+    "wait": 1000
   },
   {
     "runCommandTag": "burst"
