@@ -20,7 +20,11 @@
     "screenshot": {
       "path": "../../docs/modules/multiplayer-gaming/images/dashboard.png",
       "overwrite": "aboveVariation",
-      "maxVariation": 0.05
+      "maxVariation": 0.05,
+      "crop": {
+        "selector": "main",
+        "padding": 24
+      }
     }
   }
 ]
