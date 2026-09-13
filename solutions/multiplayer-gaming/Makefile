@@ -53,9 +53,10 @@ schemas: ## Register the GameEvent schema (v1, then BACKWARD, then v2) for every
 # tag::seed[]
 seed: topics schemas ## Let the simulator produce SIM_EVENTS_MAX events and wait until it stops
 	@echo "waiting for the simulator to reach its event cap"
-	@for i in $$(seq 1 150); do \
-	  state=$$(curl -fsS http://localhost:8090/stats 2>/dev/null | sed -nE 's/.*"state": *"([^"]+)".*/\1/p'); \
-	  if [ "$$state" = "capped" ]; then curl -fsS http://localhost:8090/stats; exit 0; fi; \
+	@port=$${SIMULATOR_PORT:-$$(sed -nE 's/^SIMULATOR_PORT=//p' .env)}; port=$${port:-8090}; \
+	for i in $$(seq 1 150); do \
+	  state=$$(curl -fsS http://localhost:$$port/stats 2>/dev/null | sed -nE 's/.*"state": *"([^"]+)".*/\1/p'); \
+	  if [ "$$state" = "capped" ]; then curl -fsS http://localhost:$$port/stats; exit 0; fi; \
 	  sleep 2; \
 	done; echo "simulator did not reach its cap in time (state: $$state)"; exit 1
 # end::seed[]

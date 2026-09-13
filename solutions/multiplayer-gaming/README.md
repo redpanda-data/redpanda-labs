@@ -17,9 +17,11 @@ make clean    # stop and delete volumes
 ```
 
 `make help` lists every target. Versions and simulator settings are pinned in
-`.env` (copied from `.env.example` on the first `make up`).
+`.env` (copied from `.env.example` on the first `make up`), and so are the
+host ports (`CONSOLE_PORT`, `LEADERBOARD_PORT`, and the other `*_PORT`
+variables). Change them there when another stack already uses the defaults.
 
-Then open:
+Then open (default ports):
 
 | URL | What |
 |---|---|

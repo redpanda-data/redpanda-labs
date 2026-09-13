@@ -3,7 +3,8 @@
 # Start with `make up` (waits for every healthcheck), create the contract with
 # `make topics` and `make schemas`, seed with `make seed`, prove the outcome
 # with `make verify`, tear down with `make clean`. Versions and settings come
-# from .env (copied from .env.example on first `make up`).
+# from .env (copied from .env.example on first `make up`). Run one stack at a
+# time, or give each its own host ports in .env.
 name: multiplayer-gaming
 
 networks:
@@ -23,9 +24,9 @@ services:
       - redpanda
       - start
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-19092}
       - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${REDPANDA_PROXY_PORT:-18082}
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
@@ -34,10 +35,10 @@ services:
       - --memory 1G
       - --default-log-level=info
     ports:
-      - "18081:18081"
-      - "18082:18082"
-      - "19092:19092"
-      - "19644:9644"
+      - "${REDPANDA_SR_PORT:-18081}:18081"
+      - "${REDPANDA_PROXY_PORT:-18082}:18082"
+      - "${REDPANDA_KAFKA_PORT:-19092}:19092"
+      - "${REDPANDA_ADMIN_PORT:-19644}:9644"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     networks:
@@ -59,7 +60,7 @@ services:
     volumes:
       - ./console-config.yaml:/etc/console/config.yaml:ro
     ports:
-      - "8080:8080"
+      - "${CONSOLE_PORT:-8080}:8080"
     networks:
       - redpanda
     depends_on:
@@ -106,7 +107,7 @@ services:
     image: redis:7-alpine
     container_name: multiplayer-gaming-redis
     ports:
-      - "16379:6379"
+      - "${REDIS_PORT:-16379}:6379"
     networks:
       - redpanda
     healthcheck:
@@ -126,7 +127,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "15432:5432"
+      - "${POSTGRES_PORT:-15432}:5432"
     networks:
       - redpanda
     healthcheck:
@@ -151,7 +152,7 @@ services:
     volumes:
       - ./connect/match-history.yaml:/connect/match-history.yaml:ro
     ports:
-      - "4195:4195"
+      - "${CONNECT_PORT:-4195}:4195"
     networks:
       - redpanda
     depends_on:
@@ -190,7 +191,7 @@ services:
       - ./proto:/proto:ro
       - ./sample-data:/sample-data:ro
     ports:
-      - "8090:8090"
+      - "${SIMULATOR_PORT:-8090}:8090"
     networks:
       - redpanda
     depends_on:
@@ -248,7 +249,7 @@ services:
       HTTP_ADDR: ":8080"
       LEADERBOARD_ROLE: dashboard
     ports:
-      - "3000:8080"
+      - "${LEADERBOARD_PORT:-3000}:8080"
     networks:
       - redpanda
     depends_on:
@@ -280,7 +281,7 @@ services:
     volumes:
       - ./proto:/proto:ro
     ports:
-      - "3010:8080"
+      - "${ACHIEVEMENTS_PORT:-3010}:8080"
     networks:
       - redpanda
     depends_on:

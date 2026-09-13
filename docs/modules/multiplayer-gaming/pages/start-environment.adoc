@@ -72,7 +72,7 @@ Expected output:
   "state": "waiting_for_topics",
 ----
 
-If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `16379`, `18081`, or `19092` already in use on the host. If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `16379`, `18081`, or `19092` already in use on the host (move a port with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
 
 == In production
 

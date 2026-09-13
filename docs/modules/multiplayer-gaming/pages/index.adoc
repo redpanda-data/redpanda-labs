@@ -57,6 +57,7 @@ Left to right: the simulator looks the `GameEvent` schema up in Schema Registry 
 * Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
 * `curl` and `make` on the host (every `rpk`, `psql`, and `redis-cli` command runs inside a container)
 * Optional: Go 1.25 or later, only if you want to run the unit tests outside Docker
+* Free host ports `8080`, `3000`, `3010`, `4195`, `8090`, `15432`, `16379`, `18081`, `18082`, `19092`, and `19644`, or different ones set with the `*_PORT` variables in `.env`
 * Approximately {page-solution-duration} minutes
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.

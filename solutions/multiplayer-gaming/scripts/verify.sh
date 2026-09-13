@@ -20,10 +20,17 @@ else
   exit 2
 fi
 
-SIM=http://localhost:8090
-LEADERBOARD=http://localhost:3000
-ACHIEVEMENTS=http://localhost:3010
-CONNECT=http://localhost:4195
+# Read .env the way Compose does: a variable already set in the shell wins.
+if [ -f .env ]; then
+  while IFS='=' read -r k v; do
+    case "$k" in ''|\#*) continue ;; esac
+    [ -z "${!k:-}" ] && export "$k=$v"
+  done < .env
+fi
+SIM=http://localhost:${SIMULATOR_PORT:-8090}
+LEADERBOARD=http://localhost:${LEADERBOARD_PORT:-3000}
+ACHIEVEMENTS=http://localhost:${ACHIEVEMENTS_PORT:-3010}
+CONNECT=http://localhost:${CONNECT_PORT:-4195}
 
 # </dev/null: docker compose exec forwards stdin, which would eat the loop input in check 5.
 psql_q() { docker compose exec -T postgres psql -U "${POSTGRES_USER:-game}" -d "${POSTGRES_DB:-game}" -tA -c "$1" 2>/dev/null </dev/null | tr -d '[:space:]'; }
