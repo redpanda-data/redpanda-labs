@@ -91,8 +91,9 @@ Created solution '$slug' ($title)
 
 Next steps
   1. Edit docs/modules/$slug/pages/index.adoc: fill every attribute and section.
-  2. Rename pages/step.adoc and tests/doc-detective/specs/step.json to your first step id,
-     copy them for each further step, and list the ids in :page-solution-steps:.
+  2. Rename pages/step.adoc and tests/doc-detective/specs/step.json (file, specId, testId)
+     to your first step id, copy them for each further step, and list the ids in
+     :page-solution-steps:.
   3. Put real services, sample data, and checks in solutions/$slug/; make scripts/verify.sh
      prove the outcome.
   4. Run tools/check-metadata.sh, then 'make up seed verify' inside solutions/$slug/.

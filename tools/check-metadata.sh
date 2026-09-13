@@ -11,8 +11,8 @@
 #   - difficulty, status, download, platforms, duration, featured are valid
 #   - deprecated solutions name :page-solution-superseded-by:
 #   - every :page-solution-steps: id has pages/<id>.adoc (with :page-layout: solution-step)
-#     and solutions/<slug>/tests/doc-detective/specs/<id>.json, and every non-index
-#     page is listed in the steps (strict bijection)
+#     and solutions/<slug>/tests/doc-detective/specs/<id>.json whose specId is the id,
+#     and every non-index page is listed in the steps (strict bijection)
 #   - no template placeholders are left ([...], __x__, vX.Y.Z, the step id "step")
 #   - every symlink under docs/modules/<slug>/ resolves
 #   - every attachment has a file extension and no leading dot (Antora drops the rest silently)
@@ -239,7 +239,12 @@ for slug in $slugs; do
         fi
       fi
       spec="$code/tests/doc-detective/specs/$s.json"
-      [ -f "$spec" ] || err "$page" "step '$s' has no Doc Detective spec $spec"
+      if [ ! -f "$spec" ]; then
+        err "$page" "step '$s' has no Doc Detective spec $spec"
+      elif command -v jq >/dev/null && jq -e . "$spec" >/dev/null 2>&1; then
+        sid=$(jq -r '.specId // empty' "$spec")
+        [ "$sid" = "$s" ] || err "$spec" "specId '$sid' must equal the step id '$s' (rename the id inside the spec too)"
+      fi
     done
     for f in "$module"/pages/*.adoc; do
       [ -e "$f" ] || continue
