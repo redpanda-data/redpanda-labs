@@ -1,0 +1,12 @@
+SCHEMA REGISTRY SYNC
+====================
+SHADOWING MODE                     shadow schema registry api
+PAUSED                             false
+SOURCE URL                         http://confluent-schema-registry:8081
+TAIL INTERVAL                      10s
+FULL SYNC INTERVAL                 20s
+MAX SOURCE REQUESTS PER SECOND     30
+UNSUPPORTED SCHEMA FEATURE POLICY  REMOVE
+SOURCE CONTEXTS:                   
+                                   - .
+DESTINATION                        identity

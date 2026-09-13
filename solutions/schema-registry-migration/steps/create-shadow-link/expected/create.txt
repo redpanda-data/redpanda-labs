@@ -1,0 +1,6 @@
+Link Name:          schema-registry-migration
+Bootstrap Servers:  
+                    - confluent-kafka:29092
+Creating Shadow Link...
+Successfully created shadow link "schema-registry-migration" with ID "ecf6e056-d120-49b4-bf8a-91c325f7730d". To query the status, run:
+  'rpk shadow status schema-registry-migration'

@@ -1,0 +1,9 @@
+Schema Registry: http://confluent-schema-registry:8081
+Kafka bootstrap: confluent-kafka:29092
+[orders] key=ord-1001 schema_id=3 value={"amount": 42.5, "currency": "USD", "order_id": "ord-1001"}
+[orders] key=ord-1002 schema_id=3 value={"amount": 17.25, "currency": "USD", "order_id": "ord-1002"}
+[orders] key=ord-1003 schema_id=3 value={"amount": 99.99, "currency": "USD", "order_id": "ord-1003"}
+[customers] key=cust-500 schema_id=2 value={"customer_id": "cust-500", "email": "alex@example.com"}
+[customers] key=cust-501 schema_id=2 value={"customer_id": "cust-501", "email": "sam@example.com"}
+[shipping] key=ord-1001 schema_id=5 value={"destination": {"city": "San Francisco", "postal_code": "94105", "street": "1 Panda Way"}, "order_id": "ord-1001"}
+6 record(s) decoded with 3 schema(s) fetched from http://confluent-schema-registry:8081

@@ -1,0 +1,2 @@
+{"error_code":412,"message":"Writes to Schema Registry are disabled"}
+412

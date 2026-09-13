@@ -1,0 +1,11 @@
+orders-value v1 (Avro):
+{"id":1,"version":1,"guid":"6550b813-77d1-d6b2-7d9b-67290f7cde8d","schemaType":"AVRO","schema":"{\"type\":\"record\",\"name\":\"Order\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"order_id\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"}]}"}
+customers-value v1 (Avro):
+{"id":2,"version":1,"guid":"3fffbb8e-d725-5a97-f189-3f06446ea284","schemaType":"AVRO","schema":"{\"type\":\"record\",\"name\":\"Customer\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"customer_id\",\"type\":\"string\"},{\"name\":\"email\",\"type\":\"string\"}]}"}
+orders-value compatibility BACKWARD:
+{"compatibility":"BACKWARD"}
+orders-value v2 (adds currency with a default, so BACKWARD accepts it):
+{"id":3,"version":2,"guid":"2260576f-12cd-49e1-cf17-10c962db3070","schemaType":"AVRO","schema":"{\"type\":\"record\",\"name\":\"Order\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"order_id\",\"type\":\"string\"},{\"name\":\"amount\",\"type\":\"double\"},{\"name\":\"currency\",\"type\":\"string\",\"default\":\"USD\"}]}"}
+
+subjects on the source registry:
+["customers-value","orders-value"]

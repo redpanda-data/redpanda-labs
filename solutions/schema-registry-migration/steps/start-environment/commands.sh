@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Commands the 'step' page shows, one tagged region per command block.
-# Rename this directory to the step id. The page includes a region with
-# include::example$steps/<step-id>/commands.sh[tag=<name>]; the Doc Detective
-# spec runs the same region; tools/capture-expected.sh writes its stdout to
-# expected/<name>.txt. Never edit this file and the page separately.
+# Commands the 'start-environment' page shows, one tagged region per command block.
+# The page includes each region; the generated Doc Detective spec runs the
+# same region; tools/capture-expected.sh writes its stdout to expected/<tag>.txt.
 
-# tag::run[]
+# tag::up[]
 make up
-# end::run[]
+# end::up[]
+
+# tag::source-empty[]
+curl -s http://localhost:38081/subjects
+# end::source-empty[]
+
+# tag::shadow-linking[]
+docker compose exec -T rpk rpk cluster config get enable_shadow_linking
+# end::shadow-linking[]
 
 # tag::verify[]
-docker compose exec -T rpk rpk topic list
+docker compose ps --format '{{.Service}}: {{.Health}}' | sort
 # end::verify[]

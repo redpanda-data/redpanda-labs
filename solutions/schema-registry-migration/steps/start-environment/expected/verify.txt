@@ -1,2 +1,6 @@
-NAME              PARTITIONS  REPLICAS
-__slug__.events   3           1
+client: healthy
+confluent-kafka: healthy
+confluent-schema-registry: healthy
+console: healthy
+redpanda: healthy
+rpk: healthy

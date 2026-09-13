@@ -1,0 +1,12 @@
+Schema Registry: http://confluent-schema-registry:8081
+Kafka bootstrap: confluent-kafka:29092
+orders: 3 record(s) encoded with schema ID 3 (orders-value)
+customers: 2 record(s) encoded with schema ID 2 (customers-value)
+shipping: 1 record(s) encoded with schema ID 5 (shipping-value)
+  delivered customers key=cust-500
+  delivered customers key=cust-501
+  delivered orders key=ord-1001
+  delivered orders key=ord-1002
+  delivered orders key=ord-1003
+  delivered shipping key=ord-1001
+6 record(s) delivered

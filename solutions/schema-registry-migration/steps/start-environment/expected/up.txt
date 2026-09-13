@@ -1,0 +1,43 @@
+docker compose up -d --build --wait
+#1 [internal] load local bake definitions
+#1 reading from stdin 650B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 536B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/python:3.11-slim
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [1/5] FROM docker.io/library/python:3.11-slim
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 37B done
+#6 DONE 0.0s
+
+#7 [3/5] COPY requirements.txt /tmp/requirements.txt
+#7 CACHED
+
+#8 [4/5] RUN pip install --no-cache-dir -r /tmp/requirements.txt
+#8 CACHED
+
+#9 [2/5] RUN apt-get update  && apt-get install -y --no-install-recommends curl jq ca-certificates  && rm -rf /var/lib/apt/lists/*
+#9 CACHED
+
+#10 [5/5] WORKDIR /scripts
+#10 CACHED
+
+#11 exporting to image
+#11 exporting layers done
+#11 writing image sha256:84b25e93d90acfabf23bf75be822ed52a4ba070a820f8082e2253cdb43b185a8 done
+#11 naming to docker.io/library/schema-registry-migration-client done
+#11 DONE 0.0s
+
+#12 resolving provenance for metadata file
+#12 DONE 0.0s
