@@ -7,7 +7,7 @@
       "steps": [
         {
           "runShell": {
-            "command": "make clean",
+            "command": "rm -f before.txt after.txt; make clean",
             "timeout": 120000
           }
         }

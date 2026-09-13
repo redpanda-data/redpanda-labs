@@ -1,0 +1,33 @@
+{
+  "specId": "create-topics",
+  "description": "Replays the 'create-topics' page: make topics, then the documented rpk topic list output.",
+  "contentPath": "docs/modules/multiplayer-gaming/pages/create-topics.adoc",
+  "tests": [
+    {
+      "testId": "create-topics",
+      "description": "The four topics exist with the documented partition counts",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make topics",
+            "timeout": 120000
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk topic describe game.player-events -c",
+            "timeout": 60000,
+            "stdio": "/retention\\.ms\\s+604800000/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk topic list",
+            "timeout": 60000,
+            "stdio": "/game\\.player-events\\s+6\\s+1[\\s\\S]*game\\.player-events\\.dlq\\s+1\\s+1/"
+          }
+        }
+      ]
+    }
+  ]
+}

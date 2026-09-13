@@ -1,0 +1,99 @@
+{
+  "specId": "scale-and-replay",
+  "description": "Replays the 'scale-and-replay' page: burst, scale the leaderboard to three members, then rebuild Redis from the log and diff the top 10.",
+  "contentPath": "docs/modules/multiplayer-gaming/pages/scale-and-replay.adoc",
+  "tests": [
+    {
+      "testId": "scale-and-replay",
+      "description": "A burst drains, three members split the partitions, and a replay rebuilds an identical leaderboard",
+      "steps": [
+        {
+          "runShell": {
+            "command": "curl -s -X POST 'http://localhost:8090/burst?rate=2000&seconds=5'",
+            "timeout": 60000,
+            "stdio": "/\"burst\": \"started\"/"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "docker compose up -d --scale leaderboard-service=3 --no-recreate --wait leaderboard-service",
+            "timeout": 300000
+          }
+        },
+        {
+          "wait": 12000
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk group describe leaderboard",
+            "timeout": 60000,
+            "stdio": "/MEMBERS\\s+3/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "for i in $(seq 1 30); do lag=$(docker compose exec -T rpk rpk group describe leaderboard </dev/null 2>/dev/null | awk '/^TOTAL-LAG/ {print $2}'); [ \"$lag\" = 0 ] && break; sleep 2; done; echo lag=$lag",
+            "timeout": 120000,
+            "stdio": "/lag=0/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 9 WITHSCORES > before.txt && wc -l < before.txt",
+            "timeout": 60000,
+            "stdio": "/20/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose stop leaderboard-service",
+            "timeout": 120000
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T redis redis-cli FLUSHALL",
+            "timeout": 60000,
+            "stdio": "/OK/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk group seek leaderboard --to start",
+            "timeout": 60000
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose start leaderboard-service",
+            "timeout": 120000
+          }
+        },
+        {
+          "runShell": {
+            "command": "for i in $(seq 1 60); do lag=$(docker compose exec -T rpk rpk group describe leaderboard </dev/null 2>/dev/null | awk '/^TOTAL-LAG/ {print $2}'); [ \"$lag\" = 0 ] && break; sleep 2; done; echo lag=$lag",
+            "timeout": 180000,
+            "stdio": "/lag=0/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 9 WITHSCORES > after.txt && wc -l < after.txt",
+            "timeout": 60000,
+            "stdio": "/20/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "diff before.txt after.txt && echo \"leaderboard identical after replay\"",
+            "timeout": 60000,
+            "stdio": "/leaderboard identical after replay/"
+          }
+        }
+      ]
+    }
+  ]
+}

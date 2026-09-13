@@ -1,0 +1,40 @@
+{
+  "specId": "register-schemas",
+  "description": "Replays the 'register-schemas' page: make schemas, the breaking-change check is refused, and the subject lists two versions.",
+  "contentPath": "docs/modules/multiplayer-gaming/pages/register-schemas.adoc",
+  "tests": [
+    {
+      "testId": "register-schemas",
+      "description": "Two schema versions are registered under BACKWARD and a breaking change is refused",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make schemas",
+            "timeout": 120000
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk registry compatibility-level get game.player-events-value",
+            "timeout": 60000,
+            "stdio": "/BACKWARD/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk registry schema check-compatibility game.player-events-value --schema /proto/history/game_events.breaking.proto --type protobuf --schema-version latest",
+            "timeout": 60000,
+            "stdio": "/Schema is not compatible/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk registry schema list game.player-events-value",
+            "timeout": 60000,
+            "stdio": "/game\\.player-events-value\\s+1\\s+\\d+\\s+PROTOBUF[\\s\\S]*game\\.player-events-value\\s+2\\s+\\d+\\s+PROTOBUF/"
+          }
+        }
+      ]
+    }
+  ]
+}

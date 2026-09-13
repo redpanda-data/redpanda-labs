@@ -1,0 +1,34 @@
+{
+  "specId": "build-leaderboard",
+  "description": "Replays the 'build-leaderboard' page: Redis and the dashboard agree, and the top 3 are the documented seed-42 scores.",
+  "contentPath": "docs/modules/multiplayer-gaming/pages/build-leaderboard.adoc",
+  "tests": [
+    {
+      "testId": "build-leaderboard",
+      "description": "The leaderboard shows the documented top 3 for seed 42",
+      "steps": [
+        {
+          "runShell": {
+            "command": "for i in $(seq 1 30); do lag=$(docker compose exec -T rpk rpk group describe leaderboard </dev/null 2>/dev/null | awk '/^TOTAL-LAG/ {print $2}'); [ \"$lag\" = 0 ] && break; sleep 2; done; echo lag=$lag",
+            "timeout": 120000,
+            "stdio": "/lag=0/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T redis redis-cli ZCARD leaderboard:global",
+            "timeout": 60000,
+            "stdio": "/24/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "curl -s 'http://localhost:3000/api/top?n=3'",
+            "timeout": 60000,
+            "stdio": "/\"rank\": 1,\\s+\"player_id\": \"p014\",\\s+\"score\": 795[\\s\\S]*\"rank\": 2,\\s+\"player_id\": \"p024\",\\s+\"score\": 715/"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "specId": "persist-match-history",
+  "description": "Replays the 'persist-match-history' page: rows match the source, a poison record lands on the dead-letter topic with the error, and match_history holds 48 rows.",
+  "contentPath": "docs/modules/multiplayer-gaming/pages/persist-match-history.adoc",
+  "tests": [
+    {
+      "testId": "persist-match-history",
+      "description": "Connect wrote every event to Postgres and dead-lettered the poison record",
+      "steps": [
+        {
+          "runShell": {
+            "command": "for i in $(seq 1 30); do lag=$(docker compose exec -T rpk rpk group describe connect-history </dev/null 2>/dev/null | awk '/^TOTAL-LAG/ {print $2}'); [ \"$lag\" = 0 ] && break; sleep 2; done; echo lag=$lag",
+            "timeout": 120000,
+            "stdio": "/lag=0/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T postgres psql -U game -d game -c \"SELECT event_type, COUNT(*) FROM player_events GROUP BY 1 ORDER BY 1\"",
+            "timeout": 60000,
+            "stdio": "/score_changed\\s+\\|\\s+1729/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "curl -s -X POST http://localhost:8090/poison",
+            "timeout": 60000,
+            "stdio": "/\"poison\": \"produced\"/"
+          }
+        },
+        {
+          "wait": 8000
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk topic consume game.player-events.dlq -o start -n 1",
+            "timeout": 60000,
+            "stdio": "/Schema 2147483647 not found/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose exec -T postgres psql -U game -d game -tA -c \"SELECT COUNT(*) FROM match_history\"",
+            "timeout": 60000,
+            "stdio": "/^48/"
+          }
+        }
+      ]
+    }
+  ]
+}
