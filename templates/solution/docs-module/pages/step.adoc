@@ -13,16 +13,26 @@
 
 . [Instruction 1]
 +
-[,bash]
+// Never type a command into a page. Put it in steps/<step-id>/commands.sh inside a
+// tagged region and include the region; the Doc Detective spec runs the same region.
+[source,bash]
 ----
-make up
+include::example$steps/step/commands.sh[tag=run]
+----
++
+// The output is captured by tools/capture-expected.sh into steps/<step-id>/expected/<tag>.txt
+// and included right after the command that produced it. Never type an expected output.
+.Expected output
+[source,text]
+----
+include::example$steps/step/expected/run.txt[]
 ----
 
 . [Instruction 2]
 +
 // Show code from the solution directory, never paste it. Tag the region in the source
 // file with // tag::name[] ... // end::name[] and include only that region.
-[,yaml]
+[source,yaml]
 ----
 include::example$docker-compose.yml[tags=redpanda]
 ----
@@ -41,19 +51,21 @@ include::example$docker-compose.yml[tags=redpanda]
 
 == Verify
 
+// The last command block of the step is its Verify command; its expected output
+// is captured like every other.
 Run:
 
-[,bash]
+[source,bash]
 ----
-docker compose exec -T rpk rpk topic list
+include::example$steps/step/commands.sh[tag=verify]
 ----
 
 Expected output:
 
-[,text]
+[.solution-verify]
+[source,text]
 ----
-NAME              PARTITIONS  REPLICAS
-__slug__.events   3           1
+include::example$steps/step/expected/verify.txt[]
 ----
 
 [If the output differs: the one or two most likely causes and how to fix them.]

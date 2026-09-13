@@ -145,9 +145,9 @@ This solution runs on a single broker with no authentication so that it starts i
 
 Stop the stack and delete its volumes:
 
-[,bash]
+[source,bash]
 ----
-make clean
+include::example$steps/overview/commands.sh[tag=clean]
 ----
 
 == Related docs

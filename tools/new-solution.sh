@@ -4,7 +4,8 @@
 #   tools/new-solution.sh <slug>
 #
 # Creates solutions/<slug>/ (code, Makefile, compose file, verify script,
-# Doc Detective specs) and docs/modules/<slug>/ (overview + step page,
+# steps/<step-id>/commands.sh, Doc Detective setup and teardown specs) and
+# docs/modules/<slug>/ (overview + step page,
 # images, partials) with relative symlinks so the docs build reads the code
 # straight from solutions/<slug>/:
 #
@@ -84,15 +85,16 @@ done < <(find "$module" -type l)
 cat <<MSG
 Created solution '$slug' ($title)
 
-  solutions/$slug/               code, compose file, Makefile, scripts/verify.sh, tests/doc-detective/
+  solutions/$slug/               code, compose file, Makefile, scripts/verify.sh, steps/<step-id>/, tests/doc-detective/
   docs/modules/$slug/pages/      index.adoc (overview) and step.adoc (rename per step id)
 
 Next steps
   1. Edit docs/modules/$slug/pages/index.adoc: fill every attribute and section.
-  2. Rename pages/step.adoc and tests/doc-detective/specs/step.json (file, specId, testId)
-     to your first step id, copy them for each further step, and list the ids in
-     :page-solution-steps:.
+  2. Rename pages/step.adoc and solutions/$slug/steps/step/ to your first step id, copy
+     them for each further step, and list the ids in :page-solution-steps:. Every
+     command a page shows lives in steps/<step-id>/commands.sh as a tagged region.
   3. Put real services, sample data, and checks in solutions/$slug/; make scripts/verify.sh
      prove the outcome.
-  4. Run tools/check-metadata.sh, then 'make up seed verify' inside solutions/$slug/.
+  4. 'make up' inside solutions/$slug/, then tools/capture-expected.sh $slug to capture the
+     expected outputs, then tools/check-metadata.sh and tools/run-doc-detective.sh $slug.
 MSG
