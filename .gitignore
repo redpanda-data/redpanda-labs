@@ -16,6 +16,7 @@ local-docs/
 testresults-*.json
 testResults-*.json
 doc-detective-output/
+.doc-detective/
 
 # Release bundles built locally
 *-v[0-9]*.zip
