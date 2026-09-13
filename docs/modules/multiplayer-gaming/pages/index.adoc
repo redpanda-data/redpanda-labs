@@ -4,7 +4,7 @@
 :description: Stream game events through Redpanda to a live leaderboard, an achievements engine, and a match history without one consumer ever slowing down another.
 :page-solution-version: v1.0.0
 :page-solution-difficulty: intermediate
-:page-solution-duration: 45
+:page-solution-duration: 50
 :page-solution-status: draft
 :page-solution-featured: true
 :page-solution-download: authenticated
@@ -14,7 +14,7 @@
 :page-solution-use-cases: Real-time analytics, Event-driven microservices, Gaming
 :personas: streaming_developer, platform_operator
 :page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
-:page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc
+:page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc, streaming:console:config/deserialization.adoc
 
 A multiplayer game emits thousands of events a second: players join, score, and win. The leaderboard must update in real time, achievements must fire the moment a streak completes, and analysts want every match in a database.
 
@@ -44,13 +44,13 @@ A game simulator produces `GameEvent` records to two topics. Three consumers rea
 
 image::architecture.svg[Architecture: the simulator produces to two Redpanda topics; the leaderboard service, the achievements service, and Redpanda Connect each read game.player-events in their own consumer group; results land in Redis, game.achievements, and Postgres]
 
-Left to right: the simulator looks the `GameEvent` schema up in Schema Registry (it never registers one; the contract is created in step 3) and produces every event about a player to `game.player-events`, keyed by `player_id`, and every match lifecycle event to `game.match-events`, keyed by `match_id`. Three consumer groups read `game.player-events`. The leaderboard group applies `score_changed` deltas to Redis sorted sets and serves the dashboard. The achievements group folds each player's events into a small in-memory state and produces `achievement_unlocked` events to `game.achievements`. The `connect-history` group, a Redpanda Connect pipeline, decodes each record through Schema Registry, flattens it, and inserts it into Postgres; a record it cannot decode goes to `game.player-events.dlq` with the error attached. Console reads all four topics with the same schemas.
+Left to right: the simulator looks the `GameEvent` schema up in Schema Registry (it never registers one; the contract is created in xref:register-schemas.adoc[]) and produces every event about a player to `game.player-events`, keyed by `player_id`, and every match lifecycle event to `game.match-events`, keyed by `match_id`. Three consumer groups read `game.player-events`. The leaderboard group applies `score_changed` deltas to Redis sorted sets and serves the dashboard. The achievements group folds each player's events into a small in-memory state and produces `achievement_unlocked` events to `game.achievements`. The `connect-history` group, a Redpanda Connect pipeline, decodes each record through Schema Registry, flattens it, and inserts it into Postgres; a record it cannot decode goes to `game.player-events.dlq` with the error attached. Console reads all four topics with the same schemas.
 
 === Why Redpanda
 
 * *Independent consumer groups fan one stream out.* Each of the three consumers keeps its own offsets, so scaling the leaderboard, redeploying the achievements service, or a slow Postgres never touches the others. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 * *Per-key ordering.* A record key selects the partition, so every event of one player is delivered in order to exactly one consumer instance. That is what lets the achievements service keep per-player state locally instead of in a shared store. xref:streaming:develop:produce-data/configure-producers.adoc[]
-* *Replay.* Offsets are the consumer's, not the broker's. Step 8 wipes Redis, seeks the group to the start, and rebuilds an identical leaderboard from the log. xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
+* *Replay.* Offsets are the consumer's, not the broker's. The replay in xref:scale-and-replay.adoc[] wipes Redis, seeks the group to the start, and rebuilds an identical leaderboard from the log. xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
 * *Schema Registry as the contract.* Producers and consumers agree on a Protobuf schema by ID, compatibility rules make evolution safe, and Console and Redpanda Connect decode records with no extra configuration. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
 * *Redpanda Connect for the sink.* Decode, flatten, insert, dead-letter: fifty lines of YAML, no code. xref:connect:components:outputs/sql_insert.adoc[]
 
@@ -87,11 +87,11 @@ This solution runs on a single broker with no authentication so that it starts i
 | Size for peak throughput and for the parallelism of the largest consumer group; the partition count is the ceiling on consumer instances. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
 
 | Schema validation
-| Schemas are registered and consumers reject unknown IDs, but the broker accepts any bytes (step 6 proves it with a poison record).
+| Schemas are registered and consumers reject unknown IDs, but the broker accepts any bytes (xref:persist-match-history.adoc[] proves it with a poison record).
 | Enable schema ID validation on `game.player-events` and `game.match-events` so the broker rejects a record whose schema ID is not registered under the topic's subject. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| One instance per group; step 8 scales the leaderboard to three by hand.
+| One instance per group; xref:scale-and-replay.adoc[] scales the leaderboard to three by hand.
 | Scale on consumer group lag, keep instances at or below the partition count, and use static group membership for stateful services so a restart does not trigger a rebalance. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
@@ -99,8 +99,8 @@ This solution runs on a single broker with no authentication so that it starts i
 | Tiered Storage: long retention and replay from object storage without growing local disks. xref:streaming:manage:tiered-storage.adoc[]
 
 | Idempotency and delivery
-| Idempotent producer with `acks=all`; consumers commit after writing, so a crash can replay a batch. Postgres inserts are `ON CONFLICT DO NOTHING`; Redis increments are not (step 5 shows the fix).
-| Idempotent sinks everywhere (the `processed:<partition>:<offset>` key from step 5), or transactions where a consumer also produces. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:develop:transactions.adoc[]
+| Idempotent producer with `acks=all`; consumers commit after writing, so a crash can replay a batch. Postgres inserts are `ON CONFLICT DO NOTHING`; Redis increments are not (xref:build-leaderboard.adoc[] shows the fix).
+| Idempotent sinks everywhere (the `processed:<partition>:<offset>` key from xref:build-leaderboard.adoc[]), or transactions where a consumer also produces. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:develop:transactions.adoc[]
 
 | Dead-letter handling
 | Redpanda Connect routes undecodable records to `game.player-events.dlq` with the error as a header. The Go services log and skip them.
@@ -131,7 +131,7 @@ make clean
 == Related docs
 
 * xref:streaming:develop:consume-data/consumer-offsets.adoc[] explains the consumer group mechanics every step of this solution relies on.
-* xref:streaming:develop:produce-data/idempotent-producers.adoc[] is the producer setting that makes the retry in step 4 safe.
-* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] covers subjects, compatibility levels, and the wire format that step 3 exercises.
-* xref:connect:components:outputs/sql_insert.adoc[] is the output the pipeline in step 6 builds on.
+* xref:streaming:develop:produce-data/idempotent-producers.adoc[] is the producer setting that makes the retry in xref:produce-player-events.adoc[] safe.
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] covers subjects, compatibility levels, and the wire format that xref:register-schemas.adoc[] exercises.
+* xref:connect:components:outputs/sql_insert.adoc[] is the output the pipeline in xref:persist-match-history.adoc[] builds on.
 * xref:streaming:console:config/deserialization.adoc[] describes how Console decodes Protobuf with Schema Registry, which `console-config.yaml` enables.
