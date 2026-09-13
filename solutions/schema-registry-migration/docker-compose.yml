@@ -21,7 +21,7 @@ volumes:
   redpanda-data: {}
 
 services:
-  # tag::confluent[]
+  # tag::confluent-kafka[]
   # SOURCE: Confluent Platform broker, KRaft mode, single node.
   confluent-kafka:
     image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-8.3.0}
@@ -54,7 +54,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+  # end::confluent-kafka[]
 
+  # tag::confluent-registry[]
   # SOURCE: Confluent Schema Registry, backed by the broker above.
   confluent-schema-registry:
     image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-8.3.0}
@@ -80,7 +82,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
-  # end::confluent[]
+  # end::confluent-registry[]
 
   # tag::redpanda[]
   # DESTINATION: the Redpanda shadow cluster. Shadowing is off by default;

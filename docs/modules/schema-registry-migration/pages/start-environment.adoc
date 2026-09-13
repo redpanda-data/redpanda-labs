@@ -71,11 +71,11 @@ Shadowing is part of the broker: `enable_shadow_linking=true` is the only config
 
 Confluent's broker starts in KRaft mode as one combined broker and controller and reports healthy when its API answers; the Confluent Schema Registry waits for it and then serves an empty registry on port 8081 inside the network (`38081` on the host). Redpanda starts in `dev-container` mode with `--memory 1G`, advertises `redpanda:9092` inside the compose network and `localhost:29092` outside it, and reports `Healthy: true` once its single Raft group has a leader. Console connects to Redpanda's Kafka API, Schema Registry, and Admin API. The `rpk` helper container has the link configuration mounted at `/config` for the next steps, and the client image is built from `client/Dockerfile` with pinned Python dependencies plus `curl` and `jq`.
 
-The source side of the compose file:
+The source registry's service in the compose file (the broker it depends on is in the complete file below):
 
 [source,yaml]
 ----
-include::example$docker-compose.yml[tags=confluent]
+include::example$docker-compose.yml[tags=confluent-registry]
 ----
 
 Complete sources for building along:

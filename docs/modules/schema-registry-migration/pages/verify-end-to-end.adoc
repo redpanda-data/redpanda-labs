@@ -1,6 +1,6 @@
 = Verify end to end
 :page-layout: solution-step
-:description: Run the eighteen assertions that prove the migration reached its end state: matching registries, preserved IDs, a writable destination, failed-over topics, and every record decodable from Redpanda alone.
+:description: Run the eighteen assertions that prove the migration reached its end state: matching registries, preserved IDs, a writable destination, failed-over topics, records readable from Redpanda alone.
 :page-solution-step-duration: 3
 
 One script asserts everything the previous steps claimed, against both running clusters, with exact values. It is the same script CI runs on every change to this solution.
