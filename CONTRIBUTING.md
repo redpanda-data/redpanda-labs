@@ -125,7 +125,7 @@ checking categories against the shared list).
 | `:page-solution-download:` | yes | `authenticated`, `public`, `none` | Who can fetch the release bundle |
 | `:page-solution-platforms:` | no | subset of `self-managed`, `cloud` | Default both. Filters recommendations on Cloud vs Self-Managed pages. |
 | `:page-solution-technologies:` | yes | comma list | Chips on the card; search facet |
-| `:page-categories:` | yes | comma list from `valid-categories.yml` | Unknown values fail the build. Parents are added automatically. |
+| `:page-categories:` | yes | comma list from `valid-categories.yml` | Unknown values fail the build. Prefer subcategories (`Consumer Groups`, `Retention and Compaction`, `Pipelines`) over top-level ones: only subcategory overlap creates recommendations between pages and solutions, and the top-level values are added automatically. |
 | `:page-solution-use-cases:` | no | comma list | |
 | `:personas:` | no | ids from `docs/modules/ROOT/partials/personas.yaml` | |
 | `:page-solution-steps:` | yes | ordered comma list of step ids | The only source of step order. Each id is `pages/<id>.adoc` and `specs/<id>.json`. |
@@ -245,6 +245,19 @@ pasted source file.
   exists.
 - `scripts/verify.sh` is unchanged by all of this: it is code, shown with a
   tagged include like any other file, and it stays the last step's command.
+- Media is captured by the tests, never edited by hand. A step that shows the
+  running system has `steps/<step-id>/media.json`: an array of Doc Detective
+  browser steps (`goTo`, `find`, `wait`, `screenshot`, `record`, `stopRecord`;
+  `{"runCommandTag": "<name>"}` expands to a command block so a recording can
+  wrap it) that the generator appends after the step's command blocks, with
+  output paths into `../../docs/modules/<slug>/images/`. Pages embed the
+  results with `image::` or `video::`; `check-metadata.sh` fails on any image
+  or video that is not such an output (`architecture.svg` excepted). Use
+  `"overwrite": "aboveVariation"` with a small `maxVariation` so a run only
+  rewrites a file when the picture really changed, which keeps the nightly
+  media pull request quiet. The base context is headless Firefox at 1280x800;
+  a spec that records is given headed Chrome, because that is the only engine
+  that can record a browser in doc-detective 4.38.1.
 
 ## Production checklist
 
