@@ -32,9 +32,9 @@ Redpanda Cloud Serverless::
 --
 The local `redpanda` and `console` containers are skipped; Postgres, Redpanda Connect, the services, the dashboard, and the `rpk` helper run unchanged and connect over TLS with a SCRAM user.
 
-. Create a Serverless cluster and wait for it to be ready: xref:cloud:get-started:cluster-types/serverless.adoc[].
-. Create a user (SCRAM-SHA-256) and give it ACLs: all operations on topics with the prefix `game.`, read on the consumer groups `leaderboard`, `achievements`, and `connect-history`, and describe on the cluster. Users and ACLs are on the cluster's *Security* page, or use xref:cloud:reference:rpk/rpk-security/rpk-security-user-create.adoc[`rpk security user create`] and xref:cloud:reference:rpk/rpk-security/rpk-security-acl-create.adoc[`rpk security acl create`]. See xref:cloud:security:authorization/acl.adoc[].
-. On the cluster's *Overview* page, open *How to connect* and copy the bootstrap server URL and the Schema Registry URL. xref:cloud:manage:cluster-maintenance/configure-client-connections.adoc[] describes the settings a client needs.
+. Create a Serverless cluster and wait for it to be ready: xref:cloud-data-platform:get-started:cluster-types/serverless.adoc[].
+. Create a user (SCRAM-SHA-256) and give it ACLs: all operations on topics with the prefix `game.`, read on the consumer groups `leaderboard`, `achievements`, and `connect-history`, and describe on the cluster. Users and ACLs are on the cluster's *Security* page, or use xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-user-create.adoc[`rpk security user create`] and xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-acl-create.adoc[`rpk security acl create`]. See xref:cloud-data-platform:security:authorization/acl.adoc[].
+. On the cluster's *Overview* page, open *How to connect* and copy the bootstrap server URL and the Schema Registry URL. xref:cloud-data-platform:manage:cluster-maintenance/configure-client-connections.adoc[] describes the settings a client needs.
 . Copy `.env.example` to `.env` and set:
 +
 [,bash]
