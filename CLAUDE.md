@@ -14,7 +14,8 @@ docs/modules/ROOT/partials/relationships.yml  editor-approved doc <-> solution e
 docs/modules/<slug>/pages/index.adoc     overview: all metadata lives here
 docs/modules/<slug>/pages/<step-id>.adoc one page per step
 docs/modules/<slug>/examples             symlink -> ../../../solutions/<slug>
-docs/modules/<slug>/attachments/*        symlinks to the build-along files
+docs/modules/<slug>/attachments/*        symlinks to the build-along files (env.example, Makefile.mk:
+                                         Antora drops dotfiles and extension-less files)
 solutions/<slug>/                        docker-compose.yml, Makefile, .env.example,
                                          services, scripts/verify.sh,
                                          tests/doc-detective/{.doc-detective.json,specs/}

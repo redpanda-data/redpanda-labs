@@ -10,8 +10,8 @@
 #
 #   docs/modules/<slug>/examples                        -> ../../../solutions/<slug>
 #   docs/modules/<slug>/attachments/docker-compose.yml   -> ../../../../solutions/<slug>/docker-compose.yml
-#   docs/modules/<slug>/attachments/.env.example         -> ../../../../solutions/<slug>/.env.example
-#   docs/modules/<slug>/attachments/Makefile             -> ../../../../solutions/<slug>/Makefile
+#   docs/modules/<slug>/attachments/env.example          -> ../../../../solutions/<slug>/.env.example
+#   docs/modules/<slug>/attachments/Makefile.mk          -> ../../../../solutions/<slug>/Makefile
 #   docs/modules/<slug>/attachments/scripts/verify.sh    -> ../../../../../solutions/<slug>/scripts/verify.sh
 #   docs/modules/<slug>/attachments/scripts/verify-lib.sh -> ../../../../../tools/verify-lib.sh
 #
@@ -59,10 +59,12 @@ mkdir -p "$module/images" "$module/partials" "$module/attachments/scripts"
 touch "$module/images/.gitkeep" "$module/partials/.gitkeep"
 
 # Relative symlinks. Depth matters: attachments/ is four levels below the root.
+# Antora silently drops dotfiles and files without an extension, so .env.example
+# publishes as env.example and Makefile as Makefile.mk (readers rename them).
 ln -s "../../../solutions/$slug" "$module/examples"
-for f in docker-compose.yml .env.example Makefile; do
-  ln -s "../../../../solutions/$slug/$f" "$module/attachments/$f"
-done
+ln -s "../../../../solutions/$slug/docker-compose.yml" "$module/attachments/docker-compose.yml"
+ln -s "../../../../solutions/$slug/.env.example" "$module/attachments/env.example"
+ln -s "../../../../solutions/$slug/Makefile" "$module/attachments/Makefile.mk"
 ln -s "../../../../../solutions/$slug/scripts/verify.sh" "$module/attachments/scripts/verify.sh"
 # verify.sh sources verify-lib.sh from tools/; publish it next to the script so
 # build-along readers get a working pair.

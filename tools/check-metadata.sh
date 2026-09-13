@@ -15,6 +15,7 @@
 #     page is listed in the steps (strict bijection)
 #   - no template placeholders are left ([...], __x__, vX.Y.Z, the step id "step")
 #   - every symlink under docs/modules/<slug>/ resolves
+#   - every attachment has a file extension and no leading dot (Antora drops the rest silently)
 #   - solutions/<slug>/ has docker-compose.yml, Makefile, .env.example, scripts/verify.sh,
 #     tests/doc-detective/.doc-detective.json, specs/_setup.json, specs/_teardown.json
 #   - :page-categories: values exist in valid-categories.yml when it is reachable:
@@ -252,6 +253,18 @@ for slug in $slugs; do
   while IFS= read -r l; do
     [ -e "$l" ] || err "$l" "symlink target '$(readlink "$l")' does not exist"
   done < <(find "$module" -type l 2>/dev/null)
+
+  # Attachments Antora would silently skip
+  if [ -d "$module/attachments" ]; then
+    while IFS= read -r a; do
+      base=$(basename "$a")
+      case "$base" in
+        .*) err "$a" "attachment starts with a dot; Antora skips dotfiles (publish .env.example as env.example)" ;;
+        *.*) ;;
+        *) err "$a" "attachment has no file extension; Antora skips it (publish Makefile as Makefile.mk)" ;;
+      esac
+    done < <(find "$module/attachments" \( -type f -o -type l \) 2>/dev/null)
+  fi
 
   # Required code files
   if [ -d "$code" ]; then

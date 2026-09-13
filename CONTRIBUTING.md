@@ -80,7 +80,7 @@ docs/modules/<slug>/
   images/architecture.svg
   partials/
   examples -> ../../../solutions/<slug>                      include::example$...
-  attachments/{docker-compose.yml,.env.example,Makefile}     build-along files
+  attachments/{docker-compose.yml,env.example,Makefile.mk}   build-along files (symlinks)
   attachments/scripts/{verify.sh,verify-lib.sh}
 ```
 
@@ -227,6 +227,11 @@ attachment under `docs/modules/<slug>/attachments/` (a relative symlink into
 `solutions/<slug>/`), listed in that step's `.Files for this step`. The
 signed-in download of the complete bundle is a shortcut, never a prerequisite.
 The reviewer checks this by completing step 1 from the attachments alone.
+
+Antora silently drops dotfiles and files without an extension, so publish
+`.env.example` as `env.example` and `Makefile` as `Makefile.mk` and tell the
+reader what to save them as. `tools/check-metadata.sh` fails on any attachment
+Antora would skip.
 
 ## Doc Detective
 
