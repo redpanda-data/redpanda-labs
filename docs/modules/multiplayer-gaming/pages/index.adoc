@@ -180,7 +180,7 @@ Tiered Storage is an enterprise feature. A new cluster starts with a 30-day tria
 
 === Next: Cloud Topics and Iceberg
 
-xref:streaming:develop:manage-topics/cloud-topics.adoc[Cloud Topics] go one step further than Tiered Storage and keep the topic's data in object storage from the first write, which is the shape to reach for when a season of game events should cost object storage prices from day one. For the analytics side, the lakehouse path (Iceberg topics feeding a query engine) is its own Solution, CDC to lakehouse, and the Analytics and lakehouse row above is where this one hands off to it.
+xref:streaming:develop:manage-topics/cloud-topics.adoc[Cloud Topics] go one step further than Tiered Storage and keep the topic's data in object storage from the first write, which is the shape to reach for when a season of game events should cost object storage prices from day one. For the analytics side, the lakehouse path (Iceberg topics feeding a query engine) is its own solution, CDC to lakehouse, and the Analytics and lakehouse row above is where this one hands off to it.
 
 == Clean up
 
