@@ -2,8 +2,9 @@
 #
 # Start with `make up` (waits for every healthcheck), seed with `make seed`,
 # prove the outcome with `make verify`, tear down with `make clean`.
-# Versions come from .env (copied from .env.example on first `make up`);
-# the nightly CI run overrides them with `latest`.
+# Versions and host ports come from .env (copied from .env.example on first
+# `make up`); the nightly CI run overrides the versions with `latest`. Run one
+# stack at a time, or give each its own host ports in .env.
 name: __slug__
 
 networks:
@@ -22,9 +23,9 @@ services:
       - redpanda
       - start
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-19092}
       - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${REDPANDA_PROXY_PORT:-18082}
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
@@ -32,10 +33,10 @@ services:
       - --smp 1
       - --default-log-level=info
     ports:
-      - "18081:18081"
-      - "18082:18082"
-      - "19092:19092"
-      - "19644:9644"
+      - "${REDPANDA_SR_PORT:-18081}:18081"
+      - "${REDPANDA_PROXY_PORT:-18082}:18082"
+      - "${REDPANDA_KAFKA_PORT:-19092}:19092"
+      - "${REDPANDA_ADMIN_PORT:-19644}:9644"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     networks:
@@ -67,7 +68,7 @@ services:
             enabled: true
             urls: ["http://redpanda:9644"]
     ports:
-      - "8080:8080"
+      - "${CONSOLE_PORT:-8080}:8080"
     networks:
       - redpanda
     depends_on:

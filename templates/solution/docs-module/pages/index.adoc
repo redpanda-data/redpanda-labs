@@ -1,7 +1,8 @@
 = __title__
 // Overview page of the __slug__ solution. Every attribute below is part of the
 // metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
-// fails the build while any [placeholder] is left in place.
+// flags placeholder attribute values and bracketed placeholder lines like the ones
+// in this template; replace them all before opening a PR.
 :page-layout: solution
 :page-topic-type: solution
 // One sentence, 200 characters or fewer. What the reader builds and why it matters.

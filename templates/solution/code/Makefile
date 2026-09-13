@@ -22,9 +22,11 @@ up: .env ## Start every service and wait until all healthchecks pass
 down: ## Stop the services, keep data volumes
 	$(COMPOSE) down
 
-seed: ## Create topics and load sample data
+seed: ## Create topics and load sample data (idempotent: skips when the topic already has events)
 	$(COMPOSE) exec -T rpk rpk topic create $(TOPIC) -p 3 -r 1 || $(COMPOSE) exec -T rpk rpk topic describe $(TOPIC) >/dev/null
-	$(COMPOSE) exec -T rpk sh -c 'rpk topic produce $(TOPIC) -f "%v\n" < /sample-data/events.ndjson'
+	@hwm=$$($(COMPOSE) exec -T rpk rpk topic describe $(TOPIC) -p | awk 'NR>1 {s+=$$NF} END {print s+0}'); \
+	if [ "$$hwm" -gt 0 ]; then echo "seed: $(TOPIC) already holds $$hwm events, skipping"; \
+	else $(COMPOSE) exec -T rpk sh -c 'rpk topic produce $(TOPIC) -f "%v\n" < /sample-data/events.ndjson'; fi
 
 verify: ## Prove the outcome; prints PASS (n/n) or FAIL
 	./scripts/verify.sh

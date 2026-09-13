@@ -21,10 +21,12 @@ else
 fi
 
 TOPIC="__slug__.events"
+[ -f .env ] && . ./.env
+CONSOLE_PORT=${CONSOLE_PORT:-8080}
 
 # 1. Services are healthy.
 assert_cmd "redpanda is healthy" sh -c "docker compose exec -T rpk rpk cluster health | grep -Eq 'Healthy:.+true'"
-assert_cmd "console answers" http_ok http://localhost:8080/admin/health
+assert_cmd "console answers" http_ok "http://localhost:${CONSOLE_PORT}/admin/health"
 
 # 2. Topics exist with the documented shape.
 partitions=$(rpk_exec topic describe "$TOPIC" -p 2>/dev/null | awk 'NR>1 {n++} END {print n+0}')
