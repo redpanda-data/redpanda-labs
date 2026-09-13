@@ -14,7 +14,10 @@
 #   - every :page-solution-steps: id has pages/<id>.adoc (with :page-layout: solution-step)
 #     and solutions/<slug>/tests/doc-detective/specs/<id>.json whose specId is the id,
 #     and every non-index page is listed in the steps (strict bijection)
-#   - no template placeholders are left ([...], __x__, vX.Y.Z, the step id "step")
+#   - no template placeholders are left: in attribute values ([...], __x__, vX.Y.Z,
+#     the step id "step") and in page bodies (bracket-only placeholder lines, __title__),
+#     and no ifdef::env-* conditionals or github.com/redpanda-data/(redpanda-labs|solutions) links
+#   - attribute values are one line (a trailing backslash continues onto the next line)
 #   - images/architecture.svg exists when the overview includes it
 #   - every symlink under docs/modules/<slug>/ resolves
 #   - every attachment has a file extension and no leading dot (Antora drops the rest silently)
@@ -22,15 +25,16 @@
 #     tests/doc-detective/.doc-detective.json, specs/_setup.json, specs/_teardown.json
 #   - :page-categories: values exist in valid-categories.yml when it is reachable:
 #     VALID_CATEGORIES_PATH=<file>, or a GITHUB_TOKEN / GH_TOKEN that can read
-#     redpanda-data/docs. Otherwise the category check is skipped with a notice.
+#     redpanda-data/docs. Otherwise the check is skipped with a notice, except in
+#     CI (CI=true), where an unavailable category list is an error.
 set -uo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+. "$root/tools/lib.sh"
 
 errors=0
 warnings=0
-reserved="progress download api index ROOT examples"
 
 err()    { errors=$((errors + 1));     printf 'ERROR  %s: %s\n' "$1" "$2"; }
 warn()   { warnings=$((warnings + 1)); printf 'WARN   %s: %s\n' "$1" "$2"; }
@@ -45,8 +49,12 @@ in_list() {
 
 trim() { printf '%s' "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
 
-# header <file>: the attribute lines of the document header (title to first blank line)
-header() { awk 'NR==1 && /^= /{next} /^[[:space:]]*$/{exit} /^:[A-Za-z0-9_-]+:/{print}' "$1"; }
+# header <file>: the attribute lines of the document header (title to first blank line).
+# A line ending in a backslash continues on the next line (AsciiDoc attribute continuation).
+header() {
+  sed -e :a -e '/\\$/N; s/\\\n[[:space:]]*/ /; ta' "$1" \
+    | awk 'NR==1 && /^= /{next} /^[[:space:]]*$/{exit} /^:[A-Za-z0-9_-]+:/{print}'
+}
 # attr <header> <name>
 attr() { printf '%s\n' "$1" | sed -nE "s/^:$2:[[:space:]]*//p" | head -1 | sed -E 's/[[:space:]]+$//'; }
 has_attr() { printf '%s\n' "$1" | grep -qE "^:$2:"; }
@@ -94,6 +102,9 @@ load_categories() {
 valid_category() { printf '%s\n' "$VALID_CATS" | grep -qxF "$1"; }
 
 load_categories
+if [ "${CI:-}" = "true" ] && [ $CATS_AVAILABLE -eq 0 ]; then
+  err "valid-categories.yml" "not available in CI; set REDPANDA_GITHUB_TOKEN (or VALID_CATEGORIES_PATH) so :page-categories: can be validated"
+fi
 
 # Which slugs ------------------------------------------------------------------
 if [ $# -gt 0 ]; then
@@ -112,11 +123,11 @@ for slug in $slugs; do
   code="solutions/$slug"
   page="$module/pages/index.adoc"
 
-  if ! [[ "$slug" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ ]]; then
-    err "$slug" "not a valid slug (lowercase letters, digits, hyphens, 1-64 chars)"
+  if ! valid_slug "$slug"; then
+    err "$slug" "not a valid slug (see SLUG_RE in tools/lib.sh)"
   fi
-  if in_list "$slug" $reserved; then
-    err "$slug" "reserved id (one of: $reserved)"
+  if is_reserved "$slug"; then
+    err "$slug" "reserved id (one of: $RESERVED_IDS)"
   fi
   if [ ! -d "$module" ]; then
     err "$code" "has no docs module docs/modules/$slug"
@@ -223,10 +234,10 @@ for slug in $slugs; do
       if [ "$s" = "step" ]; then
         err "$page" "step id 'step' is the template placeholder: rename pages/step.adoc and specs/step.json to the real step id"
       fi
-      if ! [[ "$s" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ ]]; then
-        err "$page" "step id '$s' is not a valid slug"
+      if ! valid_slug "$s"; then
+        err "$page" "step id '$s' is not a valid slug (see SLUG_RE in tools/lib.sh)"
       fi
-      if in_list "$s" $reserved; then
+      if is_reserved "$s"; then
         err "$page" "step id '$s' is reserved"
       fi
       sp="$module/pages/$s.adoc"
@@ -249,13 +260,26 @@ for slug in $slugs; do
         [ "$sid" = "$s" ] || err "$spec" "specId '$sid' must equal the step id '$s' (rename the id inside the spec too)"
       fi
     done
-    for f in "$module"/pages/*.adoc; do
-      [ -e "$f" ] || continue
-      stem=$(basename "$f" .adoc)
+    while IFS= read -r f; do
+      rel=${f#"$module/pages/"}
+      stem=${rel%.adoc}
       [ "$stem" = "index" ] && continue
       in_list "$stem" $listed || err "$f" "page is not listed in :page-solution-steps: (every non-index page must be a step)"
-    done
+    done < <(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null)
   fi
+
+  # Page bodies: leftover template placeholders, GitHub/site conditionals, repo links
+  while IFS= read -r f; do
+    while IFS=: read -r ln text; do
+      err "$f:$ln" "template placeholder left in the page: $(printf '%s' "$text" | cut -c1-70)"
+    done < <(grep -nE '^\[[A-Z][a-z ][^]]*\]$|^= \[|^\| *\[[A-Z][a-z ]|^\* (\[ \] )?\[[A-Z][a-z ]|__title__|__slug__' "$f")
+    while IFS=: read -r ln text; do
+      err "$f:$ln" "no ifdef/ifndef env-* conditionals under docs/ (pages are written for the site only)"
+    done < <(grep -nE '^ifn?def::env-' "$f")
+    while IFS=: read -r ln text; do
+      err "$f:$ln" "never link to this repository from a page (readers use attachments and the download)"
+    done < <(grep -nE 'github\.com/redpanda-data/(redpanda-labs|solutions)' "$f")
+  done < <(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null)
 
   # Architecture diagram referenced by the overview template
   if grep -qE '^image::architecture\.svg\[' "$page" && [ ! -f "$module/images/architecture.svg" ]; then

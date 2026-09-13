@@ -39,15 +39,20 @@ for s in $steps; do
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "run-doc-detective: no steps listed in $overview" >&2; exit 2; }
 
+# --input is not variadic in doc-detective 4.38.1, so the step specs go into
+# the merged config's input array. Never pass the specs directory: _setup and
+# _teardown would then run a second time as ordinary specs.
 merged=$(mktemp "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX.json")
 trap 'rm -f "$merged"' EXIT
-jq -s '.[0] * .[1]' "$root/tools/doc-detective.base.json" "$local_cfg" > "$merged"
+inputs_json=$(printf '%s\n' "${inputs[@]}" | jq -R . | jq -s .)
+jq -s --argjson inputs "$inputs_json" '.[0] * .[1] * {input: $inputs}' \
+  "$root/tools/doc-detective.base.json" "$local_cfg" > "$merged"
 
 cd "$dir"
 rm -f testResults-*.json
 echo "run-doc-detective: $slug with doc-detective@$DD_VERSION"
 echo "run-doc-detective: specs: ${inputs[*]}"
-npx --yes "doc-detective@$DD_VERSION" --config "$merged" --input "${inputs[@]}" &
+npx --yes "doc-detective@$DD_VERSION" --config "$merged" &
 pid=$!
 
 # The CLI has been seen to finish and then not exit. Poll for the results
@@ -60,8 +65,11 @@ done
 
 rc=0
 if kill -0 "$pid" 2>/dev/null; then
+  echo "run-doc-detective: engine still running after results were written; stopping it" >&2
   kill -9 "$pid" 2>/dev/null || true
-  pkill -9 -f "doc-detective" 2>/dev/null || true
+  # Only the engine's node process. A bare "doc-detective" pattern would match
+  # this script too.
+  pkill -9 -f 'node .*doc-detective' 2>/dev/null || true
 else
   wait "$pid" || rc=$?
 fi

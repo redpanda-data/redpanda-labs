@@ -19,8 +19,8 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+. "$root/tools/lib.sh"
 slug=${1:-}
-reserved="progress download api index ROOT examples"
 
 usage() { sed -n '2,18p' "$0"; }
 
@@ -29,16 +29,14 @@ if [ -z "$slug" ] || [ "$slug" = "-h" ] || [ "$slug" = "--help" ]; then
   exit 2
 fi
 
-if ! [[ "$slug" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ ]]; then
+if ! valid_slug "$slug"; then
   echo "new-solution: '$slug' is not a valid slug (lowercase letters, digits, hyphens; 1-64 chars; no leading or trailing hyphen)" >&2
   exit 1
 fi
-for r in $reserved; do
-  if [ "$slug" = "$r" ]; then
-    echo "new-solution: '$slug' is a reserved id ($reserved)" >&2
-    exit 1
-  fi
-done
+if is_reserved "$slug"; then
+  echo "new-solution: '$slug' is a reserved id ($RESERVED_IDS)" >&2
+  exit 1
+fi
 if [ -e "$root/solutions/$slug" ] || [ -e "$root/docs/modules/$slug" ]; then
   echo "new-solution: solutions/$slug or docs/modules/$slug already exists" >&2
   exit 1

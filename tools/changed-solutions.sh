@@ -8,7 +8,9 @@
 # under solutions/<slug>/ or docs/modules/<slug>/. docs/modules/ROOT and
 # docs/modules/examples are not solutions and are skipped. Only slugs that
 # still exist as solutions/<slug>/ at HEAD are printed, so a deleted solution
-# never lands in the matrix. Output is always valid JSON, [] when nothing matches.
+# never lands in the matrix. A change under tools/, templates/, or the shared
+# test-solution workflow affects every solution, so it selects all of them.
+# Output is always valid JSON, [] when nothing matches.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -42,7 +44,14 @@ if ! git rev-parse --verify --quiet "$base" >/dev/null; then
   exit 2
 fi
 
-git diff --name-only "$base...HEAD" \
+changed=$(git diff --name-only "$base...HEAD")
+
+if printf '%s\n' "$changed" | grep -qE '^(tools/|templates/|\.github/workflows/test-solution\.yml$)'; then
+  all_slugs | to_json
+  exit 0
+fi
+
+printf '%s\n' "$changed" \
   | sed -nE 's#^(solutions|docs/modules)/([^/]+)/.*#\2#p' \
   | sort -u \
   | while IFS= read -r slug; do
