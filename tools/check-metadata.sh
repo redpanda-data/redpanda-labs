@@ -17,6 +17,8 @@
 #     and every non-index page is listed in the steps (strict bijection)
 #   - every listing block (---- or ....) in a solution page carries [source,<lang>] (or
 #     [,<lang>]) and contains only include:: lines: no literal code in pages
+#   - no indented prose: a line that begins with spaces and a letter outside a delimited
+#     block, and not the continuation of a list item or paragraph, renders as a literal block
 #   - tools/gen-dd-specs.mjs --check passes: every step page yields at least one runnable
 #     command block and one expected-output check, and every command tag it references exists
 #   - every image:: or video:: target in a solution page exists under images/ and is an output
@@ -324,6 +326,29 @@ for slug in $slugs; do
         }
         if ($0 ~ /^\[.*\]$/ || $0 ~ /^\.[^.[:space:]]/) attrs = attrs "\n" $0
         else flush_attrs()
+      }' "$f")
+  done < <(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null)
+
+  # Page bodies: indented prose renders as a literal block (monospace, cut off).
+  # A line that starts with spaces and a letter is fine inside a delimited
+  # block and as the wrapped continuation of a list item or paragraph (the
+  # previous line is not blank). When it starts a paragraph instead (after a
+  # blank line, a closing delimiter, a heading, a block macro, a block title
+  # or attribute line) and the previous non-blank line is not a list marker or
+  # a + continuation, AsciiDoc makes that paragraph literal.
+  while IFS= read -r f; do
+    while IFS=$'\t' read -r ln msg; do
+      err "$f:$ln" "$msg"
+    done < <(awk '
+      function is_list_or_cont(l) { return (l ~ /^[[:space:]]*([*.-]+|[0-9]+\.)[[:space:]]/ || l ~ /^[[:space:]]*\+[[:space:]]*$/) }
+      {
+        if (delim != "") { if ($0 == delim) { delim = ""; prev = "" } else prev = $0; next }
+        if ($0 ~ /^(----|\.\.\.\.|====|\|===|\/\/\/\/|--)$/) { delim = $0; prev = $0; next }
+        if ($0 ~ /^ +[A-Za-z]/ && (NR == 1 || prev ~ /^[[:space:]]*$/ || prev ~ /^\[.*\]$/ || prev ~ /^\.[^.[:space:]]/ || prev ~ /^=+ / || prev ~ /^[a-z]+::/)) {
+          if (!is_list_or_cont(prevnb)) printf "%d\tindented prose renders as a literal block (remove the leading spaces)\n", NR
+        }
+        if ($0 !~ /^[[:space:]]*$/) prevnb = $0
+        prev = $0
       }' "$f")
   done < <(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null)
 
