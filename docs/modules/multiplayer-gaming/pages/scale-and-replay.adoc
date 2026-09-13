@@ -1,0 +1,96 @@
+= Scale and replay
+:page-layout: solution-step
+:description: Burst the producer and watch lag, add two leaderboard instances and watch the group rebalance, then wipe Redis and rebuild an identical leaderboard from the log.
+:page-solution-step-duration: 8
+
+Three experiments that only a log makes cheap. You push the producer past what one consumer keeps up with and watch lag rise and fall, scale the leaderboard to three instances and watch partitions move, then delete the leaderboard entirely and rebuild it from the topic.
+
+== What you do
+
+. Keep the dashboard at http://localhost:3000 open and burst the simulator at 2000 events per second for 5 seconds:
++
+[,bash]
+----
+curl -s -X POST 'http://localhost:8090/burst?rate=2000&seconds=5'
+----
++
+The `consumer lag` counter on the dashboard rises for a moment and returns to 0 once the group catches up. The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged.
+
+. Scale the leaderboard to three instances:
++
+[,bash]
+----
+docker compose up -d --scale leaderboard-service=3 --no-recreate --wait leaderboard-service
+docker compose exec -T rpk rpk group describe leaderboard
+----
++
+`MEMBERS 3`, and the partition table shows two partitions per member. The dashboards at http://localhost:3001 and http://localhost:3002 each show their own instance name and partitions; all three read the same Redis and show the same top 10.
+
+. Snapshot the board, then destroy and rebuild it. Stop the consumers, wipe Redis, seek the group to the start of every partition, start the consumers again:
++
+[,bash]
+----
+docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 9 WITHSCORES > before.txt
+docker compose stop leaderboard-service
+docker compose exec -T redis redis-cli FLUSHALL
+docker compose exec -T rpk rpk group seek leaderboard --to start
+docker compose start leaderboard-service
+----
++
+`rpk group seek` needs the group to have no active members, which is why the services are stopped first.
+
+. Wait for the lag to return to 0 (a few seconds), then compare:
++
+[,bash]
+----
+docker compose exec -T rpk rpk group describe leaderboard | grep TOTAL-LAG
+docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 9 WITHSCORES > after.txt
+diff before.txt after.txt && echo "leaderboard identical after replay"
+----
+
+== Why
+
+The burst shows what lag is: the distance between the newest record and the last one a group committed. It is the one number to alert on for any consumer, and the dashboard reads it from the same source `rpk group describe` does.
+
+Scaling shows how consumer groups distribute work. Nobody told the new instances which partitions to take; joining the group is enough. The coordinator ran a rebalance and each member got two of six partitions. The ceiling is six instances, which is why step 2 chose six partitions. With a single-instance shared Redis, three instances also show that the writes commute: `ZINCRBY` from three writers in any order gives the same set.
+
+The replay is the reason to build on a log at all. The leaderboard in Redis was never the source of truth; the topic is. Deleting Redis loses nothing that cannot be rebuilt, and rebuilding it is a group seek. The same move fixes a bug in the leaderboard logic (deploy the fix, seek, replay), bootstraps a new consumer that needs history, or recovers from a Redis that was lost.
+
+== Why Redpanda
+
+Consumer group offsets are the consumer's, not the broker's, and `rpk group seek` edits them. Retention on `game.player-events` (7 days here, longer with Tiered Storage) decides how far back a replay can go. Cooperative rebalancing moves only the partitions that need to move, so two instances keep working while the third joins. See xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[] and xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+
+== What happens inside
+
+During the burst the simulator's ticker fires 2000 times a second and the producer batches records per partition; the leaderboard applies them at Redis round-trip speed, so its committed offsets fall behind the high watermarks and `Lag.Total()` in the service rises. When the burst ends the group drains the difference.
+
+When the second and third instances join, the coordinator triggers a rebalance with the cooperative-sticky protocol. Partitions are revoked from the first instance in a first round and assigned to the newcomers in a second; the `OnPartitionsRevoked` and `OnPartitionsAssigned` callbacks in the service update the partition list the dashboard shows. Uncommitted work on a revoked partition is committed before the partition moves.
+
+`FLUSHALL` empties Redis. `rpk group seek leaderboard --to start` writes offset 0 for each of the six partitions into `__consumer_offsets` on behalf of the group. When the instances start again they fetch from 0, apply every `score_changed` again in the original per-partition order, and the sorted set converges on the same members with the same scores, because addition is commutative across partitions and ordered within one. `before.txt` and `after.txt` are identical; the poison record and the burst are replayed too, and are handled the same way.
+
+== Verify
+
+Run:
+
+[,bash]
+----
+diff before.txt after.txt && echo "leaderboard identical after replay"
+----
+
+Expected output:
+
+[.solution-verify]
+[,text]
+----
+leaderboard identical after replay
+----
+
+If `diff` prints differences, the group had not finished replaying when `after.txt` was taken: wait for `TOTAL-LAG 0` and take it again. If `rpk group seek` reports that the group is not empty, a leaderboard instance was still running; `docker compose stop leaderboard-service` and repeat.
+
+== In production
+
+[.production-note]
+Scale consumer groups on lag, keep instance counts at or below the partition count, and use Tiered Storage so the replay window is a retention setting rather than a disk size. See the Consumer scaling and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]

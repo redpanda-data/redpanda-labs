@@ -1,0 +1,74 @@
+= Verify end to end
+:page-layout: solution-step
+:description: Run the nine assertions that prove the whole system agrees with itself: counts, sums, lags, and the dead-letter topic.
+:page-solution-step-duration: 3
+
+One script asserts everything the previous steps claimed, against the running system, with exact numbers. It is the same script CI runs on every change to this solution.
+
+== What you do
+
+. Run the checks:
++
+[,bash]
+----
+make verify
+----
+
+. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `retry`) and runs nine checks:
++
+[,bash]
+----
+include::example$scripts/verify.sh[tags=checks]
+----
+
+== Why
+
+Every step's Verify section checked one component. This step checks that the components agree with each other, which is the claim the architecture actually makes: three consumers of one stream, three views of one truth. The Redis leaderboard is compared with a `SUM(delta)` in Postgres that a different consumer wrote through a different path; the match history is compared with the simulator's own count; the achievements topic's high watermark is compared with the service's counter; the dead-letter topic must hold exactly the poison records and nothing else.
+
+The checks work because the simulator is deterministic and stops at a cap, so "the number of `match_ended` events" is a fact, not an estimate. They tolerate the two things you did in step 8: a burst (the watermark check uses the simulator's acknowledged counts, and the seeded 3000 must still be exact when no burst happened) and a poison record (the dead-letter check expects exactly as many records as were poisoned).
+
+== Why Redpanda
+
+Every number the script needs is observable from outside: high watermarks and group lag from `rpk`, counts from the sinks, counters from the services. That is the property that makes a streaming system testable in CI, and it is the same property you would alert on in production. See xref:streaming:reference:rpk/rpk-group/rpk-group-describe.adoc[].
+
+== What happens inside
+
+The script runs `rpk topic describe -p` to sum high watermarks, `rpk group describe` for the three groups' lag (with a retry, because the groups may be a second behind), `redis-cli ZCARD` and `ZREVRANGE`, and `psql` queries, all inside the compose containers. Each check prints `ok` or `FAIL`, and `verify_summary` prints `PASS (9/9)` and exits 0, or lists the failed checks and exits 1. CI gates on that exit code.
+
+== Verify
+
+Run:
+
+[,bash]
+----
+make verify
+----
+
+Expected output (the counts in parentheses depend on whether you ran the burst and poison steps):
+
+[.solution-verify]
+[,text]
+----
+ok    topics and partitions
+ok    high watermarks match the simulator (SIM_EVENTS_MAX=3000, burst=0, poison=0)
+ok    consumer groups leaderboard, achievements, connect-history have lag 0
+ok    Redis leaderboard:global has one entry per scoring player
+ok    top 10 Redis scores equal SUM(delta) in Postgres
+ok    match_history rows equal match_ended events
+ok    achievements: hot_streak fired (374) and all 396 unlocks are on game.achievements
+ok    game.player-events.dlq holds exactly the poison records (0)
+ok    leaderboard dashboard and Connect /ready answer
+PASS (9/9)
+----
+
+A failed check names what it compared. The most likely one after step 8 is the lag check, if a replay is still running: wait for `rpk group describe leaderboard` to show `TOTAL-LAG 0` and run `make verify` again.
+
+When you are done, `make clean` stops the stack and deletes its volumes.
+
+== In production
+
+[.production-note]
+Turn these assertions into alerts: consumer lag per group, dead-letter topic size, and a periodic reconciliation between the Redis board and the database. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (save both under `scripts/`)
