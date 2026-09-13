@@ -5,7 +5,7 @@
   "tests": [
     {
       "testId": "create-topics",
-      "description": "The four topics exist with the documented partition counts",
+      "description": "The five topics exist with the documented partition counts and game.leaderboard is compacted",
       "steps": [
         {
           "runShell": {
@@ -22,9 +22,16 @@
         },
         {
           "runShell": {
+            "command": "docker compose exec -T rpk rpk topic describe game.leaderboard -c",
+            "timeout": 60000,
+            "stdio": "/cleanup\\.policy\\s+compact/"
+          }
+        },
+        {
+          "runShell": {
             "command": "docker compose exec -T rpk rpk topic list",
             "timeout": 60000,
-            "stdio": "/game\\.player-events\\s+6\\s+1[\\s\\S]*game\\.player-events\\.dlq\\s+1\\s+1/"
+            "stdio": "/game\\.leaderboard\\s+3\\s+1[\\s\\S]*game\\.player-events\\s+6\\s+1[\\s\\S]*game\\.player-events\\.dlq\\s+1\\s+1/"
           }
         }
       ]

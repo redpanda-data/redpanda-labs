@@ -1,6 +1,6 @@
 {
   "specId": "verify-end-to-end",
-  "description": "Replays the 'verify-end-to-end' page: make verify prints PASS (9/9).",
+  "description": "Replays the 'verify-end-to-end' page: make verify prints PASS (9/9), including the two checks that read game.leaderboard.",
   "contentPath": "docs/modules/multiplayer-gaming/pages/verify-end-to-end.adoc",
   "tests": [
     {
