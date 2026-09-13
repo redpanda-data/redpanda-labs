@@ -1,0 +1,89 @@
+// Game event contract for the multiplayer-gaming solution.
+//
+// Every record on game.player-events, game.match-events, and
+// game.achievements is one GameEvent. The envelope carries the identity and
+// time of the event; the oneof carries the payload. Registered in Schema
+// Registry as a Protobuf schema under the subjects <topic>-value with
+// BACKWARD compatibility, so a consumer compiled against an older version
+// can always read what a newer producer writes.
+//
+// A change Schema Registry must reject: player_id changes type from string to
+// int64. Consumers compiled against version 1 or 2 would misread every record.
+syntax = "proto3";
+
+package game.v1;
+
+option go_package = "multiplayer-gaming/services/internal/gamepb;gamepb";
+
+import "google/protobuf/timestamp.proto";
+
+// tag::envelope[]
+message GameEvent {
+  // Unique per event. The Postgres sink uses it as the primary key, so a
+  // redelivered record inserts nothing twice.
+  string event_id = 1;
+  // Record key on game.player-events and game.achievements. Every event of one
+  // player lands on one partition, in order.
+  int64 player_id = 2;
+  // Record key on game.match-events.
+  string match_id = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  // Added in version 2. Old consumers ignore it; new consumers see it unset on
+  // old records. That is what BACKWARD compatibility guarantees.
+  optional string region = 5;
+
+  oneof event {
+    PlayerJoined player_joined = 10;
+    PlayerLeft player_left = 11;
+    MatchStarted match_started = 12;
+    MatchEnded match_ended = 13;
+    ScoreChanged score_changed = 14;
+    ItemAcquired item_acquired = 15;
+    AchievementUnlocked achievement_unlocked = 16;
+  }
+}
+// end::envelope[]
+
+// tag::payloads[]
+message PlayerJoined {
+  string display_name = 1;
+}
+
+// One per participant when a match ends, keyed by player_id, so a consumer
+// that owns a player's partition sees that player's match results.
+message PlayerLeft {
+  bool won = 1;
+  int64 final_score = 2;
+}
+
+message MatchStarted {
+  repeated string player_ids = 1;
+  string mode = 2;
+}
+
+message MatchEnded {
+  repeated string player_ids = 1;
+  string winner_player_id = 2;
+  int64 duration_seconds = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+message ScoreChanged {
+  // Positive or negative. The leaderboard applies it with ZINCRBY, so the
+  // score in Redis is the running sum of deltas.
+  int64 delta = 1;
+  int64 new_score = 2;
+  string reason = 3;
+}
+
+message ItemAcquired {
+  string item_id = 1;
+  int32 quantity = 2;
+}
+
+message AchievementUnlocked {
+  // hot_streak, first_win, veteran
+  string achievement = 1;
+  string detail = 2;
+}
+// end::payloads[]

@@ -1,0 +1,9 @@
+# `make proto` runs buf in a container with the remote protoc-gen-go plugin, so
+# nobody needs protoc or Go plugins installed. Output is committed under
+# services/internal/gamepb/ and is what the three services compile against.
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.12
+    out: services/internal/gamepb
+    opt:
+      - paths=source_relative

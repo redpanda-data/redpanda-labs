@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live leaderboard</title>
+<style>
+  :root { color-scheme: light dark; --bg: #0f1115; --fg: #e8e8e8; --muted: #9aa0a6; --row: #181b22; --accent: #e2401b; }
+  @media (prefers-color-scheme: light) { :root { --bg: #fafafa; --fg: #1a1a1a; --muted: #5f6368; --row: #f0f0f0; } }
+  body { margin: 0; padding: 24px 16px; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 8px 0 20px; }
+  .meta b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .lag-hot b { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr { background: var(--row); }
+  tbody tr + tr { border-top: 2px solid var(--bg); }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.moved td { animation: flash .6s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--accent) 35%, var(--row)); } to { background: var(--row); } }
+  .bar { height: 3px; background: var(--accent); width: 0; transition: width .4s; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Live leaderboard</h1>
+  <div class="meta">
+    <span>instance <b id="instance">-</b></span>
+    <span>partitions <b id="partitions">-</b></span>
+    <span id="lagwrap">consumer lag <b id="lag">-</b></span>
+    <span>players <b id="players">-</b></span>
+    <span>applied <b id="processed">-</b></span>
+    <span>poison skipped <b id="poison">-</b></span>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Player</th><th style="text-align:right">Score</th><th style="width:40%"></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script>
+  const rows = document.getElementById('rows');
+  const $ = (id) => document.getElementById(id);
+  let last = {};
+  const es = new EventSource('/events');
+  es.onmessage = (m) => {
+    const d = JSON.parse(m.data);
+    const s = d.status || {};
+    $('instance').textContent = s.instance || '-';
+    $('partitions').textContent = (s.partitions || []).sort((a, b) => a - b).join(',') || '-';
+    $('lag').textContent = s.lag ?? '-';
+    $('lagwrap').className = s.lag > 0 ? 'lag-hot' : '';
+    $('players').textContent = s.players ?? '-';
+    $('processed').textContent = s.processed ?? '-';
+    $('poison').textContent = s.poison_skipped ?? '-';
+    const max = d.top.length ? d.top[0].score : 1;
+    rows.innerHTML = '';
+    for (const e of d.top) {
+      const tr = document.createElement('tr');
+      if (last[e.player_id] !== undefined && last[e.player_id] !== e.score) tr.className = 'moved';
+      tr.innerHTML = `<td class="n">${e.rank}</td><td>${e.player_id}</td><td class="n">${e.score}</td><td><div class="bar" style="width:${Math.round(100 * e.score / max)}%"></div></td>`;
+      rows.appendChild(tr);
+      last[e.player_id] = e.score;
+    }
+  };
+</script>
+</body>
+</html>

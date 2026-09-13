@@ -1,0 +1,14 @@
+# buf configuration for `make proto`. Only proto/game_events.proto is compiled;
+# proto/history/ holds earlier and deliberately incompatible versions of the
+# same schema that step 3 registers by hand.
+version: v2
+modules:
+  - path: proto
+    excludes:
+      - proto/history
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
