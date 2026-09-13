@@ -64,7 +64,7 @@ include::example$proto/game_events.proto[tags=payloads]
 
 == Why Redpanda
 
-Schema Registry is part of the broker, stores its state in the `_schemas` topic you saw in step 2, and speaks the Confluent-compatible API, so franz-go's `sr` package, Redpanda Connect's `schema_registry_decode`, and Console all work against it unchanged. Protobuf compatibility checking understands field kinds, `oneof` moves, and removed fields. See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] and xref:streaming:reference:rpk/rpk-registry/rpk-registry-schema-create.adoc[].
+Schema Registry is part of the broker, stores its state in the `_schemas` topic you saw in xref:create-topics.adoc[], and speaks the Confluent-compatible API, so franz-go's `sr` package, Redpanda Connect's `schema_registry_decode`, and Console all work against it unchanged. Protobuf compatibility checking understands field kinds, `oneof` moves, and removed fields. See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] and xref:streaming:reference:rpk/rpk-registry/rpk-registry-schema-create.adoc[].
 
 == What happens inside
 

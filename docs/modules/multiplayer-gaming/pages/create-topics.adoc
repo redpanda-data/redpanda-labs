@@ -37,7 +37,7 @@ The four topics and the reason for each shape:
 | `game.player-events`
 | 6
 | `player_id`
-| Everything about one player, in order, on one partition. Six partitions is the ceiling for the leaderboard group; step 8 runs three members.
+| Everything about one player, in order, on one partition. Six partitions is the ceiling for the leaderboard group; xref:scale-and-replay.adoc[] runs three members.
 
 | `game.match-events`
 | 3
@@ -57,9 +57,9 @@ The four topics and the reason for each shape:
 
 == Why
 
-The leaderboard and the achievements service are both correct only because the record key is `player_id`. The achievements service (step 7) keeps a small in-memory state per player and never consults a shared store. That is safe only if every event of one player reaches exactly one instance, in the order it was produced. Keying by `player_id` gives that. Keying by `match_id` on `game.match-events` gives the same guarantee for matches, which is what a history sink wants.
+The leaderboard and the achievements service are both correct only because the record key is `player_id`. The achievements service (xref:detect-achievements.adoc[]) keeps a small in-memory state per player and never consults a shared store. That is safe only if every event of one player reaches exactly one instance, in the order it was produced. Keying by `player_id` gives that. Keying by `match_id` on `game.match-events` gives the same guarantee for matches, which is what a history sink wants.
 
-The partition counts are the scaling limits. A consumer group cannot have more active members than partitions, so six partitions means the leaderboard can run six instances, no more. Retention on `game.player-events` is 7 days because step 8 replays it; the default would do for the demo, but in a real game the replay window is a product decision.
+The partition counts are the scaling limits. A consumer group cannot have more active members than partitions, so six partitions means the leaderboard can run six instances, no more. Retention on `game.player-events` is 7 days because xref:scale-and-replay.adoc[] replays it; the default would do for the demo, but in a real game the replay window is a product decision.
 
 == Why Redpanda
 
@@ -67,7 +67,7 @@ Topic creation is one `rpk topic create` with the partition count, the replicati
 
 == What happens inside
 
-`rpk` sends a `CreateTopics` request to the broker. For each topic the controller creates the partitions as Raft groups (one replica each here, three in production), assigns leaders, and writes the topic properties to the controller log. From now on, when the simulator produces a record with key `p014`, its partitioner hashes the key with murmur2 and takes the result modulo 6; every record with that key lands on the same partition for as long as the partition count does not change. With 24 players and 6 partitions the spread is uneven (one partition can stay empty), which is normal for a small key space.
+`rpk` sends a `CreateTopics` request to the broker. For each topic the controller creates the partitions as Raft groups (one replica each here, three in production), assigns leaders, and writes the topic properties to the controller log. From now on, every record the simulator produces with key `p014` lands on the same partition, because the producer hashes the key to choose one (xref:streaming:develop:produce-data/configure-producers.adoc[]). With 24 players and 6 partitions the spread is uneven (one partition can stay empty), which is normal for a small key space.
 
 The simulator notices the topics within two seconds and moves from `waiting_for_topics` to `waiting_for_schema`. It still produces nothing.
 

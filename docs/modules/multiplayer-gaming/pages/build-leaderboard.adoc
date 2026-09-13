@@ -3,11 +3,11 @@
 :description: Read game.player-events in the leaderboard consumer group, apply every score change to Redis sorted sets, and serve a dashboard that updates twice a second.
 :page-solution-step-duration: 7
 
-The leaderboard service has been consuming since step 4. Here you open its dashboard, check its numbers against Redis, and read the consumer loop: when it commits, why that is at-least-once, and what the fix looks like.
+The leaderboard service has been consuming since the simulator started in xref:produce-player-events.adoc[]. Here you open its dashboard, check its numbers against Redis, and read the consumer loop: when it commits, why that is at-least-once, and what the fix looks like.
 
 == What you do
 
-. Open the dashboard at http://localhost:3000. It shows the top 10, the number of members in the `leaderboard` group, and the group's consumer lag. The dashboard is the leaderboard binary started with `LEADERBOARD_ROLE=dashboard`: it reads Redis and asks the broker for the group's lag, but joins no group, so its address never changes when you scale the consumers in step 8.
+. Open the dashboard at http://localhost:3000. It shows the top 10, the number of members in the `leaderboard` group, and the group's consumer lag. The dashboard is the leaderboard binary started with `LEADERBOARD_ROLE=dashboard`: it reads Redis and asks the broker for the group's lag, but joins no group, so its address never changes when you scale the consumers in xref:scale-and-replay.adoc[].
 
 . Ask Redis directly:
 +
@@ -50,13 +50,13 @@ The service commits offsets by hand, after the Redis writes of a batch succeed. 
 
 == Why Redpanda
 
-The leaderboard group's offsets are its own. Redpanda Connect and the achievements service read the same partitions at their own pace, and a slow Postgres in step 6 changes nothing here. The lag number on the dashboard comes from the same place `rpk group describe` reads: the difference between the group's committed offset and the partition's high watermark. See xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+The leaderboard group's offsets are its own. Redpanda Connect and the achievements service read the same partitions at their own pace, and a slow Postgres in xref:persist-match-history.adoc[] changes nothing here. The lag number on the dashboard comes from the same place `rpk group describe` reads: the difference between the group's committed offset and the partition's high watermark. See xref:streaming:develop:consume-data/consumer-offsets.adoc[].
 
 == What happens inside
 
-On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. For each `score_changed` the service pipelines the two `ZINCRBY` calls and an `EXPIRE` on the match key in one round trip to Redis. When the whole batch is applied, `CommitUncommittedOffsets` writes the next offset of every partition it read from into `__consumer_offsets`. A record whose schema ID is not registered under `game.player-events-value` (step 6 produces one) is counted as `poison_skipped` and committed past; the service decides that a record it cannot read should not stop the board.
+On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. For each `score_changed` the service pipelines the two `ZINCRBY` calls and an `EXPIRE` on the match key in one round trip to Redis. When the whole batch is applied, `CommitUncommittedOffsets` writes the next offset of every partition it read from into `__consumer_offsets`. A record whose schema ID is not registered under `game.player-events-value` (xref:persist-match-history.adoc[] produces one) is counted as `poison_skipped` and committed past; the service decides that a record it cannot read should not stop the board.
 
-A second background loop asks the broker for the group's lag and member count every second; in dashboard role that loop is all the binary runs, and it is what step 8 makes visible.
+A second background loop asks the broker for the group's lag and member count every second; in dashboard role that loop is all the binary runs, and it is what xref:scale-and-replay.adoc[] makes visible.
 
 The complete service, for building along:
 
@@ -105,7 +105,7 @@ Expected output (the beginning; the `status` object follows):
     }
 ----
 
-These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (step 8). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error. `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/api/top` asks a consumer instance directly; its `status` includes the partitions it owns.
+These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (xref:scale-and-replay.adoc[]). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error. `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/api/top` asks a consumer instance directly; its `status` includes the partitions it owns.
 
 == In production
 

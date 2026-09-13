@@ -3,7 +3,7 @@
 :description: Land both topics in Postgres with a Redpanda Connect pipeline that decodes through Schema Registry, flattens the oneof, inserts idempotently, and dead-letters what it cannot decode.
 :page-solution-step-duration: 6
 
-Redpanda Connect has been writing Postgres since step 4. You query the two tables, then produce one deliberately unreadable record and follow it to the dead-letter topic with the error attached. No code is involved: the pipeline is fifty lines of YAML.
+Redpanda Connect has been writing Postgres since the simulator started in xref:produce-player-events.adoc[]. You query the two tables, then produce one deliberately unreadable record and follow it to the dead-letter topic with the error attached. No code is involved: the pipeline is fifty lines of YAML.
 
 == What you do
 
@@ -83,7 +83,7 @@ The dead-letter path exists because a stream will, eventually, carry a record th
 
 == Why Redpanda
 
-The `redpanda` input, `schema_registry_decode`, `sql_insert`, and `fallback` are built-in components that know the Confluent wire format and Schema Registry, so the pipeline needs no schema file and no code. The record header the producer set in step 4, `event_type`, is available to Bloblang as `@event_type`, which is how the mapping knows the shape before it reads the payload. See xref:connect:components:processors/schema_registry_decode.adoc[], xref:connect:components:outputs/sql_insert.adoc[], and xref:connect:configuration:error_handling.adoc[].
+The `redpanda` input, `schema_registry_decode`, `sql_insert`, and `fallback` are built-in components that know the Confluent wire format and Schema Registry, so the pipeline needs no schema file and no code. The record header the producer set in xref:produce-player-events.adoc[], `event_type`, is available to Bloblang as `@event_type`, which is how the mapping knows the shape before it reads the payload. See xref:connect:components:processors/schema_registry_decode.adoc[], xref:connect:components:outputs/sql_insert.adoc[], and xref:connect:configuration:error_handling.adoc[].
 
 == What happens inside
 

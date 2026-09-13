@@ -14,7 +14,7 @@ The achievements service has been reading the same topic as the leaderboard, in 
 curl -s http://localhost:3010/healthz
 ----
 +
-24 players tracked, 374 `hot_streak` unlocks and 22 `first_win` unlocks from the seeded 3000 events. `veteran` needs ten finished matches per player, which takes more than 3000 events; it appears after the burst in step 8.
+24 players tracked, 374 `hot_streak` unlocks and 22 `first_win` unlocks from the seeded 3000 events. `veteran` needs ten finished matches per player, which takes more than 3000 events; it appears after the burst in xref:scale-and-replay.adoc[].
 
 . Read the achievements topic, decoding with Schema Registry:
 +
@@ -43,9 +43,9 @@ include::example$services/achievements/rules/rules.go[tags=apply]
 
 Three rules: `hot_streak` (three positive score changes within 30 seconds), `first_win` (once), and `veteran` (ten matches finished). All three need history for one player: the last few deltas with their times, a win counter, a match counter. The obvious place for that history is a shared store, and the obvious cost is a round trip per event plus a consistency story.
 
-The service keeps the state in memory instead. It can, because step 2 keyed `game.player-events` by `player_id`: every event of one player is on one partition, in order, and a partition is consumed by exactly one member of the group at a time. So the instance that owns the partition sees the player's complete history and nothing another instance needs. When a rebalance moves a partition, the service drops the state of that partition's players; the new owner rebuilds it from its committed offset onward.
+The service keeps the state in memory instead. It can, because xref:create-topics.adoc[] keyed `game.player-events` by `player_id`: every event of one player is on one partition, in order, and a partition is consumed by exactly one member of the group at a time. So the instance that owns the partition sees the player's complete history and nothing another instance needs. When a rebalance moves a partition, the service drops the state of that partition's players; the new owner rebuilds it from its committed offset onward.
 
-The rules judge time by the event's `occurred_at`, not the wall clock. That is what makes step 8's replay produce the same unlocks, and it is the right choice for any rule that means "within 30 seconds of game time".
+The rules judge time by the event's `occurred_at`, not the wall clock. That is what makes the replay in xref:scale-and-replay.adoc[] produce the same unlocks, and it is the right choice for any rule that measures game time rather than wall-clock time.
 
 `veteran` counts `player_left` events, one of which the simulator emits per participant when a match ends. That keeps the rule inside the player's own partition; counting `match_ended` on `game.match-events` would need the participants' state from a different topic and key.
 

@@ -11,7 +11,7 @@ Choose one of two paths. Both end with the same running stack.
 
 . *Download the complete example* (sign in required). Unzip it and change into `multiplayer-gaming/`.
 +
-*Or build along.* Create a directory `multiplayer-gaming/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Go sources are shown in full in steps 4, 5, and 7; the Postgres schema and the Connect pipeline in step 6. Save each into the path its heading names. Then regenerate the Protobuf code once:
+*Or build along.* Create a directory `multiplayer-gaming/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Go sources are shown in full in xref:produce-player-events.adoc[], xref:build-leaderboard.adoc[], and xref:detect-achievements.adoc[]; the Postgres schema and the Connect pipeline in xref:persist-match-history.adoc[]. Save each into the path its heading names. Then regenerate the Protobuf code once:
 +
 [,bash]
 ----

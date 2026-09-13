@@ -52,7 +52,7 @@ diff before.txt after.txt && echo "leaderboard identical after replay"
 
 The burst shows what lag is: the distance between the newest record and the last one a group committed. It is the one number to alert on for any consumer, and the dashboard reads it from the same source `rpk group describe` does.
 
-Scaling shows how consumer groups distribute work. Nobody told the new instances which partitions to take; joining the group is enough. The coordinator ran a rebalance and each member got two of six partitions. The ceiling is six instances, which is why step 2 chose six partitions. With a single-instance shared Redis, three instances also show that the writes commute: `ZINCRBY` from three writers in any order gives the same set.
+Scaling shows how consumer groups distribute work. Nobody told the new instances which partitions to take; joining the group is enough. The coordinator ran a rebalance and each member got two of six partitions. The ceiling is six instances, which is why xref:create-topics.adoc[] chose six partitions. With a single-instance shared Redis, three instances also show that the writes commute: `ZINCRBY` from three writers in any order gives the same set.
 
 The replay is the reason to build on a log at all. The leaderboard in Redis was never the source of truth; the topic is. Deleting Redis loses nothing that cannot be rebuilt, and rebuilding it is a group seek. The same move fixes a bug in the leaderboard logic (deploy the fix, seek, replay), bootstraps a new consumer that needs history, or recovers from a Redis that was lost.
 

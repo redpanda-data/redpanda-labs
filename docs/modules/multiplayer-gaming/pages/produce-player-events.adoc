@@ -44,7 +44,7 @@ include::example$services/simulator/main.go[tags=loop]
 
 Three settings on the producer carry the design. Idempotence gives every partition a producer ID and a sequence number, so a retried batch after a timeout is deduplicated by the broker and a `score_changed` is never applied twice on the log. `acks=all` waits for the full in-sync replica set before the send is acknowledged; with one replica it changes nothing here, with three it is the difference between a durable score and a lost one. The sticky key partitioner hashes the key like the Java client does, so `player_id` maps to the same partition from any client language.
 
-The generator is deterministic on purpose. It seeds a random source from `SIM_SEED`, keeps its own simulated clock (200 simulated milliseconds per event), and returns exactly one event per call, queuing the several events of a match start or match end so a hard stop at 3000 never leaves half a match on the log. Same seed, same 3000 records, same timestamps, which is what lets `scripts/verify.sh` assert exact numbers and lets you compare a replay with the original in step 8.
+The generator is deterministic on purpose. It seeds a random source from `SIM_SEED`, keeps its own simulated clock (200 simulated milliseconds per event), and returns exactly one event per call, queuing the several events of a match start or match end so a hard stop at 3000 never leaves half a match on the log. Same seed, same 3000 records, same timestamps, which is what lets `scripts/verify.sh` assert exact numbers and lets you compare a replay with the original in xref:scale-and-replay.adoc[].
 
 [,go]
 ----
@@ -53,11 +53,11 @@ include::example$services/simulator/sim/generator.go[tags=next]
 
 == Why Redpanda
 
-Idempotent producers are on by default in Redpanda and in franz-go, and they cost nothing measurable. The `event_type` record header lets Redpanda Connect route without decoding the payload first (step 6), and the Confluent wire format the `sr` serde writes is what Console and Connect decode. See xref:streaming:develop:produce-data/idempotent-producers.adoc[] and xref:streaming:develop:produce-data/configure-producers.adoc[].
+Idempotent producers are on by default in Redpanda and in franz-go, and they cost nothing measurable. The `event_type` record header lets Redpanda Connect route without decoding the payload first (xref:persist-match-history.adoc[]), and the Confluent wire format the `sr` serde writes is what Console and Connect decode. See xref:streaming:develop:produce-data/idempotent-producers.adoc[] and xref:streaming:develop:produce-data/configure-producers.adoc[].
 
 == What happens inside
 
-For each event the simulator serializes the Protobuf message, prefixes the schema ID header, hashes the key to pick a partition, and appends the record to a per-partition batch. Batches are sent after 5 ms of lingering, compressed with Snappy. The broker checks the producer's sequence number, appends the batch to the partition's log, and acknowledges once it is on stable storage. The high watermark of each partition advances by the number of records in the batch; the sum across the six partitions of `game.player-events` plus the three of `game.match-events` is 3000 once the simulator reports `capped`.
+For each event the simulator serializes the Protobuf message, prefixes the schema ID header, hashes the key to pick a partition, and appends the record to a per-partition batch. Batches are sent after 5 ms of lingering, compressed with Snappy, and the broker drops any retried batch it has already appended by checking the producer's sequence number (xref:streaming:develop:produce-data/idempotent-producers.adoc[]). The high watermark of each partition advances by the number of records in the batch; the sum across the six partitions of `game.player-events` plus the three of `game.match-events` is 3000 once the simulator reports `capped`.
 
 The three consumers have been reading since the first record arrived. The next three steps look at each in turn.
 
