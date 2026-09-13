@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" role="img" aria-labelledby="t d">
   <title id="t">Architecture of the multiplayer gaming solution</title>
-  <desc id="d">A game simulator produces Protobuf events to two Redpanda topics. Three independent consumer groups read game.player-events: the leaderboard service writes Redis and serves a dashboard, the achievements service produces to game.achievements, and Redpanda Connect writes Postgres with failures routed to a dead-letter topic. Schema Registry holds the contract; Redpanda Console decodes records with it.</desc>
+  <desc id="d">A game simulator produces Protobuf events to two Redpanda topics. Three independent consumer groups read game.player-events: the leaderboard service publishes each player's total to the compacted topic game.leaderboard, which a dashboard reads; the achievements service produces to game.achievements; Redpanda Connect writes Postgres with failures routed to a dead-letter topic. Schema Registry holds the contract; Redpanda Console decodes records with it.</desc>
   <style>
     :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --store: #eef2ff; --storeline: #4f5bd5; --svc: #eefbf3; --svcline: #2e8b57; }
     @media (prefers-color-scheme: dark) {
@@ -32,31 +32,35 @@
   <text class="muted" x="95" y="280" text-anchor="middle">Protobuf via Schema Registry</text>
 
   <!-- redpanda -->
-  <rect class="rp" x="210" y="60" width="270" height="440"/>
+  <rect class="rp" x="210" y="60" width="270" height="480"/>
   <text class="h" x="345" y="88" text-anchor="middle" fill="var(--rp)" style="fill: var(--rp)">Redpanda</text>
   <rect class="box" x="230" y="104" width="230" height="52"/>
   <text class="h" x="345" y="126" text-anchor="middle">Schema Registry</text>
   <text class="muted" x="345" y="144" text-anchor="middle">GameEvent, Protobuf, BACKWARD</text>
 
-  <rect class="topic" x="230" y="186" width="230" height="56"/>
-  <text class="mono" x="345" y="208" text-anchor="middle">game.player-events</text>
-  <text class="muted" x="345" y="228" text-anchor="middle">key player_id, 6 partitions, 7 d</text>
+  <rect class="topic" x="230" y="170" width="230" height="56"/>
+  <text class="mono" x="345" y="192" text-anchor="middle">game.player-events</text>
+  <text class="muted" x="345" y="212" text-anchor="middle">key player_id, 6 partitions, 7 d</text>
 
-  <rect class="topic" x="230" y="262" width="230" height="56"/>
-  <text class="mono" x="345" y="284" text-anchor="middle">game.match-events</text>
-  <text class="muted" x="345" y="304" text-anchor="middle">key match_id, 3 partitions</text>
+  <rect class="topic" x="230" y="240" width="230" height="56"/>
+  <text class="mono" x="345" y="262" text-anchor="middle">game.match-events</text>
+  <text class="muted" x="345" y="282" text-anchor="middle">key match_id, 3 partitions</text>
 
-  <rect class="topic" x="230" y="338" width="230" height="56"/>
-  <text class="mono" x="345" y="360" text-anchor="middle">game.achievements</text>
-  <text class="muted" x="345" y="380" text-anchor="middle">key player_id, 3 partitions</text>
+  <rect class="topic" x="230" y="310" width="230" height="56"/>
+  <text class="mono" x="345" y="332" text-anchor="middle">game.leaderboard</text>
+  <text class="muted" x="345" y="352" text-anchor="middle">key player_id, 3 partitions, compacted</text>
 
-  <rect class="topic" x="230" y="414" width="230" height="56"/>
-  <text class="mono" x="345" y="436" text-anchor="middle">game.player-events.dlq</text>
-  <text class="muted" x="345" y="456" text-anchor="middle">1 partition, poison records</text>
+  <rect class="topic" x="230" y="380" width="230" height="56"/>
+  <text class="mono" x="345" y="402" text-anchor="middle">game.achievements</text>
+  <text class="muted" x="345" y="422" text-anchor="middle">key player_id, 3 partitions</text>
+
+  <rect class="topic" x="230" y="450" width="230" height="56"/>
+  <text class="mono" x="345" y="472" text-anchor="middle">game.player-events.dlq</text>
+  <text class="muted" x="345" y="492" text-anchor="middle">1 partition, poison records</text>
 
   <!-- producer arrows -->
-  <path class="flow" d="M170,236 L228,214"/>
-  <path class="flow" d="M170,260 L228,290"/>
+  <path class="flow" d="M170,236 L228,198"/>
+  <path class="flow" d="M170,260 L228,268"/>
   <path class="flow dash" d="M95,200 L95,130 L228,130"/>
   <text class="muted" x="112" y="122">looks up the schema</text>
 
@@ -64,8 +68,8 @@
   <rect class="svc" x="560" y="90" width="190" height="88"/>
   <text class="h" x="655" y="116" text-anchor="middle">leaderboard-service</text>
   <text class="muted" x="655" y="136" text-anchor="middle">group leaderboard, x1..x3</text>
-  <text class="muted" x="655" y="152" text-anchor="middle">ZINCRBY per score_changed</text>
-  <text class="muted" x="655" y="168" text-anchor="middle">dashboard + SSE</text>
+  <text class="muted" x="655" y="152" text-anchor="middle">total per player, in memory</text>
+  <text class="muted" x="655" y="168" text-anchor="middle">publishes absolute totals</text>
 
   <rect class="svc" x="560" y="236" width="190" height="88"/>
   <text class="h" x="655" y="262" text-anchor="middle">achievements-service</text>
@@ -81,24 +85,24 @@
   <text class="muted" x="655" y="478" text-anchor="middle">fallback: dead-letter topic</text>
 
   <!-- fan-out arrows from player-events -->
-  <path class="flow" d="M460,200 L558,134"/>
-  <path class="flow" d="M460,214 L558,280"/>
-  <path class="flow" d="M460,228 L558,420"/>
-  <path class="flow" d="M460,300 L558,440"/>
+  <path class="flow" d="M460,184 L558,134"/>
+  <path class="flow" d="M460,198 L558,280"/>
+  <path class="flow" d="M460,212 L558,420"/>
+  <path class="flow" d="M460,278 L558,440"/>
+  <!-- leaderboard totals published back to the compacted topic -->
+  <path class="flow" d="M560,168 L462,326"/>
   <!-- achievements produce back -->
-  <path class="flow" d="M560,310 L462,366"/>
+  <path class="flow" d="M560,310 L462,404"/>
   <!-- dlq from connect -->
-  <path class="flow dash" d="M560,470 L462,448"/>
+  <path class="flow dash" d="M560,470 L462,484"/>
 
-  <!-- sinks -->
-  <rect class="store" x="820" y="90" width="140" height="60"/>
-  <text class="h" x="890" y="114" text-anchor="middle">Redis</text>
-  <text class="mono" x="890" y="134" text-anchor="middle" style="font-size:11px">leaderboard:global</text>
-  <path class="flow" d="M750,128 L818,120"/>
-
-  <rect class="store" x="820" y="170" width="140" height="44"/>
-  <text class="h" x="890" y="197" text-anchor="middle">Browser dashboard</text>
-  <path class="flow" d="M750,152 L818,188"/>
+  <!-- dashboard reads the compacted topic, through the gap between the two service boxes -->
+  <rect class="svc" x="820" y="294" width="140" height="88"/>
+  <text class="h" x="890" y="320" text-anchor="middle">leaderboard-dashboard</text>
+  <text class="muted" x="890" y="340" text-anchor="middle">reads game.leaderboard</text>
+  <text class="muted" x="890" y="356" text-anchor="middle">from the start, no group</text>
+  <text class="muted" x="890" y="372" text-anchor="middle">top 10 to the browser, SSE</text>
+  <path class="flow" d="M460,338 L818,338"/>
 
   <rect class="store" x="820" y="400" width="140" height="66"/>
   <text class="h" x="890" y="424" text-anchor="middle">Postgres</text>
@@ -107,6 +111,6 @@
   <path class="flow" d="M750,434 L818,434"/>
 
   <!-- console -->
-  <rect class="box" x="560" y="510" width="400" height="36"/>
-  <text x="760" y="533" text-anchor="middle">Redpanda Console decodes every topic with the same schemas</text>
+  <rect class="box" x="560" y="512" width="400" height="36"/>
+  <text x="760" y="535" text-anchor="middle">Redpanda Console decodes every topic with the same schemas</text>
 </svg>
