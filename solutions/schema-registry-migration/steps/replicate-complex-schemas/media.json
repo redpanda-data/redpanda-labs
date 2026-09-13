@@ -33,8 +33,7 @@
   },
   {
     "find": {
-      "selector": "body",
-      "elementText": "address-value",
+      "selector": "a[href*='subjects/address-value']",
       "timeout": 30000
     }
   },
