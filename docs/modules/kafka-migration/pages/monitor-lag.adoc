@@ -1,0 +1,113 @@
+= Monitor the migration lag
+:page-layout: solution-step
+:description: Read the migrator's lag per topic and its migration counters from the Prometheus endpoint, and see the migrated consumer group appear on the target.
+:page-solution-step-duration: 5
+
+You read the one number that decides when a cutover is safe: how many records the source holds that the migrator has not yet copied. It comes from the migrator's own metrics, per topic and partition, along with counters for every topic, schema, and offset it has migrated so far.
+
+== What you do
+
+. Print the lag per topic. `make lag` sums the migrator's `redpanda_lag` gauge over partitions:
++
+[source,bash]
+----
+include::example$steps/monitor-lag/commands.sh[tag=lag]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/monitor-lag/expected/lag.txt[]
+----
++
+The producer writes about fifty records a second; the migrator reads them within a second, so the lag stays in the tens while the workload runs. Run it a few times to see it move. The parsing is one `awk` block:
++
+[source,bash]
+----
+include::example$scripts/lag.sh[tags=awk]
+----
+
+. Read the migration counters straight from the metrics endpoint:
++
+[source,bash]
+----
+include::example$steps/monitor-lag/commands.sh[tag=counters]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/monitor-lag/expected/counters.txt[]
+----
++
+Four topics created, schemas created on every sync, and offsets committed for `orders-service` every ten seconds.
+
+. Look at the migrated group on the target:
++
+[source,bash]
+----
+include::example$steps/monitor-lag/commands.sh[tag=group-target]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/monitor-lag/expected/group-target.txt[]
+----
++
+The group exists on the target with committed offsets and no members: nothing consumes there yet, but the position is already being kept up to date. Console shows the same on the target's *Consumer Groups* page, captured by the test run of this step:
++
+.Captured by this solution's test run
+image::console-target-groups.png[Redpanda Console on the target cluster listing the orders-service consumer group, migrated by the migrator, with no members yet]
+
+== Why
+
+Lag is the migration's progress bar and its safety check at once. While it is above zero, the target is missing records the source has; a consumer moved now would either skip them or wait for them. The cutover in xref:finish-cutover.adoc[] waits for two things, and both are visible here: the migrator's lag at zero, and the translated offsets of the consumer group level with the source's. The counters are the audit trail: how many topics, schemas, and offsets the migrator has written, and (from the `_errors_total` series) how many it could not.
+
+== Why Redpanda
+
+Redpanda Connect exposes every pipeline's metrics in Prometheus format on its HTTP server, and the `redpanda_migrator` components add their own: `redpanda_lag` per topic and partition from the input, and `redpanda_migrator_topics_created_total`, `redpanda_migrator_sr_schemas_created_total`, `redpanda_migrator_cg_offsets_committed_total`, and their error counterparts from the output. The same endpoint feeds a Grafana dashboard in production. See xref:connect:guides:monitoring.adoc[] and xref:connect:components:outputs/redpanda_migrator.adoc#_metrics[the migrator's metrics].
+
+== What happens inside
+
+Every five seconds the input refreshes the high watermark of every source partition it consumes and subtracts its own position, which is the `redpanda_lag` gauge with `topic` and `partition` labels; the pipeline's `metrics.mapping` adds a `label="source"` so a dashboard can tell clusters apart when several migrators run. `scripts/lag.sh` fetches `/metrics` inside the migrator container with `wget`, keeps the `redpanda_lag` lines, and sums the value per topic.
+
+The consumer group sync runs every `OFFSET_SYNC_INTERVAL`. For each group on the source that consumes a migrated topic (except the migrator's own, which the config excludes), it reads the committed offset of every partition, looks up the timestamp of the record at that position on the source, finds the first record with that timestamp or later on the target, and commits that offset for the same group on the target. `redpanda_migrator_cg_offsets_committed_total` counts those commits; the group on the target stays `Empty` because no client has joined it.
+
+The complete script, for building along:
+
+.Complete source: scripts/lag.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/lag.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/monitor-lag/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/monitor-lag/expected/verify.txt[]
+----
+
+A small number that changes between runs. If it grows without bound, the migrator is not keeping up or has stopped writing: `docker compose logs migrator` shows `output_error` causes such as an authorization failure on the target. If `make lag` reports that the migrator is not answering, `make migrate` did not start it.
+
+== In production
+
+[.production-note]
+Scrape the migrator's `/metrics` into Prometheus, chart `redpanda_lag` by topic, and alert when it rises for longer than your cutover window or when any `redpanda_migrator_*_errors_total` counter moves. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/lag.sh[scripts/lag.sh] (`chmod +x` it)

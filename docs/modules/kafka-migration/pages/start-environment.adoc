@@ -1,0 +1,138 @@
+= Start the environment
+:page-layout: solution-step
+:description: Start the two secured clusters, a Redpanda Console for each, and the rpk helpers with one command, and see that neither cluster accepts a client without credentials.
+:page-solution-step-duration: 5
+
+You bring up both clusters with one command: the `source`, which plays the Kafka cluster you are leaving, and the empty `target` Redpanda cluster. Both start with SASL/SCRAM authentication on and a single superuser, the way a real cluster you are allowed to migrate would. Nothing else runs yet: no topics, no application, no migrator.
+
+== What you do
+
+Choose one of two paths. Both end with the same running stack.
+
+. *Download the complete example* (sign in required). Unzip it and change into `kafka-migration/`.
++
+*Or build along.* Create a directory `kafka-migration/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Redpanda Connect pipelines and the Avro schemas are shown in full in xref:seed-source.adoc[], xref:start-workload.adoc[], and xref:start-migrator.adoc[]; save each into the path its heading names.
+
+. Start everything and wait for the healthchecks:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+The first run pulls the Redpanda and Console images and takes about a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file holds every image version, host port, and credential, and every command below reads it.
+
+. Try to list topics without credentials. The `rpk-source` helper carries the superuser's credentials in its environment; `env -u` strips them for this one command:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=anonymous]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/anonymous.txt[]
+----
++
+The broker closed the connection because the client did not authenticate. With the credentials in place, the same helper lists users on both clusters:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=users]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/users.txt[]
+----
+
+. Open Redpanda Console for the target at http://localhost:8280 and for the source at http://localhost:8281. Both show one broker and no topics of yours yet.
+
+Both brokers share one block of compose settings, and each adds its own addresses and the two security flags:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=broker-defaults]
+----
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=source]
+----
+
+== Why
+
+A migration starts from a cluster that already has a security posture, so this solution never runs an unauthenticated broker. `RP_BOOTSTRAP_USER` creates the superuser before the broker accepts its first connection, and `enable_sasl` plus `superusers` are set at the same time, so there is no window where the cluster is open and no restart to enable security later. Schema Registry requires HTTP basic auth with the same SCRAM credentials.
+
+Two `rpk` helper containers, one per cluster, carry the connection settings for their side as `RPK_*` variables. Every command in this solution is `docker compose exec -T rpk-source rpk ...` or `docker compose exec -T rpk-target rpk ...`, so which cluster a command talks to is always in the command itself, and no page ever shows a password.
+
+== Why Redpanda
+
+Redpanda serves the Kafka API, Schema Registry, and the Admin API from one binary, so a complete migration lab with two secured clusters is two containers, and `rpk` ships in the same image for the helpers. The `source` is Redpanda too: Redpanda Migrator talks to it as it would to any Kafka cluster, which is the point. See xref:streaming:manage:security/authentication.adoc[].
+
+== What happens inside
+
+Each broker starts in `dev-container` mode with 1 GB of memory, advertises `source:9092` or `target:9092` inside the compose network and `localhost:49092` or `localhost:59092` outside it, creates the SCRAM user from `RP_BOOTSTRAP_USER`, and applies `enable_sasl=true` and `superusers=[admin]` as cluster properties on its first boot. From then on every Kafka connection must authenticate with SASL/SCRAM-SHA-256, and any user who is not a superuser is subject to ACLs. Both Schema Registry listeners are declared with `authentication_method: http_basic`, so `curl` without `-u` gets a `401`.
+
+Console connects to its cluster's broker, Admin API, and Schema Registry with the superuser credentials the compose file passes in as environment variables; the config file carries only the addresses.
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: console/target.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console/target.yaml[]
+----
+====
+
+.Complete source: console/source.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console/source.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (two brokers at `--memory 1G` each) and one of the host ports already in use (move it with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If a helper reports `SASL authentication failed`, the data volume holds a user from an earlier run with a different password: `make clean` and start again.
+
+== In production
+
+[.production-note]
+Production clusters add TLS on every listener and give each application its own credential instead of the superuser. The two brokers here are single nodes; a real target runs three or more. See the Security and Brokers and replication rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/console/target.yaml[console/target.yaml] and link:{attachmentsdir}/console/source.yaml[console/source.yaml]

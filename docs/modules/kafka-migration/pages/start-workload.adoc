@@ -1,0 +1,135 @@
+= Start the legacy workload
+:page-layout: solution-step
+:description: Start the application you are migrating, a producer and the orders-service consumer group, against the source cluster, and see the committed offsets the cutover will have to carry over.
+:page-solution-step-duration: 5
+
+You start the application whose cluster you are about to replace: a producer that writes an Avro record every 20 ms across the four topics, and the `orders-service` consumer group that reads `shop.orders` and commits offsets. Both are Redpanda Connect pipelines pointed at the source. They keep running through the whole migration; nothing in the later steps touches them until the cutover.
+
+== What you do
+
+. Start the producer and the consumer, and wait until the group has committed an offset on every partition:
++
+[source,bash]
+----
+include::example$steps/start-workload/commands.sh[tag=workload]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-workload/expected/workload.txt[]
+----
+
+. Read the first record of partition 0, with its offset, timestamp, and key:
++
+[source,bash]
+----
+include::example$steps/start-workload/commands.sh[tag=first-record]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-workload/expected/first-record.txt[]
+----
++
+The timestamp is what the migrator later uses to translate committed offsets, so it is worth seeing that every record has one.
+
+. Watch the consumer decode records through Schema Registry:
++
+[source,bash]
+----
+include::example$steps/start-workload/commands.sh[tag=consumer-log]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-workload/expected/consumer-log.txt[]
+----
++
+Each line names the cluster the consumer is on (`source` for now), the order, the partition and offset, and the schema ID the record carried.
+
+The producer's mapping decides the topic and key of each record, and the encoder looks the schema up by subject:
+
+[source,yaml]
+----
+include::example$connect/producer.yaml[tags=input]
+----
+
+[source,yaml]
+----
+include::example$connect/producer.yaml[tags=pipeline]
+----
+
+The consumer joins `orders-service` and commits every second:
+
+[source,yaml]
+----
+include::example$connect/orders-consumer.yaml[tags=input]
+----
+
+== Why
+
+The migration has to happen underneath a running application, so the application runs first and never stops producing until you decide to. The consumer group matters more than the producer: its committed offsets are the application's memory of what it has processed, and losing them means either reprocessing everything or skipping records. The cutover in xref:finish-cutover.adoc[] is judged on whether those offsets arrive intact.
+
+The producer writes one record every 20 ms on purpose. Redpanda Migrator translates committed offsets by timestamp, and with records that far apart every offset maps to exactly one record on the target, which lets this solution assert the translation exactly. Real workloads write faster than that; the Idempotency and delivery row in xref:index.adoc#_production_considerations[Production considerations] says what changes.
+
+== Why Redpanda
+
+The producer and the consumer are Redpanda Connect configurations, so the "legacy application" is two YAML files with no build step, and the same consumer file runs against either cluster by changing two environment variables. `schema_registry_encode` and `schema_registry_decode` handle the wire format, and the `redpanda` output and input speak SASL/SCRAM to any Kafka-compatible cluster. See xref:connect:components:processors/schema_registry_encode.adoc[] and xref:connect:components:inputs/redpanda.adoc[].
+
+== What happens inside
+
+The producer's `generate` input fires every 20 ms; the Bloblang mapping picks a topic by the record counter (every tenth record an alert, every fifth a customer profile, every third an inventory event, the rest orders) and a key that fits the topic, so the compacted topics compact on the right key. `schema_registry_encode` fetches the subject's latest schema once, caches it, and writes the five-byte wire header (magic byte and schema ID) in front of the Avro bytes. The broker assigns each record a timestamp on arrival.
+
+The consumer joins `orders-service` with the cooperative-sticky balancer, gets all twelve partitions, decodes each record by the schema ID in its header, and commits its offsets every second, which is why `make workload` waited for twelve committed offsets before returning. From here on, `rpk group describe orders-service` on the source is the number the cutover has to preserve.
+
+Complete sources for building along:
+
+.Complete source: connect/producer.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/producer.yaml[]
+----
+====
+
+.Complete source: connect/orders-consumer.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/orders-consumer.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-workload/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-workload/expected/verify.txt[]
+----
+
+`STATE Stable` with one member; the lag is whatever the consumer has not read in the last second. If the state is `Empty` or the group does not exist, the consumer could not connect: `docker compose logs orders-consumer` shows whether it was authentication (a changed password in `.env` after the first `make up`) or a missing topic (`make topics` first). If the producer logs `subject not found`, run `make schemas`.
+
+== In production
+
+[.production-note]
+Inventory every consumer group on the source before the migration (`rpk group list`, then `rpk group describe`) and decide the order in which they move. Each group is its own cutover. See the Consumer scaling row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/producer.yaml[connect/producer.yaml]
+* link:{attachmentsdir}/connect/orders-consumer.yaml[connect/orders-consumer.yaml]
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml] (the `workload` profile)

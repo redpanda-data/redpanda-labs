@@ -1,0 +1,128 @@
+= Start Redpanda Migrator
+:page-layout: solution-step
+:description: Start the migrator pipeline and watch it create the four topics on the target with the source's partition counts and cleanup policies, then start copying records.
+:page-solution-step-duration: 5
+
+You start Redpanda Migrator: one Redpanda Connect pipeline whose input reads the source and whose output writes the target and owns every migration decision. Within seconds the four topics exist on the target with the source's configuration, and records start arriving with their original keys, timestamps, and schema IDs.
+
+== What you do
+
+. Start the migrator and wait for the topics to appear on the target:
++
+[source,bash]
+----
+include::example$steps/start-migrator/commands.sh[tag=migrate]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-migrator/expected/migrate.txt[]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=migrate]
+----
+
+. Check that both halves of the pipeline are connected:
++
+[source,bash]
+----
+include::example$steps/start-migrator/commands.sh[tag=ready]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-migrator/expected/ready.txt[]
+----
+
+. Compare the configuration that xref:seed-source.adoc[] showed on the source with the target's copy:
++
+[source,bash]
+----
+include::example$steps/start-migrator/commands.sh[tag=describe-target]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-migrator/expected/describe-target.txt[]
+----
++
+`compact,delete` and the one-day retention arrived with the topic.
+
+. Open the target Console at http://localhost:8280/topics. The four `shop.*` topics are there with the source's partition counts and cleanup policies. This is what the test run of this step sees:
++
+.Captured by this solution's test run
+image::console-target-topics.png[The target cluster's topics in Redpanda Console: the four shop topics with 12, 6, 8, and 3 partitions and their cleanup policies]
+
+The pipeline is two components and a metrics block. The input side:
+
+[source,yaml]
+----
+include::example$connect/migrator.yaml[tags=input]
+----
+
+The output side, where the migration settings live:
+
+[source,yaml]
+----
+include::example$connect/migrator.yaml[tags=output]
+----
+
+== Why
+
+Redpanda Migrator replaces the usual migration toolbox (MirrorMaker for records, a script for topics, another for schemas, a spreadsheet for offsets) with one pipeline whose output knows what a migration is. Three settings in the output carry the design of this solution: `translate_ids: false`, so the schema ID in every record's first five bytes resolves on the target without rewriting a byte; `consumer_groups` with a ten-second interval, so the offsets of `orders-service` follow the consumer closely and the cutover waits seconds, not minutes; and the `regexp_topics_include` pattern on the input, so a topic added to the source later is picked up without a config change.
+
+The migrator runs under the `migrator` user from xref:grant-migrator-access.adoc[]. Everything it does on the target is something that user was granted; if it tried anything else, the broker would refuse.
+
+== Why Redpanda
+
+The `redpanda_migrator` input and output are part of Redpanda Connect, so the migrator is a container, a YAML file, and a metrics endpoint, with the same SASL and TLS options as any Connect component. Topic creation copies the source's partition count and configuration; `topic_replication_factor` overrides the replication factor for a bigger target; `sync_topic_interval` picks up topics that exist on the source but have no traffic. See xref:connect:components:outputs/redpanda_migrator.adoc[] and xref:connect:components:inputs/redpanda_migrator.adoc[].
+
+== What happens inside
+
+On start the input lists the source's topics, keeps those matching `^shop\..*$`, and joins the consumer group `redpanda-migrator` with `start_offset: earliest`, so history is copied before new records. The output, before it writes the first batch to a topic, describes that topic on the source (the `DESCRIBE_CONFIGS` grant) and creates it on the target with the same partition count and a copy of its configuration: `cleanup.policy`, `retention.ms`, `compression.type`, and `segment.ms` arrive as topic-level settings on the target. Records are produced to the same partition number with their key, headers, and timestamp, plus a `redpanda-migrator-offset` header carrying the source offset. Every ten seconds the output syncs the registry (xref:verify-schemas.adoc[]) and the consumer groups (xref:finish-cutover.adoc[]).
+
+`make migrate` waits until `rpk topic list` on the target shows the four topics, which takes a few seconds after the container reports healthy.
+
+The complete pipeline, for building along:
+
+.Complete source: connect/migrator.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/migrator.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-migrator/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-migrator/expected/verify.txt[]
+----
+
+Twelve partitions on the target's `shop.orders`, and records in the first ones already. If the topics do not appear, `docker compose logs migrator` shows the cause: `SASL authentication failed` means xref:grant-migrator-access.adoc[] did not run on one side; `TOPIC_AUTHORIZATION_FAILED` on `create topic` means the `DESCRIBE_CONFIGS` grant is missing on the source; a registry error mentioning `IMPORT` means the target registry is not in `IMPORT` mode.
+
+== In production
+
+[.production-note]
+Set `topic_replication_factor` to the target's standard, `max_in_flight` to the number of partitions you migrate, and leave `sync_topic_interval` on so empty topics migrate too. Run the migrator close to the target cluster; it reads far more than it writes. See the Brokers and replication row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/migrator.yaml[connect/migrator.yaml]
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml] (the `migrate` profile)

@@ -1,149 +1,129 @@
-= Kafka Migration
-// Overview page of the kafka-migration solution. Every attribute below is part of the
-// metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
-// flags placeholder attribute values and bracketed placeholder lines like the ones
-// in this template; replace them all before opening a PR.
+= Migrate from Kafka to Redpanda without stopping the business
 :page-layout: solution
 :page-topic-type: solution
-// One sentence, 200 characters or fewer. What the reader builds and why it matters.
-:description: [One sentence describing what the reader builds and the problem it solves.]
-// vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
-// and publishes <slug>-<version>.zip when a merged version has no tag yet.
-:page-solution-version: vX.Y.Z
-// beginner | intermediate | advanced
+:description: Move a running Kafka workload to Redpanda with Redpanda Migrator: topics, records, schemas with their IDs, and consumer group offsets, then cut consumers over without losing their place.
+:page-solution-version: v1.0.0
 :page-solution-difficulty: intermediate
-// Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
 :page-solution-duration: 45
-// draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
 :page-solution-status: draft
-// Uncomment to feature this solution on the landing page.
-// :page-solution-featured: true
-// authenticated | public | none
 :page-solution-download: authenticated
-// Subset of: self-managed, cloud (default both)
 :page-solution-platforms: self-managed, cloud
-// Comma list of the technologies the reader touches (Redpanda, Redpanda Connect, Go, Postgres...)
-:page-solution-technologies: [Redpanda, Redpanda Connect, ...]
-// Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
-:page-categories: [Stream Processing, Integration]
-// Optional comma list of business use cases (Real-time analytics, Migration...)
-// :page-solution-use-cases:
-// Optional persona ids from docs/modules/ROOT/partials/personas.yaml
-// :personas: streaming_developer, platform_operator
-// Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec
-// tests/doc-detective/specs/<id>.json. Rename step.adoc to your first step id.
-:page-solution-steps: step
-// Fully qualified resource IDs of the canonical Product Docs pages this solution applies.
-:page-solution-related-docs: [streaming:develop:consume-data/consumer-offsets.adoc, connect:components:outputs/sql_insert.adoc]
-// Optional: ids of solutions that pair well with this one
-// :page-solution-related-solutions:
-// Required when status is deprecated: id of the solution that replaces this one
-// :page-solution-superseded-by:
+:page-solution-technologies: Redpanda, Redpanda Migrator, Redpanda Connect, Schema Registry, Redpanda Console, rpk, Avro, Docker Compose
+:page-categories: Kafka Migration, Migration, Pipelines, Connectors, Security, Consumer Groups, Schema Registry
+:page-solution-use-cases: Kafka migration, Platform consolidation, Zero-downtime cutover
+:personas: platform_operator, streaming_developer
+:page-solution-steps: start-environment, seed-source, start-workload, grant-migrator-access, start-migrator, verify-schemas, monitor-lag, finish-cutover, verify-end-to-end
+:page-solution-related-docs: connect:cookbooks:redpanda_migrator.adoc, connect:components:inputs/redpanda_migrator.adoc, connect:components:outputs/redpanda_migrator.adoc, streaming:manage:security/authentication.adoc, streaming:manage:security/authorization/acl.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, streaming:develop:consume-data/consumer-offsets.adoc
 
-// Intro: two short paragraphs, 50-80 words in total. First the business problem,
-// then what the reader builds and has running at the end. No "this page describes".
-[What business problem does this solve, and why is it hard to do well?]
+A Kafka cluster carries the order flow of a shop: producers write around the clock, a consumer group processes every order, and Schema Registry holds the contracts. Moving that to Redpanda cannot mean stopping producers, replaying history by hand, or losing where each consumer left off.
 
-[What does the reader build, and what do they have running at the end?]
+You run two secured clusters side by side, keep the legacy application writing, and let Redpanda Migrator copy topics, records, schemas, and consumer group offsets continuously. You finish with the consumer running against Redpanda from exactly the offset it had on Kafka, and one script that proves both clusters agree.
 
-// Three to five observable outcomes as literal checkboxes. Solutions do not use
-// :learning-objective-N: attributes.
 After completing this solution, you will be able to:
 
-* [ ] [Outcome 1: an observable, verifiable capability]
-* [ ] [Outcome 2]
-* [ ] [Outcome 3]
+* [ ] Run Redpanda Migrator as a Redpanda Connect pipeline between two SASL-secured clusters with a least-privilege user on each side
+* [ ] Show that migrated topics keep their partition counts, cleanup policies, and retention, and that every record arrives with its timestamp
+* [ ] Migrate schemas with their original IDs so that records already on the wire decode on the new cluster, including schemas registered mid-migration
+* [ ] Read migration lag from the migrator's metrics and know when the target has caught up
+* [ ] Cut a consumer group over to Redpanda from translated offsets, then return the target Schema Registry to normal operation
+* [ ] Prove the migration with exact assertions: partitions, configurations, high watermarks, schema IDs, committed offsets
 
 == What you build
 
-[Two or three sentences on the running system: the services, the topics that connect them, and what a user of the system sees.]
+Two single-broker Redpanda clusters, both with SASL/SCRAM authentication and ACLs from the first boot. The `source` stands in for the Kafka cluster you are leaving; the migrator speaks the Kafka protocol to it and never notices the difference. A legacy application (a producer and the `orders-service` consumer group, both Redpanda Connect pipelines) works against the source the whole time. Redpanda Migrator copies everything to the `target`, and at the end you move the consumer.
 
-* [Component 1 and its role]
-* [Component 2 and its role]
-* [Component 3 and its role]
+* *`source`*: four `shop.*` topics with different partition counts and cleanup policies, four Avro subjects in Schema Registry, the `orders-service` consumer group.
+* *`producer`*: writes one Avro record every 20 ms to the four topics, encoded through the source Schema Registry.
+* *`orders-consumer`*: consumer group `orders-service` on `shop.orders`, committing offsets every second. The same pipeline file later runs against the target.
+* *`migrator`*: the `redpanda_migrator` input and output, authenticated as the `migrator` user with read-only ACLs on the source and write ACLs on the target only for `shop.*`.
+* *`target`*: receives the topics with their configurations, every record with its timestamp and schema ID, every schema with its ID, and the translated offsets of `orders-service`.
+* *Redpanda Console*, one per cluster, signed in as the superuser.
+
+.Captured by this solution's test run
+image::console-target-topics.png[The target cluster's topics in Redpanda Console after the migrator created them: the four shop topics with the source's partition counts and cleanup policies]
 
 == Architecture
 
-image::architecture.svg[Architecture of Kafka Migration]
+image::architecture.svg[Architecture: a producer and the orders-service consumer work against the source cluster; Redpanda Migrator reads the four shop topics, the source Schema Registry, and the group's offsets, and writes the same topics, records, schemas, and translated offsets to the target Redpanda cluster; at the cutover the consumer moves to the target]
 
-[Walk the diagram left to right: where events originate, which topics carry them, which consumers read them, and where results land.]
+Left to right: the producer looks up each topic's schema in the source Schema Registry and writes Avro records to the four `shop.*` topics; the `orders-service` group consumes `shop.orders` and commits offsets to `__consumer_offsets`. Redpanda Migrator reads the topics through the Kafka API as the `migrator` user, reads the registry over HTTP with the same user, and periodically reads the committed offsets of every consumer group on those topics. On the target it creates each topic with the source's partition count and configuration, produces every record with its original key, headers, timestamp, and schema ID, registers every schema version under its original ID (which is why the target registry runs in `IMPORT` mode until the cutover), and commits the translated offsets for `orders-service`. At the cutover the consumer stops on the source, the migrator's next sync brings the target's offsets level with the source's, and the same consumer starts on the target and continues from there.
 
 === Why Redpanda
 
-[Name the Redpanda capabilities this design depends on and what each buys the reader. Link the canonical Product Docs page for each; do not re-explain it.]
-
-* [Capability, for example independent consumer groups fan out one stream to many services] (xref:streaming:develop:consume-data/consumer-offsets.adoc[])
-* [Capability]
-* [Capability]
+* *Redpanda Migrator moves the whole state of a cluster, not only its records.* Topics with their configurations, schemas with their IDs, and consumer group offsets travel in one pipeline, which is the difference between copying data and migrating a system. xref:connect:cookbooks:redpanda_migrator.adoc[]
+* *Continuous replication makes the cutover a decision, not an outage.* The migrator keeps the target level with the source while producers keep writing; you choose the moment to move each consumer and can move them one at a time. xref:connect:components:outputs/redpanda_migrator.adoc[]
+* *Schema IDs are preserved.* Every record carries its schema ID in its first five bytes. Because the target registry gets the same IDs, records copied yesterday and records produced tomorrow decode with the same registry lookup, and no consumer needs a mapping table. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* *Consumer group offsets are translated, not guessed.* The migrator maps each committed offset through the record's timestamp to the matching position on the target, so a consumer resumes where it stopped instead of from the beginning or the end. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* *Least privilege is a few ACLs.* The migrator user can read the source and write only `shop.*` on the target; `rpk security acl` expresses that in seven commands. xref:streaming:manage:security/authorization/acl.adoc[]
+* *One binary.* Each cluster is one container with the Kafka API, Schema Registry, and the Admin API built in, so a full two-cluster migration lab fits on a laptop. xref:streaming:get-started:intro-to-events.adoc[]
 
 == Prerequisites
 
-* Docker Engine 24 or later with Docker Compose v2
-* [CPU/RAM the compose stack needs, for example 4 CPU and 8 GB RAM]
-* [Any client tooling the reader runs on the host, with version]
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker (two brokers at 1 GB each, two Consoles, four Redpanda Connect pipelines)
+* `curl` and `make` on the host (every `rpk` command runs inside a container)
+* Free host ports `8280`, `8281`, `4295`, `48081`, `49092`, `49644`, `58081`, `59092`, and `59644`, or different ones set with the `*_PORT` variables in `.env`
 * Approximately {page-solution-duration} minutes
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
 
-// Steps are rendered from :page-solution-steps: by the solution layout. Do not list
-// them here.
+// Steps are rendered from :page-solution-steps: by the solution layout.
 
 == Production considerations
 
-This solution runs on a single broker with no authentication so that it starts in seconds. Before you reuse the design in production, work through this table.
+This solution runs two single-broker clusters with demo credentials so that it starts in a minute. Before you reuse the design for a real migration, work through this table.
 
 [cols="1,2,2"]
 |===
 | Area | In this solution | In production
 
 | Brokers and replication
-| [One broker, replication factor 1]
-| [Three or more brokers, replication factor 3, rack awareness. Link the deployment docs.]
+| One broker per cluster, replication factor 1 on both sides; the migrator copies the source's replication factor.
+| Three or more brokers on the target, and `topic_replication_factor: 3` on the `redpanda_migrator` output so migrated topics get the target's standard even when the source used less. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[], xref:connect:components:outputs/redpanda_migrator.adoc[]
 
 | Security
-| [Plaintext, no authentication]
-| [TLS, SASL/SCRAM or mTLS, ACLs per service. Link the security docs.]
+| SASL/SCRAM with plaintext listeners; superuser credentials for the application and Console; a least-privilege `migrator` user on both clusters; Schema Registry behind HTTP basic auth.
+| TLS on every listener and on Schema Registry, one credential per application, the migrator's ACLs exactly as in xref:grant-migrator-access.adoc[] plus `sync_topic_acls` if ACLs move too, and Schema Registry authorization so the registry grants are as narrow as the Kafka ones. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:security/authentication.adoc[], xref:streaming:manage:security/authorization/acl.adoc[], xref:streaming:manage:schema-reg/schema-reg-authorization.adoc[]
 
 | Partitions
-| [Fixed partition counts sized for the demo]
-| [Size partitions for peak throughput and consumer parallelism. Link the partition guidance.]
+| Four topics with 12, 6, 8, and 3 partitions; the migrator recreates them with the same counts.
+| Keep partition counts identical during the migration: offset translation needs matching counts. Resize on the target after every consumer has moved. xref:streaming:develop:manage-topics/index.adoc[]
 
 | Schema validation
-| [Schemas registered, no broker-side validation]
-| [Enable schema ID validation on the topics. Link the schema registry docs.]
+| Schemas registered on the source; the target registry in `IMPORT` mode until the cutover so IDs are preserved; no broker-side validation.
+| Migrate with `IMPORT` mode and preserved IDs, return to `READWRITE` as the last step, then enable schema ID validation on the migrated topics. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| [One instance per consumer group]
-| [Scale on consumer lag; keep instances at or below partition count.]
+| One consumer instance in `orders-service`, moved by hand in xref:finish-cutover.adoc[].
+| Move consumer groups one at a time, each after its own `wait-offsets`, and keep the migrator running until the last producer has switched. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
-| [Local disk, default retention]
-| [Tiered Storage for long retention and replay. Link the Tiered Storage docs.]
+| The topics keep their source retention (7 days, 1 hour, compaction) on the target.
+| Check that the target's retention covers the migration window plus the consumer's expected backlog; a compacted source topic arrives already compacted. xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
 
 | Idempotency and delivery
-| [At-least-once with idempotent producers]
-| [Transactions or exactly-once where the sink needs it. Link the producer docs.]
+| Records are 20 ms apart, so timestamp-based offset translation lands on the exact record; the cutover step proves it.
+| Timestamps are not unique in general, so a translated offset can be a few records early: consumers must tolerate at-least-once delivery across the cutover. The migrator never moves a target offset backwards. xref:connect:components:outputs/redpanda_migrator.adoc[]
 
 | Dead-letter handling
-| [DLQ topic, no alerting]
-| [Alert on DLQ growth, replay tooling, retention policy for the DLQ.]
+| None: a record the migrator cannot write is retried, and the pipeline stops on a permanent error.
+| Alert on `output_error` and on a rising `redpanda_lag`, and keep the source until the target has been verified. xref:connect:configuration:error_handling.adoc[]
 
 | Observability
-| [Console only]
-| [Prometheus metrics, dashboards, alerts on lag and under-replicated partitions. Link the monitoring docs.]
+| `make lag` reads the migrator's Prometheus endpoint; Console on both clusters.
+| Scrape the migrator's `/metrics` (`redpanda_lag`, the `redpanda_migrator_*` counters) and both clusters into your monitoring, and alert on lag and on offset commit errors. xref:connect:guides:monitoring.adoc[], xref:streaming:manage:monitoring.adoc[]
 
 | Disaster recovery
-| [None]
-| [Shadowing to a second cluster. Link the Shadowing docs.]
+| None.
+| After the migration, Shadowing keeps a second Redpanda cluster level with the first, with the same offset and schema replication, for failover. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
 
 | Analytics and lakehouse
-| [Optional Iceberg profile]
-| [Iceberg topics with a catalog. Link the Iceberg docs.]
+| None.
+| Once the data lives in Redpanda, Iceberg topics write it to a lakehouse table with no pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
 |===
 
 == Clean up
 
-Stop the stack and delete its volumes:
+Stop every service, including the workload, the migrator, and the moved consumer, and delete the volumes:
 
 [source,bash]
 ----
@@ -152,7 +132,8 @@ include::example$steps/overview/commands.sh[tag=clean]
 
 == Related docs
 
-// The solution layout also renders :page-solution-related-docs:. Use this list for
-// anything that needs a sentence of context.
-* xref:streaming:develop:consume-data/consumer-offsets.adoc[] - [why it matters here]
-* [Next canonical page]
+* xref:connect:cookbooks:redpanda_migrator.adoc[] is the canonical walkthrough of Redpanda Migrator, including the ACLs each side needs.
+* xref:connect:components:inputs/redpanda_migrator.adoc[] and xref:connect:components:outputs/redpanda_migrator.adoc[] list every field of the pipeline in xref:start-migrator.adoc[], including `topic_replication_factor`, `translate_ids`, and the `consumer_groups` block.
+* xref:streaming:manage:security/authentication.adoc[] and xref:streaming:manage:security/authorization/acl.adoc[] explain the SASL/SCRAM and ACL model both clusters run from the first boot.
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] covers subjects, versions, and the wire format whose schema ID xref:verify-schemas.adoc[] preserves.
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[] explains the committed offsets that xref:finish-cutover.adoc[] translates.

@@ -1,0 +1,30 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${CONSOLE_PORT:-8280}/groups",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "table tbody tr:first-child",
+      "timeout": 30000
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/kafka-migration/images/console-target-groups.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05,
+      "crop": {
+        "selector": "main",
+        "padding": 0
+      }
+    }
+  }
+]

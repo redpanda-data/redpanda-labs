@@ -1,0 +1,187 @@
+= Finish the cutover
+:page-layout: solution-step
+:description: Stop the consumer on the source, wait for its offsets to land on the target, start it there, stop the producer, confirm every record arrived, and return the target registry to READWRITE.
+:page-solution-step-duration: 8
+
+You move the application. The consumer stops on the source, the migrator's next sync brings the target's copy of its offsets exactly level, and the same consumer starts on the target and continues from there. Then the producer stops (in production, it would be pointed at the target), the migrator drains the last records, and the target Schema Registry leaves `IMPORT` mode. Every step is a `make` target so the order is repeatable.
+
+== What you do
+
+. Stop the consumer on the source. Its committed offsets stop moving:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=stop-consumer]
+----
+
+. Wait until the migrator has written the same offsets on the target. This takes at most one `OFFSET_SYNC_INTERVAL` (ten seconds here):
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=wait-offsets]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/wait-offsets.txt[]
+----
++
+Put the two sides next to each other:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=compare]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/compare.txt[]
+----
++
+Twelve partitions, twelve identical offsets. The records on this workload are 20 ms apart, so the timestamp translation lands on exactly the record the consumer would have read next.
+
+. Start the same consumer against the target. Only `BROKERS` and `SCHEMA_REGISTRY_URL` differ:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=consumer-target]
+----
++
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=cutover]
+----
++
+Watch it pick up where the source consumer stopped:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=resumed]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/resumed.txt[]
+----
++
+The lines now say `target`, the order numbers continue from where the source consumer's log ended, and the schema ID is still `1`: the target registry answers for it.
+
+. Stop the producer. In a real migration this is the moment you point it at the target instead:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=stop-producer]
+----
+
+. Let the migrator drain, then compare high watermarks per topic:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=wait-lag]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/wait-lag.txt[]
+----
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=watermarks]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/watermarks.txt[]
+----
++
+Source and target agree on every topic.
+
+. Return the target Schema Registry to normal operation:
++
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=readwrite]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/finish-cutover/expected/readwrite.txt[]
+----
+
+The five targets in order, as the Makefile defines them (`make cutover` runs them all):
+
+[source,makefile]
+----
+include::example$Makefile[tags=cutover]
+----
+
+== Why
+
+The order of the cutover is the whole design. Stop the consumer first, so its committed offsets are a fixed number the migrator can copy. Wait for the copy, because a consumer started on the target before its offsets arrive would start from `earliest` or `latest`, the two outcomes a migration exists to avoid. Start it on the target only then. Stop or repoint the producer last, so the application never has a moment without a working consumer, and let the migrator drain before you declare the data complete. `READWRITE` is the very last step because a registry in `IMPORT` mode refuses ordinary registrations, and the application will register its next schema on the target.
+
+Doing this one consumer group at a time is what makes a migration incremental: the migrator keeps every group's offsets current on the target, so each team moves when it is ready and the source stays authoritative until the last producer has switched.
+
+== Why Redpanda
+
+Committed offsets live in `__consumer_offsets`, and the migrator writes translated ones there for the group as an ordinary Kafka client with `READ` on the group and on the topic. `rpk group describe --print-commits` shows the result on both sides in the same format, which is what `wait-offsets` diffs. On the target the consumer joins `orders-service`, receives the committed offsets, and fetches from there; no application code changes. See xref:streaming:develop:consume-data/consumer-offsets.adoc[] and xref:streaming:reference:rpk/rpk-group/rpk-group-describe.adoc[].
+
+== What happens inside
+
+`docker compose stop orders-consumer` lets the consumer commit and leave the group; on the source, `orders-service` becomes `Empty` with its last offsets in `__consumer_offsets`. On the migrator's next consumer group sync, each of the twelve offsets is translated: the migrator fetches the timestamp of the record at the committed position on the source, asks the target for the earliest offset with that timestamp or later, and commits it. Because the migrator preserved every record's timestamp and no two records on a partition share one, that offset is the same number. `scripts/wait-for-offsets.sh` polls both sides until the lists are identical.
+
+`orders-consumer-target` joins `orders-service` on the target, is assigned all twelve partitions, reads the committed offsets, and fetches from there; the target registry serves schema 1 for the records' headers. When the producer stops, the source's high watermarks freeze; the migrator copies the last records and `redpanda_lag` reaches zero on every partition, so the watermarks match. `rpk registry mode set --mode READWRITE` switches the global mode; the migrator's schema sync keeps running but has nothing left to register.
+
+The offset helpers, for building along:
+
+.Complete source: scripts/group-offsets.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/group-offsets.sh[]
+----
+====
+
+.Complete source: scripts/wait-for-offsets.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/wait-for-offsets.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/finish-cutover/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/finish-cutover/expected/verify.txt[]
+----
+
+`STATE Stable`, one member, `TOTAL-LAG 0`: the consumer is on the target and has read everything the migrator delivered. If `wait-offsets` times out, check `docker compose logs migrator | grep "Consumer group"`: `TOPIC_AUTHORIZATION_FAILED` on `update offset` means the target grant is missing `READ` on `shop.`. If the target consumer's log starts at `order-000001`, it started before the offsets arrived and read from `earliest`: stop it, run `make wait-offsets`, and start it again.
+
+== In production
+
+[.production-note]
+Repeat this sequence per consumer group, repoint producers instead of stopping them, keep the migrator running until the last producer has switched, and expect a few duplicate deliveries around the cutover when record timestamps are not unique. See the Consumer scaling and Idempotency and delivery rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/group-offsets.sh[scripts/group-offsets.sh] and link:{attachmentsdir}/scripts/wait-for-offsets.sh[scripts/wait-for-offsets.sh] (`chmod +x` both)
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml] (the `cutover` profile)
