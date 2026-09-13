@@ -6,6 +6,7 @@
 #
 # Checks (errors fail the run, warnings do not):
 #   - module name is a valid, non-reserved slug and solutions/<slug>/ exists
+#     (docs/modules/ROOT and docs/modules/examples are skipped: they are not solutions)
 #   - overview has :page-layout: solution and :page-topic-type: solution
 #   - :page-solution-version: matches ^v[0-9]+\.[0-9]+\.[0-9]+$
 #   - difficulty, status, download, platforms, duration, featured are valid
@@ -29,7 +30,7 @@ cd "$root"
 
 errors=0
 warnings=0
-reserved="progress download api index ROOT"
+reserved="progress download api index ROOT examples"
 
 err()    { errors=$((errors + 1));     printf 'ERROR  %s: %s\n' "$1" "$2"; }
 warn()   { warnings=$((warnings + 1)); printf 'WARN   %s: %s\n' "$1" "$2"; }
@@ -98,7 +99,8 @@ load_categories
 if [ $# -gt 0 ]; then
   slugs="$*"
 else
-  slugs=$( { ls -1 docs/modules 2>/dev/null; ls -1 solutions 2>/dev/null; } | grep -v '^ROOT$' | sort -u )
+  # ROOT (landing page, partials) and examples (Product Docs code, not a solution) are not solutions.
+  slugs=$( { ls -1 docs/modules 2>/dev/null; ls -1 solutions 2>/dev/null; } | grep -vE '^(ROOT|examples)$' | sort -u )
 fi
 
 if [ -z "$slugs" ]; then

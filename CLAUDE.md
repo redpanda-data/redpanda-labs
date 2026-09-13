@@ -11,6 +11,9 @@ docs/antora.yml                          component descriptor (name: solutions)
 docs/modules/ROOT/pages/index.adoc       landing page (cards render from the catalog)
 docs/modules/ROOT/partials/personas.yaml persona ids for :personas:
 docs/modules/ROOT/partials/relationships.yml  editor-approved doc <-> solution edges
+docs/modules/examples/                   NOT a solution: runnable code for Product Docs tutorials,
+                                         included via include::solutions:examples:example$..., shipped
+                                         as public attachment zips; see its README.md
 docs/modules/<slug>/pages/index.adoc     overview: all metadata lives here
 docs/modules/<slug>/pages/<step-id>.adoc one page per step
 docs/modules/<slug>/examples             symlink -> ../../../solutions/<slug>
@@ -28,7 +31,7 @@ connect-plugins/, setup-tests/           frozen labs content awaiting migration
 ## The contract
 
 - Slug = directory = module = solution id. Reserved: `progress`, `download`,
-  `api`, `index`, `ROOT`.
+  `api`, `index`, `ROOT`, `examples`.
 - Every attribute on the overview page is part of the contract
   (CONTRIBUTING.md, "Metadata reference"). `:page-solution-steps:` is the only
   source of step order; there is no nav.adoc.

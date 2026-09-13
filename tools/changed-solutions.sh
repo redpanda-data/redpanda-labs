@@ -5,9 +5,10 @@
 #   tools/changed-solutions.sh --all          every slug under solutions/
 #
 # A slug is "touched" when git diff --name-only <base>...HEAD lists a path
-# under solutions/<slug>/ or docs/modules/<slug>/. Only slugs that still
-# exist as solutions/<slug>/ at HEAD are printed, so a deleted solution never
-# lands in the matrix. Output is always valid JSON, [] when nothing matches.
+# under solutions/<slug>/ or docs/modules/<slug>/. docs/modules/ROOT and
+# docs/modules/examples are not solutions and are skipped. Only slugs that
+# still exist as solutions/<slug>/ at HEAD are printed, so a deleted solution
+# never lands in the matrix. Output is always valid JSON, [] when nothing matches.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,7 +46,7 @@ git diff --name-only "$base...HEAD" \
   | sed -nE 's#^(solutions|docs/modules)/([^/]+)/.*#\2#p' \
   | sort -u \
   | while IFS= read -r slug; do
-      [ "$slug" = "ROOT" ] && continue
+      case "$slug" in ROOT|examples) continue ;; esac
       [ -d "solutions/$slug" ] && echo "$slug"
     done \
   | to_json

@@ -9,7 +9,7 @@ asciidoc:
       description: "End-to-end, runnable reference architectures built on Redpanda."
       # Amber. Distinct from Streaming (#4D7C0F), Connect (#A21CAF),
       # Cloud (#1D4ED8), ADP (#7C3AED), and the retired Labs teal (#227093).
-      color: "#A16207"
+      color: "#B45309"
       icon: "rocket"
       order: 5
     # Persona definitions live in the ROOT partial so the solutions-catalog

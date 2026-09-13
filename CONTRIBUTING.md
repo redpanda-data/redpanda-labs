@@ -86,7 +86,17 @@ docs/modules/<slug>/
 
 `tools/new-solution.sh <slug>` creates all of it. The slug is the directory
 name, the Antora module name, and the solution id (`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`).
-`progress`, `download`, `api`, `index`, and `ROOT` are reserved.
+`progress`, `download`, `api`, `index`, `ROOT`, and `examples` are reserved.
+
+### The `examples` module is not a solution
+
+`docs/modules/examples/` holds runnable code for Product Docs tutorials (the
+chat-room clients, the data-transforms cookbook, the OIDC compose stack). A
+Product Docs page includes it with `include::solutions:examples:example$...`
+and readers get it as public attachment zips that the docs-site
+`archive-attachments` extension builds. It has no pages, no metadata, and no
+download gate. `tools/check-metadata.sh` and `tools/changed-solutions.sh`
+skip it. See `docs/modules/examples/README.md`.
 
 ## Metadata reference
 

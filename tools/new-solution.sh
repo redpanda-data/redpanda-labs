@@ -20,7 +20,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 slug=${1:-}
-reserved="progress download api index ROOT"
+reserved="progress download api index ROOT examples"
 
 usage() { sed -n '2,18p' "$0"; }
 

@@ -13,6 +13,7 @@ here until it is migrated (see below).
 
 ```
 docs/                    the solutions Antora component (descriptor, landing page, one module per solution)
+docs/modules/examples/   ungated code for Product Docs tutorials (not a solution; see its README.md)
 solutions/<slug>/        the code of one solution: compose stack, services, Makefile, verify script, Doc Detective specs
 tools/                   shared harness: scaffolding, metadata checks, CI matrix, verify helpers, local playbook
 templates/solution/      the scaffold that tools/new-solution.sh copies
