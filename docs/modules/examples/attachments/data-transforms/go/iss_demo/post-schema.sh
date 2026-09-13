@@ -1,0 +1,1 @@
+../../../../examples/data-transforms/go/iss_demo/post-schema.sh

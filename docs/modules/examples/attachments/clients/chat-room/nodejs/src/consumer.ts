@@ -1,0 +1,1 @@
+../../../../../examples/clients/chat-room/nodejs/src/consumer.ts

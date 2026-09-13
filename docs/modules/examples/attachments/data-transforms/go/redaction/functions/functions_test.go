@@ -1,0 +1,1 @@
+../../../../../examples/data-transforms/go/redaction/functions/functions_test.go
