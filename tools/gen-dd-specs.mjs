@@ -31,6 +31,19 @@
 // A command block carrying the `manual` role (`[.manual]` or `role=manual`
 // on the block) is not run in CI; the generator notes it and moves on.
 //
+// Media. When solutions/<slug>/steps/<step-id>/media.json exists, it is an
+// array of Doc Detective browser steps (goTo, find, wait, waitUntil,
+// screenshot, record, stopRecord) that are appended to the step's spec after
+// its command blocks, so every image and recording a page shows is produced
+// by the test run. An entry {"runCommandTag": "<name>"} expands to that
+// tagged command, which lets a recording wrap a command. `${VAR:-default}`
+// in string values is expanded from the solution's .env (or .env.example).
+// Output paths are relative to the solution directory and point into
+// ../../docs/modules/<slug>/images/. A spec that records gets a headed Chrome
+// context: in doc-detective 4.38.1 the browser recording engine needs headed
+// Chrome, and the ffmpeg engine captures a physical display, so a recording
+// cannot be made under the headless Firefox context the base config uses.
+//
 // _setup.json and _teardown.json (compose up and down) stay hand-written.
 // No dependencies beyond Node itself.
 
@@ -41,11 +54,11 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const slug = args.find((a) => !a.startsWith("--"));
-const mode = args.includes("--check") ? "check" : args.includes("--list") ? "list" : args.includes("--out") ? "out" : null;
+const mode = args.includes("--check") ? "check" : args.includes("--list") ? "list" : args.includes("--media") ? "media" : args.includes("--out") ? "out" : null;
 const outDir = mode === "out" ? args[args.indexOf("--out") + 1] : null;
 
 if (!slug || !mode || (mode === "out" && !outDir)) {
-  console.error("usage: gen-dd-specs.mjs <slug> (--out <dir> | --check | --list)");
+  console.error("usage: gen-dd-specs.mjs <slug> (--out <dir> | --check | --list | --media)");
   process.exit(2);
 }
 
@@ -182,11 +195,98 @@ function expectedRegex(step, tag, where) {
   return `/${pattern}[ \\t]*/`;
 }
 
+// The shell prefix every generated command runs under.
+const shellPrefix = "set -euo pipefail\nset -a; [ -f .env ] && . ./.env; set +a\n";
+
+// Variables from the solution's .env (or .env.example), for ${VAR:-default}.
+function dotenv() {
+  for (const name of [".env", ".env.example"]) {
+    const f = join(codeDir, name);
+    if (!existsSync(f)) continue;
+    const vars = {};
+    for (const line of readFileSync(f, "utf8").split("\n")) {
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (m) vars[m[1]] = m[2];
+    }
+    return vars;
+  }
+  return {};
+}
+const envVars = dotenv();
+function expandVars(v) {
+  if (typeof v === "string") {
+    return v.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_, name, def) => (envVars[name] !== undefined && envVars[name] !== "" ? envVars[name] : def ?? ""));
+  }
+  if (Array.isArray(v)) return v.map(expandVars);
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, expandVars(x)]));
+  return v;
+}
+
+const MEDIA_STEPS = new Set(["goTo", "find", "wait", "waitUntil", "screenshot", "record", "stopRecord"]);
+
+// The output path of a screenshot or record step, relative to the solution dir.
+function outputPath(v) {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object" && typeof v.path === "string") return v.directory ? `${v.directory.replace(/\/$/, "")}/${v.path}` : v.path;
+  return null;
+}
+
+// Browser steps of steps/<step-id>/media.json, appended after the command blocks.
+function mediaSteps(step, summary) {
+  const file = join(codeDir, "steps", step, "media.json");
+  if (!existsSync(file)) return [];
+  let entries;
+  try {
+    entries = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    problem(file, `invalid JSON: ${e.message}`);
+    return [];
+  }
+  if (!Array.isArray(entries)) {
+    problem(file, "must be a JSON array of Doc Detective steps");
+    return [];
+  }
+  const out = [];
+  entries.forEach((e, i) => {
+    const where = `${file}[${i}]`;
+    if (!e || typeof e !== "object" || Array.isArray(e) || Object.keys(e).length !== 1) {
+      problem(where, "each entry is an object with exactly one key (a Doc Detective step, or runCommandTag)");
+      return;
+    }
+    const [key] = Object.keys(e);
+    if (key === "runCommandTag") {
+      const text = commandText(step, e.runCommandTag, where);
+      if (text === null) return;
+      out.push({ runShell: { command: shellPrefix + text, workingDirectory: ".", timeout: 600000 } });
+      summary.runShell++;
+      return;
+    }
+    if (!MEDIA_STEPS.has(key)) {
+      problem(where, `unknown step '${key}' (allowed: ${[...MEDIA_STEPS].join(", ")}, runCommandTag)`);
+      return;
+    }
+    const expanded = expandVars(e);
+    if (key === "screenshot" || key === "record") {
+      const p = outputPath(expanded[key]);
+      const ok = p && (key === "screenshot" ? /\.png$/i.test(p) : /\.(gif|mp4|webm)$/i.test(p));
+      if (!ok) {
+        problem(where, `${key} needs a path ending in ${key === "screenshot" ? ".png" : ".gif, .mp4, or .webm"}`);
+        return;
+      }
+      summary.media.push(p);
+      if (key === "record") summary.record = true;
+    }
+    out.push(expanded);
+    summary.mediaSteps++;
+  });
+  return out;
+}
+
 function buildSpec(step) {
   const blocks = stepBlocks(step);
   const page = join(pagesDir, `${step}.adoc`);
   const steps = [];
-  const summary = { step, runShell: 0, stdio: 0, manual: [] };
+  const summary = { step, runShell: 0, stdio: 0, manual: [], mediaSteps: 0, media: [], record: false };
   const list = [];
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
@@ -208,7 +308,7 @@ function buildSpec(step) {
     }
     if (text === null) continue;
     const runShell = {
-      command: `set -euo pipefail\nset -a; [ -f .env ] && . ./.env; set +a\n${text}`,
+      command: shellPrefix + text,
       workingDirectory: ".",
       timeout: 600000,
     };
@@ -222,6 +322,7 @@ function buildSpec(step) {
     steps.push({ runShell });
     summary.runShell++;
   }
+  steps.push(...mediaSteps(step, summary));
   if (summary.runShell === 0) problem(page, "no runnable command block (include steps/<step-id>/commands.sh[tag=...] in a listing)");
   if (summary.stdio === 0) problem(page, "no expected-output check (include steps/<step-id>/expected/<name>.txt right after a command block)");
   const spec = {
@@ -230,6 +331,11 @@ function buildSpec(step) {
     contentPath: `docs/modules/${slug}/pages/${step}.adoc`,
     tests: [{ testId: step, description: `Every command shown on the '${step}' page runs, and every shown output matches`, steps }],
   };
+  if (summary.record) {
+    // The recording engine needs headed Chrome; screenshots elsewhere use the
+    // base config's headless Firefox context at the same size.
+    spec.runOn = [{ platforms: ["linux", "mac"], browsers: [{ name: "chrome", headless: false, viewport: { width: 1280, height: 800 } }] }];
+  }
   return { spec, summary, list };
 }
 
@@ -238,6 +344,8 @@ const results = ids.map(buildSpec);
 
 if (mode === "list") {
   for (const r of results) for (const l of r.list) console.log(l);
+} else if (mode === "media") {
+  for (const r of results) for (const p of r.summary.media) console.log(`${r.summary.step}\t${p}`);
 } else {
   if (mode === "out") mkdirSync(outDir, { recursive: true });
   for (const r of results) {
@@ -245,7 +353,8 @@ if (mode === "list") {
       writeFileSync(join(outDir, `${r.summary.step}.json`), JSON.stringify(r.spec, null, 2) + "\n");
     }
     const manual = r.summary.manual.length ? `, manual (skipped): ${r.summary.manual.join(", ")}` : "";
-    console.error(`gen-dd-specs: ${r.summary.step}: ${r.summary.runShell} runShell, ${r.summary.stdio} stdout checks${manual}`);
+    const media = r.summary.mediaSteps ? `, ${r.summary.mediaSteps} media steps (${r.summary.media.map((p) => p.split("/").pop()).join(", ")})` : "";
+    console.error(`gen-dd-specs: ${r.summary.step}: ${r.summary.runShell} runShell, ${r.summary.stdio} stdout checks${media}${manual}`);
   }
 }
 if (problems.length) {
