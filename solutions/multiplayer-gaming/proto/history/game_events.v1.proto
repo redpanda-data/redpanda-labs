@@ -66,8 +66,8 @@ message MatchEnded {
 }
 
 message ScoreChanged {
-  // Positive or negative. The leaderboard applies it with ZINCRBY, so the
-  // score in Redis is the running sum of deltas.
+  // Positive or negative. The leaderboard service adds it to the player's
+  // running total.
   int64 delta = 1;
   int64 new_score = 2;
   string reason = 3;

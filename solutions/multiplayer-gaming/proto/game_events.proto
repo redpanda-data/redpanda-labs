@@ -2,13 +2,15 @@
 //
 // Every record on game.player-events, game.match-events, and
 // game.achievements is one GameEvent. The envelope carries the identity and
-// time of the event; the oneof carries the payload. Registered in Schema
-// Registry as a Protobuf schema under the subjects <topic>-value with
-// BACKWARD compatibility, so a consumer compiled against an older version
-// can always read what a newer producer writes.
+// time of the event; the oneof carries the payload. Every record on
+// game.leaderboard is one LeaderboardEntry, a player's current total.
+// Registered in Schema Registry as a Protobuf schema under the subjects
+// <topic>-value with BACKWARD compatibility, so a consumer compiled against
+// an older version can always read what a newer producer writes.
 //
-// This file is version 2 of the schema: it adds the optional `region` field.
-// proto/history/game_events.v1.proto is the version the solution starts from.
+// This file is version 2 of the schema: it adds the optional `region` field
+// and the LeaderboardEntry message. proto/history/game_events.v1.proto is the
+// version the solution starts from.
 syntax = "proto3";
 
 package game.v1;
@@ -69,8 +71,8 @@ message MatchEnded {
 }
 
 message ScoreChanged {
-  // Positive or negative. The leaderboard applies it with ZINCRBY, so the
-  // score in Redis is the running sum of deltas.
+  // Positive or negative. The leaderboard service adds it to the player's
+  // running total and publishes that total to game.leaderboard.
   int64 delta = 1;
   int64 new_score = 2;
   string reason = 3;
@@ -87,3 +89,24 @@ message AchievementUnlocked {
   string detail = 2;
 }
 // end::payloads[]
+
+// tag::leaderboard[]
+// One record on game.leaderboard, keyed by player_id: the player's current
+// total, not a change to it. The leaderboard service publishes a new entry
+// after every score_changed, and the topic is compacted, so it converges to
+// one live record per player. Any reader that consumes it from the start ends
+// up with the full board, without replaying a single game event.
+message LeaderboardEntry {
+  string player_id = 1;
+  string display_name = 2;
+  // Absolute total: the sum of every score_changed delta for this player.
+  int64 score = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  // The game.player-events partition this player's events live on, and the
+  // offset of the last one included in score. A service that takes over that
+  // partition loads its players' entries from here and knows exactly where
+  // each total stops.
+  int32 source_partition = 5;
+  int64 source_offset = 6;
+}
+// end::leaderboard[]
