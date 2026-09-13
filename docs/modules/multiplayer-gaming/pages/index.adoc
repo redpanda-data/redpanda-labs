@@ -16,7 +16,9 @@
 :page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
 :page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc
 
-A multiplayer game emits thousands of events a second: players join, score, pick up items, win. The leaderboard must update in real time, achievements must fire the moment a streak completes, and analysts want every match in a database. You build all three on one event stream, each as an independent consumer, so a slow database never delays the leaderboard.
+A multiplayer game emits thousands of events a second: players join, score, and win. The leaderboard must update in real time, achievements must fire the moment a streak completes, and analysts want every match in a database.
+
+You build all three on one Redpanda event stream, each as an independent consumer group, so a slow database never delays the leaderboard. You finish with a live dashboard, an achievements feed, and a match history in Postgres, proven by one script.
 
 After completing this solution, you will be able to:
 
