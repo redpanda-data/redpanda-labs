@@ -12,6 +12,7 @@ make up       # build the Go services, start the stack, wait for every healthche
 make topics   # game.player-events (6p), game.match-events (3p), game.achievements (3p), game.leaderboard (3p, compacted), game.player-events.dlq (1p)
 make schemas  # register GameEvent v1, set BACKWARD, register v2 on the three event subjects; register the current file on game.leaderboard-value
 make seed     # topics + schemas, then wait for the simulator to produce exactly SIM_EVENTS_MAX events
+make wait     # block until every consumer group has caught up and the dashboard has read the board
 make verify   # prints PASS (9/9) when the system does what the docs claim
 make clean    # stop and delete volumes
 ```
@@ -63,7 +64,8 @@ Then open (default ports):
 | `console-config.yaml` | Redpanda Console with Schema Registry decoding |
 | `sample-data/players.json` | the player roster the simulator uses |
 | `scripts/verify.sh` | the nine end-to-end checks; CI gates on its exit code |
-| `tests/doc-detective/` | one spec per documented step, plus `_setup` and `_teardown` |
+| `steps/<step-id>/` | `commands.sh`: every command the step page shows, one tagged region per block; `expected/<tag>.txt`: its captured output (`tools/capture-expected.sh`) |
+| `tests/doc-detective/` | `_setup` and `_teardown` only; the step specs are generated from the pages by `tools/gen-dd-specs.mjs` |
 
 ## Change the code
 
