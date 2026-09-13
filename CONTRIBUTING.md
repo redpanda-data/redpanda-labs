@@ -232,6 +232,14 @@ table is filled and linked, and the code follows these conventions:
   Mark regions in the source with `// tag::consume[]` and `// end::consume[]`
   (or the language's comment syntax). Never paste source into a page; the
   page and the code would drift.
+- Inline code in prose is a tagged excerpt of at most about 40 lines that the
+  surrounding paragraph actually explains. Add `tag::` regions to the source
+  rather than duplicating code. Every full file the build-along reader needs
+  goes in a collapsed block at the end of the step's "What happens inside"
+  section, one per file, titled `.Complete source: <path>` with
+  `[%collapsible]` and a `====` example block around the listing (language
+  and file path on the listing). Commands readers type stay inline, and the
+  `.Files for this step` attachments list stays.
 - No `ifdef::env-github[]` or `ifdef::env-site[]` in `docs/`. The pages are
   written for the site only. The code directory has its own `README.md` for
   people who open the bundle.
