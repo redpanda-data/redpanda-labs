@@ -92,7 +92,7 @@ services:
     environment:
       RPK_BROKERS: redpanda:9092
       RPK_ADMIN_HOSTS: redpanda:9644
-      RPK_SCHEMA_REGISTRY_HOSTS: redpanda:8081
+      RPK_REGISTRY_HOSTS: redpanda:8081
     volumes:
       - ./sample-data:/sample-data:ro
     networks:
