@@ -1,4 +1,5 @@
-// Package schema wires the GameEvent Protobuf type to Schema Registry.
+// Package schema wires the Protobuf types in game_events.proto to Schema
+// Registry.
 //
 // Producers look a schema up, they never register one: the contract is
 // created by `make schemas` (step 3) and the services refuse to write until
@@ -63,35 +64,59 @@ func WaitForSchema(ctx context.Context, cl *sr.Client, subject, schemaText strin
 	}
 }
 
-// NewProducerSerde encodes GameEvent values in the Confluent wire format
-// (magic byte, schema ID, Protobuf message index, payload) with one fixed
-// schema ID.
-func NewProducerSerde(id int) *sr.Serde {
+// NewProducerSerde encodes one Protobuf message type in the Confluent wire
+// format (magic byte, schema ID, Protobuf message index, payload) with one
+// fixed schema ID. index is the message's position in the .proto file:
+// GameEvent is 0, LeaderboardEntry is 8 (see IndexOf).
+func NewProducerSerde(id int, prototype proto.Message, index int) *sr.Serde {
 	var serde sr.Serde
-	serde.Register(id, &gamepb.GameEvent{},
-		sr.Index(0), // GameEvent is the first message in the file
+	serde.Register(id, prototype,
+		sr.Index(index),
 		sr.EncodeFn(func(v any) ([]byte, error) { return proto.Marshal(v.(proto.Message)) }),
 		sr.DecodeFn(func(b []byte, v any) error { return proto.Unmarshal(b, v.(proto.Message)) }),
 	)
 	return &serde
 }
 
+// IndexOf is the position of a top-level message in game_events.proto. The
+// wire format carries it so a reader knows which message in the file a record
+// is; rpk and Console read it too.
+func IndexOf(m proto.Message) int {
+	switch m.(type) {
+	case *gamepb.GameEvent:
+		return 0
+	case *gamepb.LeaderboardEntry:
+		return 8
+	}
+	panic(fmt.Sprintf("schema: no message index for %T", m))
+}
+
 // end::lookup[]
 
 // tag::decoder[]
-// Decoder decodes GameEvent records for one subject. It knows every version
-// registered under the subject and refreshes that list once when it meets a
-// schema ID it has not seen, so a schema evolved while the consumer runs
-// still decodes and a bogus ID is reported as ErrUnknownSchema.
+// Decoder decodes the records of one subject into one Protobuf message type.
+// It knows every version registered under the subject and refreshes that list
+// once when it meets a schema ID it has not seen, so a schema evolved while
+// the consumer runs still decodes and a bogus ID is reported as
+// ErrUnknownSchema.
 type Decoder struct {
-	cl      *sr.Client
-	subject string
-	serde   sr.Serde
-	known   map[int]struct{}
+	cl        *sr.Client
+	subject   string
+	prototype proto.Message
+	serde     sr.Serde
+	known     map[int]struct{}
 }
 
+// NewDecoder decodes GameEvent records (game.player-events, game.match-events,
+// game.achievements).
 func NewDecoder(ctx context.Context, cl *sr.Client, subject string) (*Decoder, error) {
-	d := &Decoder{cl: cl, subject: subject, known: map[int]struct{}{}}
+	return NewMessageDecoder(ctx, cl, subject, &gamepb.GameEvent{})
+}
+
+// NewMessageDecoder decodes records of any message in game_events.proto, for
+// example LeaderboardEntry on game.leaderboard.
+func NewMessageDecoder(ctx context.Context, cl *sr.Client, subject string, prototype proto.Message) (*Decoder, error) {
+	d := &Decoder{cl: cl, subject: subject, prototype: prototype, known: map[int]struct{}{}}
 	if err := d.refresh(ctx); err != nil {
 		return nil, err
 	}
@@ -112,8 +137,8 @@ func (d *Decoder) refresh(ctx context.Context) error {
 			continue
 		}
 		d.known[ss.ID] = struct{}{}
-		d.serde.Register(ss.ID, &gamepb.GameEvent{},
-			sr.Index(0),
+		d.serde.Register(ss.ID, d.prototype,
+			sr.Index(IndexOf(d.prototype)),
 			sr.DecodeFn(func(b []byte, v any) error { return proto.Unmarshal(b, v.(proto.Message)) }),
 		)
 	}
@@ -125,23 +150,32 @@ func (d *Decoder) Known() int { return len(d.known) }
 
 // Decode returns the event or ErrUnknownSchema.
 func (d *Decoder) Decode(ctx context.Context, value []byte) (*gamepb.GameEvent, error) {
+	var ev gamepb.GameEvent
+	if err := d.DecodeInto(ctx, value, &ev); err != nil {
+		return nil, err
+	}
+	return &ev, nil
+}
+
+// DecodeInto fills msg, which must be the decoder's message type, or returns
+// ErrUnknownSchema.
+func (d *Decoder) DecodeInto(ctx context.Context, value []byte, msg proto.Message) error {
 	id, _, err := d.serde.DecodeID(value)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnknownSchema, err)
+		return fmt.Errorf("%w: %v", ErrUnknownSchema, err)
 	}
 	if _, ok := d.known[id]; !ok {
 		if err := d.refresh(ctx); err != nil {
 			log.Printf("schema refresh failed: %v", err)
 		}
 		if _, ok := d.known[id]; !ok {
-			return nil, fmt.Errorf("%w (id %d)", ErrUnknownSchema, id)
+			return fmt.Errorf("%w (id %d)", ErrUnknownSchema, id)
 		}
 	}
-	var ev gamepb.GameEvent
-	if err := d.serde.Decode(value, &ev); err != nil {
-		return nil, fmt.Errorf("decode with schema %d: %w", id, err)
+	if err := d.serde.Decode(value, msg); err != nil {
+		return fmt.Errorf("decode with schema %d: %w", id, err)
 	}
-	return &ev, nil
+	return nil
 }
 
 // end::decoder[]

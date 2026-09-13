@@ -85,7 +85,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.serde = schema.NewProducerSerde(outID)
+	s.serde = schema.NewProducerSerde(outID, &gamepb.GameEvent{}, schema.IndexOf(&gamepb.GameEvent{}))
 	for {
 		s.dec, err = schema.NewDecoder(ctx, srClient, schema.Subject(s.inTopic))
 		if err == nil {

@@ -18,13 +18,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sr"
 
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
+	"multiplayer-gaming/services/internal/topics"
 	"multiplayer-gaming/services/simulator/sim"
 )
 
@@ -136,7 +136,7 @@ func main() {
 	// Refuse to produce until the topics and the schema contract exist. Both
 	// are created by the reader (steps 2 and 3), not by this service.
 	s.setState("waiting_for_topics")
-	waitForTopics(ctx, cl, sim.TopicPlayerEvents, sim.TopicMatchEvents)
+	topics.Wait(ctx, cl, sim.TopicPlayerEvents, sim.TopicMatchEvents)
 
 	s.setState("waiting_for_schema")
 	srClient, err := sr.NewClient(sr.URLs(srURL))
@@ -156,7 +156,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("schema lookup: %v", err)
 		}
-		s.serdes[topic] = &schemaSerde{id: id, serde: schema.NewProducerSerde(id)}
+		s.serdes[topic] = &schemaSerde{id: id, serde: schema.NewProducerSerde(id, &gamepb.GameEvent{}, schema.IndexOf(&gamepb.GameEvent{}))}
 		ids[subject] = id
 		log.Printf("%s -> schema id %d", subject, id)
 	}
@@ -167,30 +167,6 @@ func main() {
 	s.run(ctx)
 	log.Println("flushing")
 	_ = cl.Flush(context.Background())
-}
-
-func waitForTopics(ctx context.Context, cl *kgo.Client, topics ...string) {
-	adm := kadm.NewClient(cl)
-	for {
-		listed, err := adm.ListTopics(ctx, topics...)
-		if err == nil {
-			ok := true
-			for _, t := range topics {
-				if !listed.Has(t) {
-					ok = false
-				}
-			}
-			if ok {
-				return
-			}
-		}
-		log.Printf("topics %v not all present yet; run `make topics`", topics)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(2 * time.Second):
-		}
-	}
 }
 
 // tag::loop[]
@@ -374,5 +350,3 @@ func writeJSON(w http.ResponseWriter, v any) {
 		fmt.Fprintln(os.Stderr, err)
 	}
 }
-
-var _ = gamepb.GameEvent{}
