@@ -63,7 +63,8 @@ Left to right: the simulator looks the `GameEvent` schema up in Schema Registry 
 * Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
 * `curl` and `make` on the host (every `rpk` and `psql` command runs inside a container)
 * Optional: Go 1.25 or later, only if you want to run the unit tests outside Docker
-* Free host ports `8080`, `3000`, `3010`, `4195`, `8090`, `15432`, `18081`, `18082`, `19092`, and `19644`, or different ones set with the `*_PORT` variables in `.env`
+* Free host ports `8080`, `3000`, `3010`, `4195`, `8090`, `15432`, `18081`, `18082`, `19092`, and `19644`, or different ones set with the `*_PORT` variables in `.env` (plus `19000` and `19001` for the optional Tiered Storage extension)
+* Optional: a Redpanda Cloud Serverless cluster, if you want to run the same stack against Redpanda Cloud instead of the local broker (xref:start-environment.adoc[] has both paths)
 * Approximately {page-solution-duration} minutes
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
@@ -83,7 +84,7 @@ This solution runs on a single broker with no authentication so that it starts i
 | Three or more brokers, replication factor 3, rack awareness. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
 
 | Security
-| Plaintext listeners, no authentication, every service is a superuser.
+| Plaintext listeners, no authentication, every service is a superuser. The Redpanda Cloud path in xref:start-environment.adoc[] is the exception: TLS and one SCRAM user with ACLs on `game.*`.
 | TLS on every listener, SASL/SCRAM or mTLS per service, ACLs that let the simulator write only its two topics and each consumer group read only what it needs. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:security/authentication.adoc[], xref:streaming:manage:security/authorization/acl.adoc[]
 
 | Partitions
@@ -99,7 +100,7 @@ This solution runs on a single broker with no authentication so that it starts i
 | Scale on consumer group lag, keep instances at or below the partition count, and use static group membership for stateful services so a restart does not trigger a rebalance. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
-| `game.player-events` keeps 7 days on local disk; the other event topics use the cluster default.
+| `game.player-events` keeps 7 days on local disk; the other event topics use the cluster default. xref:index.adoc#_extend_this_solution[Extend this solution] switches Tiered Storage on with MinIO.
 | Tiered Storage: long retention and replay from object storage without growing local disks. xref:streaming:manage:tiered-storage.adoc[]
 
 | Compaction of `game.leaderboard`
@@ -127,9 +128,63 @@ This solution runs on a single broker with no authentication so that it starts i
 | Iceberg topics write `game.match-events` and `game.player-events` straight to a lakehouse table for analysts, with no pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
 |===
 
+== Extend this solution
+
+Two directions the steps leave open. Neither is required, and `make verify` does not depend on either.
+
+=== Keep a season of events with Tiered Storage
+
+`game.player-events` keeps seven days on local disk. A season of a live game is months of events, and the replay in xref:scale-and-replay.adoc[] is only as deep as the retention. Tiered Storage moves closed segments to object storage and reads them back on demand, so retention becomes a setting instead of a disk size. The compose file carries a `tiered` profile with MinIO as the object store, and one target turns it on for the local broker:
+
+[,bash]
+----
+make tiered-up
+----
+
+[,makefile]
+----
+include::example$Makefile[tags=tiered]
+----
+
+[,yaml]
+----
+include::example$docker-compose.yml[tags=tiered]
+----
+
+Then make the topic write to and read from the bucket, give it a season of retention, and let a segment roll so there is something to upload (one minute here; production values are far larger):
+
+[,bash]
+----
+docker compose exec -T rpk rpk topic alter-config game.player-events \
+  --set redpanda.remote.write=true --set redpanda.remote.read=true \
+  --set retention.ms=7776000000 --set segment.ms=60000
+----
+
+About two minutes later, Redpanda has uploaded the closed segments:
+
+[,bash]
+----
+docker compose exec -T rpk rpk topic describe-storage game.player-events
+----
+
+The summary shows `CLOUD-STORAGE-MODE  full` and `LAST-UPLOAD` as milliseconds since the last upload; the size section shows non-zero `CLOUD-BYTES` and `CLOUD-SEGMENTS` for every partition. The same segments are objects in the bucket:
+
+[,bash]
+----
+COMPOSE_PROFILES=local,tiered docker compose run --rm --entrypoint sh minio-init -c \
+  'mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls -r local/redpanda-tiered'
+----
+ From here on a replay (`rpk group seek leaderboard --to start`) reads anything that has aged off local disk from the bucket, transparently to the consumers, so rebuilding the leaderboard from a whole season costs object storage reads and nothing else.
+
+Tiered Storage is an enterprise feature. A new cluster starts with a 30-day trial license, which is what this local broker runs on; see xref:streaming:get-started:licensing/overview.adoc[] for what happens after that. The setup here is the local shape of xref:streaming:manage:tiered-storage.adoc[], which covers the production settings: the object store credentials source, local retention targets, and the read and write paths. `make tiered-up` works only with the local broker (it changes cluster configuration); Redpanda Cloud clusters have Tiered Storage on already.
+
+=== Next: Cloud Topics and Iceberg
+
+xref:streaming:develop:manage-topics/cloud-topics.adoc[Cloud Topics] go one step further than Tiered Storage and keep the topic's data in object storage from the first write, which is the shape to reach for when a season of game events should cost object storage prices from day one. For the analytics side, the lakehouse path (Iceberg topics feeding a query engine) is its own Solution, CDC to lakehouse, and the Analytics and lakehouse row above is where this one hands off to it.
+
 == Clean up
 
-Stop the stack and delete its volumes:
+Stop the stack and delete its volumes, including MinIO's if you started the `tiered` profile:
 
 [,bash]
 ----
