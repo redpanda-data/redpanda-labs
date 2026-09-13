@@ -14,6 +14,7 @@
 #     and solutions/<slug>/tests/doc-detective/specs/<id>.json whose specId is the id,
 #     and every non-index page is listed in the steps (strict bijection)
 #   - no template placeholders are left ([...], __x__, vX.Y.Z, the step id "step")
+#   - images/architecture.svg exists when the overview includes it
 #   - every symlink under docs/modules/<slug>/ resolves
 #   - every attachment has a file extension and no leading dot (Antora drops the rest silently)
 #   - solutions/<slug>/ has docker-compose.yml, Makefile, .env.example, scripts/verify.sh,
@@ -252,6 +253,11 @@ for slug in $slugs; do
       [ "$stem" = "index" ] && continue
       in_list "$stem" $listed || err "$f" "page is not listed in :page-solution-steps: (every non-index page must be a step)"
     done
+  fi
+
+  # Architecture diagram referenced by the overview template
+  if grep -qE '^image::architecture\.svg\[' "$page" && [ ! -f "$module/images/architecture.svg" ]; then
+    err "$module/images/architecture.svg" "missing; the overview includes image::architecture.svg[]"
   fi
 
   # Symlinks
