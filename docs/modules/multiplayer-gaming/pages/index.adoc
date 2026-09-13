@@ -174,7 +174,7 @@ The summary shows `CLOUD-STORAGE-MODE  full` and `LAST-UPLOAD` as milliseconds s
 ----
 include::example$steps/overview/commands.sh[tag=tiered-bucket]
 ----
- From here on a replay (`rpk group seek leaderboard --to start`) reads anything that has aged off local disk from the bucket, transparently to the consumers, so rebuilding the leaderboard from a whole season costs object storage reads and nothing else.
+From here on a replay (`rpk group seek leaderboard --to start`) reads anything that has aged off local disk from the bucket, transparently to the consumers, so rebuilding the leaderboard from a whole season costs object storage reads and nothing else.
 
 Tiered Storage is an enterprise feature. A new cluster starts with a 30-day trial license, which is what this local broker runs on; see xref:streaming:get-started:licensing/overview.adoc[] for what happens after that. The setup here is the local shape of xref:streaming:manage:tiered-storage.adoc[], which covers the production settings: the object store credentials source, local retention targets, and the read and write paths. `make tiered-up` works only with the local broker (it changes cluster configuration); Redpanda Cloud clusters have Tiered Storage on already.
 

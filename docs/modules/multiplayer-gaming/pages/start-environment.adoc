@@ -75,7 +75,7 @@ The stack is nine containers, and the interesting ones are the three that read t
 ----
 include::example$services/internal/conn/conn.go[tags=config]
 ----
- Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect, the two Go consumers, and the dashboard do the same for the subjects they decode with.
+Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect, the two Go consumers, and the dashboard do the same for the subjects they decode with.
 
 == Why Redpanda
 
