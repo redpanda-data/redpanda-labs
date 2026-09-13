@@ -166,6 +166,11 @@ Expected output:
 include::example$steps/build-leaderboard/expected/verify.txt[]
 ----
 
+The dashboard shows the same ten rows. This screenshot is taken by the test run of this step, from the same stack the command above ran against:
+
+.Captured by this solution's test run
+image::dashboard.png[The live leaderboard dashboard: top 10 with display names, players, records read, group members, and consumer lag]
+
 These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`; ties are ordered by `player_id`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (xref:scale-and-replay.adoc[]). An empty `top` means the dashboard has not caught up with the topic yet, or the service has not published: `curl -s http://localhost:3000/api/status` shows `records_read` and `caught_up`, and `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/healthz` shows the partitions a service instance owns and how many entries it has published.
 
 == In production

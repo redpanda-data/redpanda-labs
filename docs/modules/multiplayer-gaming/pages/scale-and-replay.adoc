@@ -33,7 +33,10 @@ include::example$steps/scale-and-replay/commands.sh[tag=wait-burst]
 include::example$steps/scale-and-replay/expected/wait-burst.txt[]
 ----
 +
-The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged.
+The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged. This is what the dashboard does during a burst, recorded by the test run of this step:
++
+.Captured by this solution's test run
+image::leaderboard-burst.gif[The dashboard during a burst: the consumer lag counter rises as 2000 events per second arrive and falls back to 0 as the leaderboard group drains them]
 
 . Scale the leaderboard to three instances and wait for the group to settle:
 +

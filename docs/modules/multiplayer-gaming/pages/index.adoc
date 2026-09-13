@@ -10,7 +10,7 @@
 :page-solution-download: authenticated
 :page-solution-platforms: self-managed, cloud
 :page-solution-technologies: Redpanda, Schema Registry, Redpanda Connect, Redpanda Console, Go, Protobuf, Postgres, Docker Compose
-:page-categories: Stream Processing, Clients, Schema Registry, Integration
+:page-categories: Topics and Partitions, Producers, Consumer Groups, Schema Registry, Retention and Compaction, Pipelines, Clients
 :page-solution-use-cases: Real-time analytics, Event-driven microservices, Gaming
 :personas: streaming_developer, platform_operator
 :page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
@@ -42,6 +42,9 @@ A game simulator produces `GameEvent` records to two topics. Three consumers rea
 * *Achievements service* (Go): consumer group `achievements`, per-player state kept in memory because every player lives on one partition, produces to `game.achievements`.
 * *Redpanda Connect*: consumer group `connect-history`, decodes with Schema Registry, flattens the `oneof`, inserts into Postgres, routes failures to `game.player-events.dlq`.
 * *Redpanda Console*: decodes Protobuf records with the same schemas.
+
+.Captured by this solution's test run
+image::dashboard.png[The live leaderboard dashboard after the simulator has run]
 
 == Architecture
 
