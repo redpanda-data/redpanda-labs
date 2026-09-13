@@ -1,0 +1,40 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${LEADERBOARD_PORT:-3000}/",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "#rows tr:nth-child(10)",
+      "timeout": 30000
+    }
+  },
+  {
+    "record": {
+      "path": "../../docs/modules/multiplayer-gaming/images/leaderboard-burst.gif",
+      "overwrite": "true"
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "runCommandTag": "burst"
+  },
+  {
+    "wait": 9000
+  },
+  {
+    "runCommandTag": "wait-burst"
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "stopRecord": true
+  }
+]
