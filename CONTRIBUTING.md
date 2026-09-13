@@ -257,7 +257,10 @@ pasted source file.
   rewrites a file when the picture really changed, which keeps the nightly
   media pull request quiet. The base context is headless Firefox at 1280x800;
   a spec that records is given headed Chrome, because that is the only engine
-  that can record a browser in doc-detective 4.38.1.
+  that can record a browser in doc-detective 4.38.1. When you change a
+  screenshot's `crop`, delete the old image first: `aboveVariation` compares
+  against the existing file and refuses to compare images with different
+  aspect ratios, so the first cropped capture must seed a new baseline.
 
 ## Production checklist
 
