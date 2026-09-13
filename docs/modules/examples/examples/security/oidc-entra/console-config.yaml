@@ -1,0 +1,26 @@
+# Configure a connection to the Redpanda cluster
+# See https://docs.redpanda.com/current/console/config/connect-to-redpanda/
+kafka:
+  brokers: ["redpanda-0:9092", "redpanda-1:9092", "redpanda-2:9092"]
+  sasl:
+    enabled: true
+    impersonateUser: true
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda-0:8081","http://redpanda-1:8081","http://redpanda-2:8081"]
+  authentication:
+    impersonateUser: true
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda-0:9644","http://redpanda-1:9644","http://redpanda-2:9644"]
+    authentication:
+      impersonateUser: true
+authentication:
+  basic:
+    enabled: true
+  oidc:
+    enabled: true
+    redirectUrl: "http://localhost:8080/auth/callbacks/oidc"
+    accessType: "offline"
+    prompt: "consent"
