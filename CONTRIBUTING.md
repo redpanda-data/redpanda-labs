@@ -74,8 +74,11 @@ solutions/<slug>/                      code, driven by make
   scripts/verify.sh                    sources tools/verify-lib.sh; prints PASS (n/n)
   services/, connect/, proto/, ...     the actual system
   sample-data/                         deterministic seed data, committed
+  steps/<step-id>/commands.sh          every command the step page shows, tagged
+  steps/<step-id>/expected/<name>.txt  captured stdout of a command block
+  steps/overview/commands.sh           commands the overview shows (Clean up, extensions)
   tests/doc-detective/.doc-detective.json   beforeAny/afterAll over the shared base
-  tests/doc-detective/specs/_setup.json, _teardown.json, <step-id>.json
+  tests/doc-detective/specs/_setup.json, _teardown.json   (step specs are generated)
   README.md                            how to run the code; what the bundle contains
 docs/modules/<slug>/
   pages/index.adoc                     overview, all metadata
@@ -178,9 +181,10 @@ Title is an imperative verb phrase ("Register the schemas"). Then, in order:
 - `== What happens inside`: what the brokers, consumer groups, Schema Registry,
   or Connect do when the commands run. Only the behaviour this step exercises.
 - Verification: either a `== Verify` section or a `[.solution-verify]` block,
-  with one exact command and its expected output, then the one or two most
-  likely failures and their fixes. This is what the step's Doc Detective spec
-  replays. A published step must have one or the other.
+  with one command (the step's last command block) and its captured expected
+  output, then the one or two most likely failures and their fixes. The
+  generated Doc Detective spec replays every command block of the step, this
+  one last. A published step must have one or the other.
 - `== In production`: one or two sentences in a `[.production-note]` block,
   linking the Production considerations row or the canonical page.
 
@@ -208,6 +212,39 @@ in the solution layouts.
 - Versions are pinned in `.env.example` before a solution is `published`. The
   nightly workflow overrides them with `latest` and opens an issue when a
   solution breaks.
+
+### One source of truth for everything a page shows
+
+No literal code in pages. Every listing block (`----` or `....`) carries
+`[source,<lang>]` (or `[,<lang>]`) and contains only `include::` lines;
+`tools/check-metadata.sh` fails on a typed command, a typed output, or a
+pasted source file.
+
+- Commands live in `solutions/<slug>/steps/<step-id>/commands.sh`, one tagged
+  region per command block (`# tag::<name>[]` ... `# end::<name>[]`), and the
+  page shows them with `include::example$steps/<step-id>/commands.sh[tag=<name>]`.
+  The Verify command is the last command block of its step. Commands the
+  overview shows (Clean up, extensions) live in `steps/overview/commands.sh`.
+- Expected outputs are captured, never typed. `tools/capture-expected.sh <slug>`
+  runs every command block on a fresh stack (`make clean && make up`) in step
+  order and writes each command's stdout to
+  `steps/<step-id>/expected/<name>.txt`; the page includes that file in a
+  `[source,text]` block right after the command. Run it after changing
+  behaviour, then review the diff before committing.
+- Doc Detective specs are generated, never committed. `tools/gen-dd-specs.mjs`
+  turns every step page into one spec: one `runShell` per command block, run
+  exactly as shown (`bash`, `set -euo pipefail`, `.env` loaded, the solution
+  directory as the working directory), plus a stdout check for every
+  expected-output include (digits, timestamps, and hex ids are wildcarded;
+  lines are matched in order; trailing whitespace is ignored). A command that
+  cannot run in CI (a Cloud tab, a step covered elsewhere) carries the
+  `[.manual]` role and is skipped with a note. `tools/run-doc-detective.sh`
+  generates the specs into its run directory before it runs them;
+  `check-metadata.sh` runs `gen-dd-specs.mjs --check` to make sure every step
+  yields at least one runnable command and one output check and that every tag
+  exists.
+- `scripts/verify.sh` is unchanged by all of this: it is code, shown with a
+  tagged include like any other file, and it stays the last step's command.
 
 ## Production checklist
 
@@ -265,19 +302,19 @@ Antora would skip.
 
 ## Doc Detective
 
-Every step has a standalone spec `solutions/<slug>/tests/doc-detective/specs/<step-id>.json`
-that replays the step's Verify section (and the commands that lead to it) as
-`runShell` steps with `stdio` expectations. Specs are JSON files, never inline
-`// (step ...)` comments in the page.
+Every step's spec is generated from its page by `tools/gen-dd-specs.mjs` (see
+"One source of truth for everything a page shows"). The only hand-written
+specs are `solutions/<slug>/tests/doc-detective/specs/_setup.json` (`make up`),
+run once before the step specs (`beforeAny`), and `_teardown.json`
+(`make clean`), once after (`afterAll`). They are not steps and are never
+listed in `:page-solution-steps:`.
 
-- `_setup.json` (`make up`, `make seed`) runs once before the step specs
-  (`beforeAny`), `_teardown.json` (`make clean`) once after (`afterAll`). They
-  are not steps and are never listed in `:page-solution-steps:`.
 - `tools/run-doc-detective.sh <slug>` merges `tools/doc-detective.base.json`
-  with the solution's `.doc-detective.json` and runs the spec of every listed
-  step. `make test-docs` calls it.
-- Prefix resources a spec creates with the solution slug so specs never
-  collide. Never put credentials in a spec.
+  with the solution's `.doc-detective.json`, generates the step specs into
+  its run directory, and runs them in step order. `make test-docs` calls it.
+- Prefix resources a command creates with the solution slug so specs never
+  collide. Never put credentials in `commands.sh` or in a page; the Cloud path
+  reads them from `.env`.
 
 ## Review checklist
 
@@ -289,8 +326,9 @@ that replays the step's Verify section (and the commands that lead to it) as
       topics).
 - [ ] Every "In production" cell links a canonical page.
 - [ ] Step 1 completes from the page and attachments alone (reviewer tries it).
-- [ ] Every Verify section has an exact command and exact expected output, and
-      its spec replays it.
+- [ ] Every command and every expected output on a page is an include from
+      `steps/<step-id>/`; outputs were captured with `tools/capture-expected.sh`
+      and the generated spec replays them (`tools/run-doc-detective.sh`).
 - [ ] `make up seed verify` prints `PASS (n/n)` on a clean machine.
 - [ ] No pasted code; every include has a tagged region.
 - [ ] No repository links, no GitHub or site conditionals under `docs/`.
