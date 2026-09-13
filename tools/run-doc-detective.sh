@@ -92,13 +92,18 @@ if [ -z "$results" ]; then
   exit 1
 fi
 
+# A skipped test is a failure too: Doc Detective skips a test when it cannot
+# start the browser context its media steps need, and a spec that never ran
+# proves nothing.
 node -e '
   const r = require(process.argv[1]);
   const tests = (r.specs || []).flatMap((s) => s.tests || []);
   const failed = tests.filter((t) => t.result === "FAIL");
+  const skipped = tests.filter((t) => t.result === "SKIPPED");
   const ran = tests.filter((t) => ["PASS", "FAIL", "WARNING"].includes(t.result));
   console.log(JSON.stringify(r.summary || {}, null, 2));
   if (ran.length === 0) { console.error("run-doc-detective: no test reached a verdict"); process.exit(1); }
   if (failed.length) { console.error("run-doc-detective: failed tests: " + failed.map((t) => t.testId).join(", ")); process.exit(1); }
+  if (skipped.length) { console.error("run-doc-detective: skipped tests (a browser context could not start?): " + skipped.map((t) => t.testId).join(", ")); process.exit(1); }
 ' "$PWD/$results"
 exit "$rc"
