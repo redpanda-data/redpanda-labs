@@ -76,7 +76,7 @@ The three consume runs are the same code with different endpoints, and together 
 
 == Why Redpanda
 
-The link's topic sync creates each shadow topic with the source's partition count and properties and replicates from the earliest offset because the file says `start_at_earliest`, so the whole history moves, not just new records. Consumer groups do not exist on the shadow side yet; the client uses a fresh group per run, so every run reads from the start. See xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] for the topic sync options and xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[] for the status you printed.
+The link's topic sync creates each shadow topic with the source's partition count and properties and replicates from the earliest offset because the file says `start_at_earliest`, so the whole history moves, not just new records. The client joins no consumer group: it assigns every partition itself, reads from the first offset to the high watermark, and commits nothing, so every run reads the whole topic on either cluster and depends on nothing but the records. See xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] for the topic sync options and xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[] for the status you printed.
 
 == What happens inside
 

@@ -92,7 +92,7 @@ This solution runs one broker on each side, with no authentication, so that it s
 | After cut-over, enable schema ID validation on the migrated topics so a producer that still points at a stale registry cannot write records with unknown IDs. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| One consumer with a fresh group ID per run; consumer offsets are not replicated.
+| The client reads every partition from the first offset without a consumer group; consumer offsets are not replicated.
 | Add `consumer_offset_sync_options` to the link so consumer groups resume on Redpanda from where they stopped on Confluent instead of re-reading every topic. xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[], xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
