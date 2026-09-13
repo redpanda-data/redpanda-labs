@@ -1,0 +1,1 @@
+../../../../../solutions/multiplayer-gaming/scripts/verify.sh
