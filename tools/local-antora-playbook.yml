@@ -28,10 +28,13 @@ runtime:
     failure_level: fatal
 content:
   sources:
-  # This repository. Relative paths resolve against the playbook's directory
-  # (tools/), so .. is the repo root. Two start paths of one repo are one
-  # clone: the new solutions component and the frozen labs component.
-  - url: ..
+  # This repository. ~+ is Antora's token for the working directory, so run the
+  # build from the repo root (npm run build does); a plain relative path would
+  # resolve against the playbook's directory (tools/). A linked git worktree
+  # is not accepted as a local content source: build from a normal clone.
+  # Two start paths of one repo are one clone: the new solutions component and
+  # the frozen labs component.
+  - url: ~+
     branches: HEAD
     start_paths: [docs, labs-docs]
   - url: https://github.com/redpanda-data/docs
