@@ -1,0 +1,71 @@
+= [Step title: imperative verb phrase, for example Start the environment]
+// Step page of the __slug__ solution. The file stem is the step id and must appear
+// in :page-solution-steps: on index.adoc. Rename this file to the step id.
+:page-layout: solution-step
+:description: [One sentence: what the reader does in this step and what they have at the end.]
+// Optional, whole minutes for this step
+:page-solution-step-duration: 5
+
+// 1-2 sentences. What the reader does and why it is the next thing to do.
+[What does the reader do in this step, and why now?]
+
+== What you do
+
+. [Instruction 1]
++
+[,bash]
+----
+make up
+----
+
+. [Instruction 2]
++
+// Show code from the solution directory, never paste it. Tag the region in the source
+// file with // tag::name[] ... // end::name[] and include only that region.
+[,yaml]
+----
+include::example$docker-compose.yml[tags=redpanda]
+----
+
+== Why
+
+[Explain the design decision behind this step in the terms of the business problem. Would this paragraph be true in any solution that uses the feature? Then it belongs in Product Docs: link it instead.]
+
+== Why Redpanda
+
+[Which Redpanda capability makes this step simple or possible, and what would it cost to do without it. Link the canonical page.]
+
+== What happens inside
+
+[What Redpanda does when the reader runs the commands: partitions, offsets, consumer groups, schema lookups. Keep it to the behaviour this step exercises.]
+
+== Verify
+
+Run:
+
+[,bash]
+----
+docker compose exec -T rpk rpk topic list
+----
+
+Expected output:
+
+[,text]
+----
+NAME              PARTITIONS  REPLICAS
+__slug__.events   3           1
+----
+
+[If the output differs: the one or two most likely causes and how to fix them.]
+
+== In production
+
+[.production-note]
+[One or two sentences: what changes about this step in a production deployment, with a link to the Production considerations row on the overview or the relevant Product Docs page.]
+
+// Build-along files for this step. Every file the reader needs that is not shown in
+// full on this page must be listed here as a public attachment.
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/.env.example[.env.example]
+* link:{attachmentsdir}/Makefile[Makefile]

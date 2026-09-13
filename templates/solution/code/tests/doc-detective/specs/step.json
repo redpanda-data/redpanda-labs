@@ -1,0 +1,20 @@
+{
+  "specId": "step",
+  "description": "Replays the Verify section of the 'step' page of __title__. Rename this file to the step id. One spec per step, same id as the page stem.",
+  "contentPath": "docs/modules/__slug__/pages/step.adoc",
+  "tests": [
+    {
+      "testId": "step",
+      "description": "The topic exists with the documented partition count",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose exec -T rpk rpk topic list",
+            "stdio": "/__slug__\\.events\\s+3\\s+1/",
+            "timeout": 60000
+          }
+        }
+      ]
+    }
+  ]
+}

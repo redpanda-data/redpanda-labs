@@ -13,6 +13,7 @@
 #   docs/modules/<slug>/attachments/.env.example         -> ../../../../solutions/<slug>/.env.example
 #   docs/modules/<slug>/attachments/Makefile             -> ../../../../solutions/<slug>/Makefile
 #   docs/modules/<slug>/attachments/scripts/verify.sh    -> ../../../../../solutions/<slug>/scripts/verify.sh
+#   docs/modules/<slug>/attachments/scripts/verify-lib.sh -> ../../../../../tools/verify-lib.sh
 #
 # The slug is the directory name, the Antora module name, and the solution id.
 set -euo pipefail
@@ -21,7 +22,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 slug=${1:-}
 reserved="progress download api index ROOT"
 
-usage() { sed -n '2,17p' "$0"; }
+usage() { sed -n '2,18p' "$0"; }
 
 if [ -z "$slug" ] || [ "$slug" = "-h" ] || [ "$slug" = "--help" ]; then
   usage
@@ -63,6 +64,9 @@ for f in docker-compose.yml .env.example Makefile; do
   ln -s "../../../../solutions/$slug/$f" "$module/attachments/$f"
 done
 ln -s "../../../../../solutions/$slug/scripts/verify.sh" "$module/attachments/scripts/verify.sh"
+# verify.sh sources verify-lib.sh from tools/; publish it next to the script so
+# build-along readers get a working pair.
+ln -s "../../../../../tools/verify-lib.sh" "$module/attachments/scripts/verify-lib.sh"
 
 # Fill placeholders in every regular text file that was copied.
 find "$code" "$module" -type f \( -name '*.adoc' -o -name '*.md' -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.sh' -o -name 'Makefile' -o -name '.env.example' \) -print0 \

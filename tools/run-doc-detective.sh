@@ -9,9 +9,9 @@
 # tools/doc-detective.base.json before running. The engine version is pinned
 # on purpose: a bare `npx doc-detective` self-updates before every run.
 #
-# The specFilter in the base config skips specs whose specId starts with "_",
-# so _setup.json and _teardown.json only run through beforeAny/afterAll and
-# never a second time as ordinary specs.
+# The specs to run are derived from :page-solution-steps: on the overview page
+# (one spec per step id), so _setup.json and _teardown.json only run through
+# beforeAny/afterAll and nothing has to be registered by hand.
 set -euo pipefail
 
 DD_VERSION=${DD_VERSION:-4.38.1}
@@ -28,6 +28,17 @@ local_cfg="$dir/tests/doc-detective/.doc-detective.json"
 [ -f "$local_cfg" ] || { echo "run-doc-detective: $local_cfg not found" >&2; exit 2; }
 command -v jq >/dev/null || { echo "run-doc-detective: jq is required" >&2; exit 2; }
 
+overview="$root/docs/modules/$slug/pages/index.adoc"
+[ -f "$overview" ] || { echo "run-doc-detective: $overview not found" >&2; exit 2; }
+steps=$(awk 'NR==1 && /^= /{next} /^[[:space:]]*$/{exit} /^:page-solution-steps:/{sub(/^:page-solution-steps:[[:space:]]*/,""); print}' "$overview" | tr ',' ' ')
+inputs=()
+for s in $steps; do
+  spec="tests/doc-detective/specs/$s.json"
+  [ -f "$dir/$spec" ] || { echo "run-doc-detective: step '$s' has no spec $spec (run tools/check-metadata.sh)" >&2; exit 2; }
+  inputs+=("$spec")
+done
+[ ${#inputs[@]} -gt 0 ] || { echo "run-doc-detective: no steps listed in $overview" >&2; exit 2; }
+
 merged=$(mktemp "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX.json")
 trap 'rm -f "$merged"' EXIT
 jq -s '.[0] * .[1]' "$root/tools/doc-detective.base.json" "$local_cfg" > "$merged"
@@ -35,7 +46,8 @@ jq -s '.[0] * .[1]' "$root/tools/doc-detective.base.json" "$local_cfg" > "$merge
 cd "$dir"
 rm -f testResults-*.json
 echo "run-doc-detective: $slug with doc-detective@$DD_VERSION"
-npx --yes "doc-detective@$DD_VERSION" runTests --config "$merged" &
+echo "run-doc-detective: specs: ${inputs[*]}"
+npx --yes "doc-detective@$DD_VERSION" --config "$merged" --input "${inputs[@]}" &
 pid=$!
 
 # The CLI has been seen to finish and then not exit. Poll for the results

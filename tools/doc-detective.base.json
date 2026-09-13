@@ -4,7 +4,6 @@
   "recursive": false,
   "shell": "bash",
   "exitOnFail": true,
-  "specFilter": ["^[a-z0-9]"],
   "runOn": [
     {
       "platforms": ["linux", "mac"],
