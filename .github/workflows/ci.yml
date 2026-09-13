@@ -1,0 +1,60 @@
+# Runs every solution a PR touches (every solution on push to main) end to
+# end: compose up, seed, verify. The matrix comes from
+# tools/changed-solutions.sh, so no solution is listed here by hand.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      slugs: ${{ steps.set.outputs.slugs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            slugs=$(tools/changed-solutions.sh --all)
+          else
+            slugs=$(tools/changed-solutions.sh "origin/${{ github.base_ref }}")
+          fi
+          echo "slugs=$slugs" | tee -a "$GITHUB_OUTPUT"
+
+  solution:
+    needs: matrix
+    if: needs.matrix.outputs.slugs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJSON(needs.matrix.outputs.slugs) }}
+    uses: ./.github/workflows/test-solution.yml
+    with:
+      slug: ${{ matrix.slug }}
+
+  # Single required check for branch protection: green when nothing needed
+  # testing, red when any solution job failed.
+  ci:
+    needs: [matrix, solution]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "matrix: ${{ needs.matrix.result }}, solutions: ${{ needs.solution.result }}"
+          case "${{ needs.matrix.result }}/${{ needs.solution.result }}" in
+            success/success|success/skipped) exit 0 ;;
+            *) exit 1 ;;
+          esac

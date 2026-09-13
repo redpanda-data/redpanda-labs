@@ -1,0 +1,98 @@
+# Runs every solution against the latest Redpanda, Console, and Connect images
+# and opens (or updates) one issue when anything fails.
+name: nightly
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      slugs: ${{ steps.set.outputs.slugs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set
+        run: |
+          slugs=$(tools/changed-solutions.sh --all)
+          echo "slugs=$slugs" | tee -a "$GITHUB_OUTPUT"
+
+  solution:
+    needs: matrix
+    if: needs.matrix.outputs.slugs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJSON(needs.matrix.outputs.slugs) }}
+    uses: ./.github/workflows/test-solution.yml
+    with:
+      slug: ${{ matrix.slug }}
+      latest-images: true
+
+  report:
+    needs: [matrix, solution]
+    if: always() && needs.matrix.outputs.slugs != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update the failure issue
+        uses: actions/github-script@v7
+        env:
+          SOLUTION_RESULT: ${{ needs.solution.result }}
+        with:
+          script: |
+            const title = 'Nightly solutions run failed';
+            const label = 'nightly-failure';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const { owner, repo } = context.repo;
+
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner, repo, run_id: context.runId, per_page: 100,
+            });
+            const failed = jobs
+              .filter((j) => j.conclusion === 'failure' && j.name.startsWith('solution / '))
+              .map((j) => j.name.replace(/^solution \/ /, '').replace(/ \/ .*$/, ''));
+
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: label, per_page: 10 });
+            const existing = open.data.find((i) => i.title === title);
+
+            if (process.env.SOLUTION_RESULT === 'success') {
+              if (existing) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: existing.number,
+                  body: `Nightly run passed again: ${runUrl}. Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
+              }
+              return;
+            }
+
+            const date = new Date().toISOString().slice(0, 10);
+            const list = failed.length ? failed.map((s) => `- \`${s}\``).join('\n') : '- (see the run for details)';
+            const body = [
+              `The nightly run on ${date} failed against the latest images.`,
+              '',
+              'Failed solutions:',
+              list,
+              '',
+              `Run: ${runUrl}`,
+              '',
+              'Each failed job uploads a `logs-<slug>-latest` artifact with `docker compose ps` and the service logs.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+            } else {
+              try {
+                await github.rest.issues.createLabel({ owner, repo, name: label, color: 'B60205',
+                  description: 'Opened by the nightly workflow' });
+              } catch (e) { /* label exists */ }
+              await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
+            }

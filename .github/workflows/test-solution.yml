@@ -1,0 +1,77 @@
+# Reusable job: bring one solution up, seed it, run its verify script, tear it
+# down. Called by ci.yml (changed solutions, pinned versions) and nightly.yml
+# (every solution, latest images). Keep the steps here so both stay identical.
+name: test-solution
+
+on:
+  workflow_call:
+    inputs:
+      slug:
+        description: Solution slug (directory under solutions/)
+        required: true
+        type: string
+      latest-images:
+        description: Override the pinned versions in .env with latest
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ inputs.slug }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: solutions/${{ inputs.slug }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Raise the AIO limit
+        # Redpanda uses Linux AIO. Multi-broker or multi-cluster stacks exceed
+        # the runner default of 65536 events.
+        run: sudo sysctl -w fs.aio-max-nr=1048576
+
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          if [ "${{ inputs.latest-images }}" = "true" ]; then
+            # Shell variables beat .env in compose interpolation.
+            {
+              echo "REDPANDA_VERSION=latest"
+              echo "REDPANDA_CONSOLE_VERSION=latest"
+              echo "REDPANDA_CONNECT_VERSION=latest"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 600
+
+      - name: Seed
+        run: make seed
+
+      - name: Verify
+        run: ./scripts/verify.sh
+
+      - name: Collect logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          docker compose ps -a > "$RUNNER_TEMP/logs/ps.txt" 2>&1 || true
+          docker compose logs --no-color > "$RUNNER_TEMP/logs/compose.log" 2>&1 || true
+          docker compose config > "$RUNNER_TEMP/logs/resolved-compose.yml" 2>&1 || true
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ inputs.slug }}${{ inputs.latest-images && '-latest' || '' }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

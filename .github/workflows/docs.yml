@@ -1,0 +1,140 @@
+# Validates the docs side of a PR: the metadata contract, a real Antora build
+# with the same extensions production uses, Doc Detective for the solutions
+# the PR touched, and an offline link check of the built site.
+name: docs
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'tools/**'
+      - 'templates/**'
+      - 'solutions/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docs.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Actions token cannot read the private docs repos this build aggregates
+  # (docs, cloud-docs, rp-connect-docs, docs-site). REDPANDA_GITHUB_TOKEN is a
+  # fine-grained token with contents: read on those repos. Until it is set the
+  # build falls back to GITHUB_TOKEN, which is enough while every repo it
+  # touches is public.
+  DOCS_READ_TOKEN: ${{ secrets.REDPANDA_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the metadata contract
+        env:
+          GITHUB_TOKEN: ${{ env.DOCS_READ_TOKEN }}
+        run: tools/check-metadata.sh
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Git credentials for Antora
+        # Antora ignores git credential helpers; it reads ~/.git-credentials.
+        run: |
+          echo "https://${DOCS_READ_TOKEN}:@github.com" > ~/.git-credentials
+          chmod 600 ~/.git-credentials
+      - name: Build the site
+        env:
+          SOLUTIONS_INCLUDE_DRAFTS: 'true'
+        run: npm run build
+      - name: Remove git credentials
+        if: always()
+        run: rm -f ~/.git-credentials
+      - name: Check links offline
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline
+            --no-progress
+            --root-dir ${{ github.workspace }}/local-docs
+            --fallback-extensions html
+            --exclude-path 'local-docs/redpanda-labs'
+            'local-docs/solutions/**/*.html'
+          fail: true
+      - name: Upload the built site
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: local-docs
+          retention-days: 3
+
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      slugs: ${{ steps.set.outputs.slugs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set
+        run: |
+          slugs=$(tools/changed-solutions.sh "origin/${{ github.base_ref }}")
+          echo "slugs=$slugs" | tee -a "$GITHUB_OUTPUT"
+
+  doc-detective:
+    needs: [metadata, matrix]
+    if: needs.matrix.outputs.slugs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJSON(needs.matrix.outputs.slugs) }}
+    name: doc-detective (${{ matrix.slug }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Raise the AIO limit
+        run: sudo sysctl -w fs.aio-max-nr=1048576
+      - name: Run the step specs
+        run: tools/run-doc-detective.sh "${{ matrix.slug }}"
+      - name: Upload results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-detective-${{ matrix.slug }}
+          path: |
+            solutions/${{ matrix.slug }}/testResults-*.json
+            solutions/${{ matrix.slug }}/doc-detective-output
+          if-no-files-found: ignore
+      - name: Tear down
+        if: always()
+        working-directory: solutions/${{ matrix.slug }}
+        run: docker compose down -v --remove-orphans || true
+
+  # Single required check for branch protection.
+  docs:
+    needs: [metadata, build, matrix, doc-detective]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "metadata: ${{ needs.metadata.result }}, build: ${{ needs.build.result }}, doc-detective: ${{ needs.doc-detective.result }}"
+          [ "${{ needs.metadata.result }}" = "success" ] || exit 1
+          [ "${{ needs.build.result }}" = "success" ] || exit 1
+          case "${{ needs.doc-detective.result }}" in success|skipped) ;; *) exit 1 ;; esac
