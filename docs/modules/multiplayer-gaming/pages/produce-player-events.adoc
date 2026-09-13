@@ -61,9 +61,10 @@ For each event the simulator serializes the Protobuf message, prefixes the schem
 
 The three consumers have been reading since the first record arrived. The next three steps look at each in turn.
 
-The complete simulator, for building along: the generator, the main program, and the roster it names players from.
 
-.services/simulator/sim/generator.go
+Complete sources for building along: the generator, the main program, and the shared packages every service compiles against.
+
+.Complete source: services/simulator/sim/generator.go
 [%collapsible]
 ====
 [,go]
@@ -72,7 +73,7 @@ include::example$services/simulator/sim/generator.go[]
 ----
 ====
 
-.services/simulator/main.go
+.Complete source: services/simulator/main.go
 [%collapsible]
 ====
 [,go]
@@ -81,7 +82,7 @@ include::example$services/simulator/main.go[]
 ----
 ====
 
-.services/internal/schema/schema.go
+.Complete source: services/internal/schema/schema.go
 [%collapsible]
 ====
 [,go]
@@ -90,7 +91,7 @@ include::example$services/internal/schema/schema.go[]
 ----
 ====
 
-.services/internal/envvar/env.go
+.Complete source: services/internal/envvar/env.go
 [%collapsible]
 ====
 [,go]
@@ -99,7 +100,7 @@ include::example$services/internal/envvar/env.go[]
 ----
 ====
 
-.services/Dockerfile
+.Complete source: services/Dockerfile
 [%collapsible]
 ====
 [,dockerfile]

@@ -89,14 +89,38 @@ Redpanda runs as a single binary with Schema Registry and the HTTP Proxy built i
 
 == What happens inside
 
-Redpanda starts in `dev-container` mode, advertises `redpanda:9092` inside the compose network and `localhost:19092` outside it, and reports `Healthy: true` to `rpk cluster health` once its single Raft group has a leader. The one cluster setting the compose file changes, `log_segment_ms_min=60000`, lets xref:build-leaderboard.adoc[] roll a segment every minute so you can watch compaction. Console connects to the broker, the Admin API, and Schema Registry; because `console-config.yaml` enables Schema Registry and sets no manual Protobuf mappings, Console will decode records by the schema ID in each record as soon as schemas exist:
+Redpanda starts in `dev-container` mode, advertises `redpanda:9092` inside the compose network and `localhost:19092` outside it, and reports `Healthy: true` to `rpk cluster health` once its single Raft group has a leader. The one cluster setting the compose file changes, `log_segment_ms_min=60000`, lets xref:build-leaderboard.adoc[] roll a segment every minute so you can watch compaction. Console connects to the broker, the Admin API, and Schema Registry; because `console-config.yaml` enables Schema Registry and sets no manual Protobuf mappings (the complete file is below), Console will decode records by the schema ID in each record as soon as schemas exist.
 
+Redpanda Connect loads `connect/match-history.yaml`, opens its Postgres connections, and joins the consumer group `connect-history` on two topics that do not exist yet. The `redpanda` input keeps retrying metadata until they do. The simulator reaches `waiting_for_topics` and stays there; the leaderboard service and the dashboard wait for `game.leaderboard` the same way.
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: console-config.yaml
+[%collapsible]
+====
 [,yaml]
 ----
 include::example$console-config.yaml[]
 ----
+====
 
-Redpanda Connect loads `connect/match-history.yaml`, opens its Postgres connections, and joins the consumer group `connect-history` on two topics that do not exist yet. The `redpanda` input keeps retrying metadata until they do. The simulator reaches `waiting_for_topics` and stays there; the leaderboard service and the dashboard wait for `game.leaderboard` the same way.
+.Complete source: services/internal/conn/conn.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/internal/conn/conn.go[]
+----
+====
 
 == Verify
 

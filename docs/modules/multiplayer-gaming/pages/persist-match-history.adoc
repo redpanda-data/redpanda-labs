@@ -56,11 +56,18 @@ The processors decode and flatten:
 include::example$connect/match-history.yaml[tags=pipeline]
 ----
 
-The output inserts, and falls back to the dead-letter topic:
+The output inserts into one of two tables, refusing any message that carries a processing error:
 
 [,yaml]
 ----
 include::example$connect/match-history.yaml[tags=output]
+----
+
+The refused messages fall through to the second output, the dead-letter topic, with the error attached:
+
+[,yaml]
+----
+include::example$connect/match-history.yaml[tags=dlq]
 ----
 
 == Why
@@ -90,6 +97,26 @@ The `redpanda` input, `schema_registry_decode`, `sql_insert`, and `fallback` are
 For each record the input fetches, `schema_registry_decode` reads the schema ID from the first five bytes, fetches schema 2 from Schema Registry once and caches it, and decodes the Protobuf into JSON using the Protobuf JSON mapping (field names in lowerCamelCase, 64-bit integers as strings; the mapping converts what the tables need). The `switch` output sends `match_ended` rows to `match_history` and every other row to `player_events`, batching 100 rows or 500 ms at a time. The input commits the group's offset after the output acknowledges the batch.
 
 The poison record fails inside `try`: schema `2147483647` does not exist. `reject_errored` refuses it, `fallback` moves to its second output, the small `mapping` copies the error into a header, and the `redpanda` output writes the original bytes to `game.player-events.dlq` under the original key. The Go consumers meet the same record; they log it, count it as `poison_skipped`, and commit past it. Each consumer chooses its own policy, which is the point of keeping them independent.
+
+Complete sources for building along:
+
+.Complete source: connect/match-history.yaml
+[%collapsible]
+====
+[,yaml]
+----
+include::example$connect/match-history.yaml[]
+----
+====
+
+.Complete source: postgres/init.sql
+[%collapsible]
+====
+[,sql]
+----
+include::example$postgres/init.sql[]
+----
+====
 
 == Verify
 

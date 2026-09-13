@@ -79,6 +79,26 @@ include::example$services/internal/schema/schema.go[tags=lookup]
 
 From now on every record it writes starts with a magic byte `0`, the schema ID `2` as four bytes, and a Protobuf message index, followed by the serialized `GameEvent`. That header is what every consumer in the next steps reads first.
 
+Complete sources for building along:
+
+.Complete source: proto/game_events.proto
+[%collapsible]
+====
+[,protobuf]
+----
+include::example$proto/game_events.proto[]
+----
+====
+
+.Complete source: services/internal/schema/schema.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/internal/schema/schema.go[]
+----
+====
+
 == Verify
 
 Run:

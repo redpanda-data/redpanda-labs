@@ -55,23 +55,31 @@ Two consumer groups on one topic cost one extra read of the log and nothing on t
 
 == What happens inside
 
-The consumer is the same shape as the leaderboard's, plus a revocation hook and a producer:
+The consumer is the same shape as the leaderboard's, plus a revocation hook that forgets the players of a partition the instance no longer owns, and producer settings, because this service writes too:
 
 [,go]
 ----
-include::example$services/achievements/main.go[tags=consumer]
+include::example$services/achievements/main.go[tags=client]
 ----
 
-For each record it decodes, finds or creates the player's state, applies the rules, and produces one record per unlock, then moves on. The unlock's `event_id` is derived from the source event's ID and the achievement name, so a replayed source record produces an achievement with the same ID, which a downstream sink can deduplicate on:
+For each record it decodes, finds or creates the player's state, and applies the rules:
 
 [,go]
 ----
 include::example$services/achievements/main.go[tags=handle]
 ----
 
-The complete service, for building along:
+Then it produces one record per unlock and moves on. The unlock's `event_id` is derived from the source event's ID and the achievement name, so a replayed source record produces an achievement with the same ID, which a downstream sink can deduplicate on:
 
-.services/achievements/rules/rules.go
+[,go]
+----
+include::example$services/achievements/main.go[tags=produce]
+----
+
+
+Complete sources for building along. The rules have unit tests in `services/achievements/rules/rules_test.go`; `make test` runs them in a container.
+
+.Complete source: services/achievements/rules/rules.go
 [%collapsible]
 ====
 [,go]
@@ -80,7 +88,7 @@ include::example$services/achievements/rules/rules.go[]
 ----
 ====
 
-.services/achievements/main.go
+.Complete source: services/achievements/main.go
 [%collapsible]
 ====
 [,go]
@@ -88,8 +96,6 @@ include::example$services/achievements/rules/rules.go[]
 include::example$services/achievements/main.go[]
 ----
 ====
-
-The rules have unit tests in `services/achievements/rules/rules_test.go`; `make test` runs them in a container.
 
 == Verify
 

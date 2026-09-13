@@ -85,6 +85,17 @@ Topic creation is one `rpk topic create` with the partition count, the replicati
 
 The simulator notices the topics within two seconds and moves from `waiting_for_topics` to `waiting_for_schema`. It still produces nothing.
 
+The complete `Makefile`, for building along:
+
+.Complete source: Makefile
+[%collapsible]
+====
+[,makefile]
+----
+include::example$Makefile[]
+----
+====
+
 == Verify
 
 Run:

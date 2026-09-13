@@ -14,11 +14,11 @@ One script asserts everything the previous steps claimed, against the running sy
 make verify
 ----
 
-. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `retry`) and runs nine checks:
+. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `retry`) and runs nine checks; the complete script is at the end of _What happens inside_. The two that read `game.leaderboard` reduce the topic the way compaction does, last record per key, before comparing:
 +
 [,bash]
 ----
-include::example$scripts/verify.sh[tags=checks]
+include::example$scripts/verify.sh[tags=board]
 ----
 
 == Why
@@ -34,6 +34,17 @@ Every number the script needs is observable from outside: high watermarks and gr
 == What happens inside
 
 The script runs `rpk topic describe -p` to sum high watermarks, `rpk group describe` for the three groups' lag (with a retry, because the groups may be a second behind), `rpk topic consume game.leaderboard -o :end` reduced with `awk` to the last record per key, and `psql` queries, all inside the compose containers. Each check prints `ok` or `FAIL`, and `verify_summary` prints `PASS (9/9)` and exits 0, or lists the failed checks and exits 1. CI gates on that exit code.
+
+The complete script, for building along (it sources `scripts/verify-lib.sh`, an attachment):
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
 
 == Verify
 

@@ -89,9 +89,10 @@ The dashboard's reader and the map it fills:
 include::example$services/dashboard/main.go[tags=read]
 ----
 
-The complete code, for building along:
 
-.services/leaderboard/main.go
+Complete sources for building along. The dashboard page `services/dashboard/static/index.html` is an attachment; it is plain HTML and one `EventSource`.
+
+.Complete source: services/leaderboard/main.go
 [%collapsible]
 ====
 [,go]
@@ -100,7 +101,7 @@ include::example$services/leaderboard/main.go[]
 ----
 ====
 
-.services/internal/board/board.go
+.Complete source: services/internal/board/board.go
 [%collapsible]
 ====
 [,go]
@@ -109,7 +110,7 @@ include::example$services/internal/board/board.go[]
 ----
 ====
 
-.services/dashboard/main.go
+.Complete source: services/dashboard/main.go
 [%collapsible]
 ====
 [,go]
@@ -118,7 +119,7 @@ include::example$services/dashboard/main.go[]
 ----
 ====
 
-.services/internal/topics/topics.go
+.Complete source: services/internal/topics/topics.go
 [%collapsible]
 ====
 [,go]
@@ -127,7 +128,14 @@ include::example$services/internal/topics/topics.go[]
 ----
 ====
 
-The dashboard page `services/dashboard/static/index.html` is a build-along attachment; it is plain HTML and one `EventSource`.
+.Complete source: proto/game_events.proto
+[%collapsible]
+====
+[,protobuf]
+----
+include::example$proto/game_events.proto[]
+----
+====
 
 == Verify
 
