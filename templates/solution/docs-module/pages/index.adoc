@@ -12,7 +12,7 @@
 :page-solution-version: vX.Y.Z
 // beginner | intermediate | advanced
 :page-solution-difficulty: intermediate
-// Whole minutes for the complete build-along path, 5..600
+// Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
 :page-solution-duration: 45
 // draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
 :page-solution-status: draft

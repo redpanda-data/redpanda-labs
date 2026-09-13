@@ -10,6 +10,8 @@
 #   - overview has :page-layout: solution and :page-topic-type: solution
 #   - :page-solution-version: matches ^v[0-9]+\.[0-9]+\.[0-9]+$
 #   - difficulty, status, download, platforms, duration, featured are valid
+#   - :page-solution-duration: is within 10% of the sum of the :page-solution-step-duration:
+#     values when every step carries one
 #   - deprecated solutions name :page-solution-superseded-by:
 #   - every :page-solution-steps: id has pages/<id>.adoc (with :page-layout: solution-step)
 #     and solutions/<slug>/tests/doc-detective/specs/<id>.json whose specId is the id,
@@ -227,10 +229,14 @@ for slug in $slugs; do
   else
     IFS=',' read -ra steps <<< "$steps_raw"
     listed=""
+    step_count=0
+    step_timed=0
+    step_sum=0
     for s in "${steps[@]}"; do
       s=$(trim "$s")
       [ -n "$s" ] || continue
       listed="$listed $s"
+      step_count=$((step_count + 1))
       if [ "$s" = "step" ]; then
         err "$page" "step id 'step' is the template placeholder: rename pages/step.adoc and specs/step.json to the real step id"
       fi
@@ -248,8 +254,13 @@ for slug in $slugs; do
         [ "$(attr "$sh" page-layout)" = "solution-step" ] || err "$sp" ":page-layout: must be 'solution-step'"
         [ -n "$(attr "$sh" description)" ] || warn "$sp" "no :description:"
         sdur=$(attr "$sh" page-solution-step-duration)
-        if [ -n "$sdur" ] && ! [[ "$sdur" =~ ^[0-9]+$ ]]; then
-          err "$sp" ":page-solution-step-duration: '$sdur' must be an integer number of minutes"
+        if [ -n "$sdur" ]; then
+          if [[ "$sdur" =~ ^[0-9]+$ ]]; then
+            step_timed=$((step_timed + 1))
+            step_sum=$((step_sum + sdur))
+          else
+            err "$sp" ":page-solution-step-duration: '$sdur' must be an integer number of minutes"
+          fi
         fi
       fi
       spec="$code/tests/doc-detective/specs/$s.json"
@@ -260,6 +271,16 @@ for slug in $slugs; do
         [ "$sid" = "$s" ] || err "$spec" "specId '$sid' must equal the step id '$s' (rename the id inside the spec too)"
       fi
     done
+    # The overview duration is the whole path, so it must stay within 10% of the
+    # sum of the step durations. Only comparable when every step carries one.
+    if [ "$step_count" -gt 0 ] && [ "$step_timed" -eq "$step_count" ] && [[ "$duration" =~ ^[0-9]+$ ]]; then
+      diff=$(( duration > step_sum ? duration - step_sum : step_sum - duration ))
+      if [ $(( diff * 10 )) -gt "$step_sum" ]; then
+        err "$page" ":page-solution-duration: $duration differs from the sum of the step durations ($step_sum) by more than 10%"
+      fi
+    elif [ "$step_timed" -gt 0 ]; then
+      warn "$page" "only $step_timed of $step_count steps set :page-solution-step-duration:, so the overview duration cannot be checked against them"
+    fi
     while IFS= read -r f; do
       rel=${f#"$module/pages/"}
       stem=${rel%.adoc}
