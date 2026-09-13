@@ -1,0 +1,124 @@
+= Build the live leaderboard
+:page-layout: solution-step
+:description: Read game.player-events in the leaderboard consumer group, apply every score change to Redis sorted sets, and serve a dashboard that updates twice a second.
+:page-solution-step-duration: 7
+
+The leaderboard service has been consuming since step 4. Here you open its dashboard, check its numbers against Redis, and read the consumer loop: when it commits, why that is at-least-once, and what the fix looks like.
+
+== What you do
+
+. Open the dashboard at http://localhost:3000. It shows the top 10, the instance name, the partitions this instance owns, its consumer lag, and how many records it applied.
+
+. Ask Redis directly:
++
+[,bash]
+----
+docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 2 WITHSCORES
+docker compose exec -T redis redis-cli ZCARD leaderboard:global
+----
++
+The same three players and scores as the dashboard, and 24 members: every player scored at least once in 3000 events.
+
+. Look at one match's board. Match IDs are `m-00001` upward:
++
+[,bash]
+----
+curl -s 'http://localhost:3000/api/top?match=m-00001'
+----
+
+The consumer loop:
+
+[,go]
+----
+include::example$services/leaderboard/main.go[tags=consumer]
+----
+
+And what it does with each record:
+
+[,go]
+----
+include::example$services/leaderboard/main.go[tags=apply]
+----
+
+== Why
+
+A leaderboard is a sorted set, and a score change is an increment, so each `score_changed` becomes two `ZINCRBY` calls: one on `leaderboard:global`, one on `leaderboard:match:<match_id>`. Redis keeps the set ordered; the dashboard reads the top 10 with `ZREVRANGE` and pushes it to the browser over server-sent events every 500 ms, so the page never polls.
+
+The service commits offsets by hand, after the Redis writes of a batch succeed. That order matters. Commit first and a crash between the commit and the write loses score changes for good. Write first and a crash between the write and the commit replays the batch on restart: the same increments applied twice. The service chooses the second failure mode, at-least-once, because a duplicate is visible and fixable and a loss is neither. The fix for the duplicate is a few lines and is already in the code, off by default (see _In production_).
+
+`skipped` on the dashboard counts the records that are not `score_changed` (joins, item pickups, leaves). They are read, ignored, and committed like the rest; a consumer group's offset is per partition, not per event type.
+
+== Why Redpanda
+
+The leaderboard group's offsets are its own. Redpanda Connect and the achievements service read the same partitions at their own pace, and a slow Postgres in step 6 changes nothing here. The lag number on the dashboard comes from the same place `rpk group describe` reads: the difference between the group's committed offset and the partition's high watermark. See xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+
+== What happens inside
+
+On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. For each `score_changed` the service pipelines the two `ZINCRBY` calls and an `EXPIRE` on the match key in one round trip to Redis. When the whole batch is applied, `CommitUncommittedOffsets` writes the next offset of every partition it read from into `__consumer_offsets`. A record whose schema ID is not registered under `game.player-events-value` (step 6 produces one) is counted as `poison_skipped` and committed past; the service decides that a record it cannot read should not stop the board.
+
+A second background loop asks the broker for the group's lag every second, which is what the dashboard shows and what step 8 makes visible.
+
+The complete service, for building along:
+
+.services/leaderboard/main.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/leaderboard/main.go[]
+----
+====
+
+The dashboard page `services/leaderboard/static/index.html` is a build-along attachment; it is plain HTML and one `EventSource`.
+
+== Verify
+
+Run:
+
+[,bash]
+----
+curl -s 'http://localhost:3000/api/top?n=3'
+----
+
+Expected output (the beginning; the `status` object follows):
+
+[.solution-verify]
+[,text]
+----
+{
+  "match": "",
+  "top": [
+    {
+      "rank": 1,
+      "player_id": "p014",
+      "score": 795
+    },
+    {
+      "rank": 2,
+      "player_id": "p024",
+      "score": 715
+    },
+    {
+      "rank": 3,
+      "player_id": "p021",
+      "score": 715
+    }
+----
+
+These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (step 8). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error.
+
+== In production
+
+[.production-note]
+Set `LEADERBOARD_DEDUP=true` in `.env` to switch on the exactly-once effect. The partition and offset of a record are unique for the life of the topic, so a key `processed:<partition>:<offset>` set atomically with the increments makes a replayed record a no-op. The code is already in the service:
+
+[,go]
+----
+include::example$services/leaderboard/main.go[tags=dedup]
+----
+
+See the Idempotency and delivery row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/services/leaderboard/static/index.html[services/leaderboard/static/index.html]
+* link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
