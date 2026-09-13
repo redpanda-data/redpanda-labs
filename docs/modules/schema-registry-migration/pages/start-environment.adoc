@@ -154,7 +154,7 @@ The two clusters are deployed and secured separately, and the link connects to t
 * link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
 * link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
 * link:{attachmentsdir}/console-config.yaml[console-config.yaml]
-* link:{attachmentsdir}/client/Dockerfile[client/Dockerfile] and link:{attachmentsdir}/client/requirements.txt[client/requirements.txt]
+* link:{attachmentsdir}/client/Dockerfile.txt[client/Dockerfile.txt] (save it as `client/Dockerfile`) and link:{attachmentsdir}/client/requirements.txt[client/requirements.txt]
 * link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml]
 * link:{attachmentsdir}/schemas/orders-v1.avsc[schemas/orders-v1.avsc], link:{attachmentsdir}/schemas/orders-v2.avsc[schemas/orders-v2.avsc], link:{attachmentsdir}/schemas/customers.avsc[schemas/customers.avsc], link:{attachmentsdir}/schemas/address.avsc[schemas/address.avsc], link:{attachmentsdir}/schemas/shipping.avsc[schemas/shipping.avsc], link:{attachmentsdir}/schemas/warehouse-event.json[schemas/warehouse-event.json], and link:{attachmentsdir}/schemas/inventory_event.proto[schemas/inventory_event.proto]
 * link:{attachmentsdir}/sample-data/orders.json[sample-data/orders.json], link:{attachmentsdir}/sample-data/customers.json[sample-data/customers.json], link:{attachmentsdir}/sample-data/shipping.json[sample-data/shipping.json], link:{attachmentsdir}/sample-data/orders-after-cutover.json[sample-data/orders-after-cutover.json], and link:{attachmentsdir}/sample-data/README.md[sample-data/README.md]
