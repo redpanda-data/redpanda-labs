@@ -21,7 +21,14 @@ else
 fi
 
 TOPIC="__slug__.events"
-[ -f .env ] && . ./.env
+
+# Read .env the way Compose does: a variable already set in the shell wins.
+if [ -f .env ]; then
+  while IFS='=' read -r k v; do
+    case "$k" in ''|\#*) continue ;; esac
+    [ -z "${!k:-}" ] && export "$k=$v"
+  done < .env
+fi
 CONSOLE_PORT=${CONSOLE_PORT:-8080}
 
 # 1. Services are healthy.
