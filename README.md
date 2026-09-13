@@ -1,25 +1,60 @@
-[![Slack](https://img.shields.io/badge/Slack-Redpanda%20Community-blue)](https://redpanda.com/slack)
+# Redpanda Solutions
 
-## Redpanda Labs
+End-to-end, runnable reference architectures built on Redpanda, published at
+[docs.redpanda.com/solutions](https://docs.redpanda.com/solutions/). Each
+solution is a real system a reader can start with `make up`, build step by
+step, and prove with `make verify`.
 
-<img align="right" width="25%" src="images/redpanda_lab2.png">Redpanda Labs is the home for examples, experiments and research projects created by the Customer Success and Marketing teams at Redpanda.
+This repository owns the `solutions` Antora component and the code behind
+every solution. It was previously `redpanda-labs`; the labs content is frozen
+here until it is migrated (see below).
 
-Labs projects intend to showcase what is possible to achieve with Redpanda as the centerpiece of your streaming data architecture. Some of these projects may make it into the product, and many will not, but what they will do is provide examples, guidance, best practices, and most importantly give you ideas for how you can use Redpanda in your own projects.
-
-Contributions are welcome. Just fork the repo (or submodule) and send a pull request against the upstream `main` branch.
-
-## Lab Projects
-
-| Project       | Description   |
-| ------------- | ------------- |
-| [`clients`](https://github.com/redpanda-data/redpanda-labs/tree/main/clients) | A collection of Redpanda clients available in different programming languages. |
-| [`data-transforms`](https://github.com/redpanda-data/redpanda-labs/tree/main/data-transforms) | Example topic data transforms powered by WebAssembly (Wasm). |
-| [`docker-compose`](https://github.com/redpanda-data/redpanda-labs/tree/main/docker-compose) | Example deployments of Redpanda, Redpanda Console, and Redpanda Connectors using Docker. |
-| [`kubernetes`](https://github.com/redpanda-data/redpanda-labs/tree/main/kubernetes) | Examples of deploying and managing Redpanda in Kubernetes. |
-| [`redpanda-edge-agent`](https://github.com/redpanda-data/redpanda-edge-agent) | Lightweight Internet of Things (IoT) agent that forwards events from the edge. |
-
-## Update submodules
+## Layout
 
 ```
-git submodule update --remote --recursive
+docs/                    the solutions Antora component (descriptor, landing page, one module per solution)
+solutions/<slug>/        the code of one solution: compose stack, services, Makefile, verify script, Doc Detective specs
+tools/                   shared harness: scaffolding, metadata checks, CI matrix, verify helpers, local playbook
+templates/solution/      the scaffold that tools/new-solution.sh copies
+.github/workflows/       ci (run changed solutions), docs (metadata, Antora build, Doc Detective, links),
+                         release (tag + bundle per version), nightly (latest images), build-docs (Netlify hook)
+labs-docs/ and the legacy directories (docker-compose/, clients/, data-transforms/, kubernetes/,
+connect-plugins/, setup-tests/)   frozen Redpanda Labs content awaiting migration
 ```
+
+## Add a solution
+
+```bash
+tools/new-solution.sh <slug>          # scaffold solutions/<slug>/ and docs/modules/<slug>/
+cd solutions/<slug> && make up seed verify
+tools/check-metadata.sh               # the metadata contract
+npm run build                         # Antora build (needs ~/.git-credentials, see CONTRIBUTING.md)
+```
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is the writer guide: what qualifies as a
+solution, the metadata contract, page structure, the verification bar, and
+the workflow from proposal to release. Agents read [CLAUDE.md](CLAUDE.md) or
+[AGENTS.md](AGENTS.md).
+
+## How it ships
+
+- A pull request runs `ci` (every solution it touches, end to end) and `docs`
+  (metadata, a real Antora build, Doc Detective for the touched solutions, an
+  offline link check).
+- On merge to `main`, `release` tags `<slug>/<version>` and publishes
+  `<slug>-<version>.zip` for every solution whose authored
+  `:page-solution-version:` has no tag yet, then triggers the docs site build.
+- `nightly` runs every solution against the latest Redpanda, Console, and
+  Connect images and opens an issue on failure.
+
+## Labs content is frozen
+
+`labs-docs/` (the `labs` Antora component) and the legacy code directories
+still build and publish under `/labs/` while each lab is promoted into a
+solution, extracted into Product Docs, or retired with a redirect. Do not
+change them here; migrate them. The labs contributing guides are kept for
+reference at `labs-docs/CONTRIBUTING.adoc` and `labs-docs/CONTRIBUTING-LABS.adoc`.
+
+## License
+
+[Apache License 2.0](LICENSE).

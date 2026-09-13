@@ -14,6 +14,11 @@ local-docs/
 
 # Tests
 testresults-*.json
+testResults-*.json
+doc-detective-output/
+
+# Release bundles built locally
+*-v[0-9]*.zip
 
 # Go
 go.work*

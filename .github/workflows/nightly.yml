@@ -58,9 +58,11 @@ jobs:
             const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
               owner, repo, run_id: context.runId, per_page: 100,
             });
+            // Reusable-workflow matrix jobs are named "solution (<slug>) / <slug>".
             const failed = jobs
-              .filter((j) => j.conclusion === 'failure' && j.name.startsWith('solution / '))
-              .map((j) => j.name.replace(/^solution \/ /, '').replace(/ \/ .*$/, ''));
+              .filter((j) => j.conclusion === 'failure' && /^solution \(/.test(j.name))
+              .map((j) => (j.name.match(/^solution \(([^)]+)\)/) || [])[1])
+              .filter(Boolean);
 
             const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: label, per_page: 10 });
             const existing = open.data.find((i) => i.title === title);
