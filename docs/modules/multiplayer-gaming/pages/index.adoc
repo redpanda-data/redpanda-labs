@@ -1,139 +1,119 @@
-= Multiplayer Gaming
-// Overview page of the multiplayer-gaming solution. Every attribute below is part of the
-// metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
-// fails the build while any [placeholder] is left in place.
+= Multiplayer game events with a live leaderboard
 :page-layout: solution
 :page-topic-type: solution
-// One sentence, 200 characters or fewer. What the reader builds and why it matters.
-:description: [One sentence describing what the reader builds and the problem it solves.]
-// vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
-// and publishes <slug>-<version>.zip when a merged version has no tag yet.
-:page-solution-version: vX.Y.Z
-// beginner | intermediate | advanced
+:description: Stream game events through Redpanda to a live leaderboard, an achievements engine, and a match history without one consumer ever slowing down another.
+:page-solution-version: v1.0.0
 :page-solution-difficulty: intermediate
-// Whole minutes for the complete build-along path, 5..600
 :page-solution-duration: 45
-// draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
 :page-solution-status: draft
-// Uncomment to feature this solution on the landing page.
-// :page-solution-featured: true
-// authenticated | public | none
+:page-solution-featured: true
 :page-solution-download: authenticated
-// Subset of: self-managed, cloud (default both)
 :page-solution-platforms: self-managed, cloud
-// Comma list of the technologies the reader touches (Redpanda, Redpanda Connect, Go, Postgres...)
-:page-solution-technologies: [Redpanda, Redpanda Connect, ...]
-// Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
-:page-categories: [Stream Processing, Integration]
-// Optional comma list of business use cases (Real-time analytics, Migration...)
-// :page-solution-use-cases:
-// Optional persona ids from docs/modules/ROOT/partials/personas.yaml
-// :personas: streaming_developer, platform_operator
-// Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec
-// tests/doc-detective/specs/<id>.json. Rename step.adoc to your first step id.
-:page-solution-steps: step
-// Fully qualified resource IDs of the canonical Product Docs pages this solution applies.
-:page-solution-related-docs: [streaming:develop:consume-data/consumer-offsets.adoc, connect:components:outputs/sql_insert.adoc]
-// Optional: ids of solutions that pair well with this one
-// :page-solution-related-solutions:
-// Required when status is deprecated: id of the solution that replaces this one
-// :page-solution-superseded-by:
+:page-solution-technologies: Redpanda, Schema Registry, Redpanda Connect, Redpanda Console, Go, Protobuf, Redis, Postgres, Docker Compose
+:page-categories: Stream Processing, Clients, Schema Registry, Integration
+:page-solution-use-cases: Real-time analytics, Event-driven microservices, Gaming
+:personas: streaming_developer, platform_operator
+:page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
+:page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc
 
-// Intro: 1-2 sentences, 25-40 words. Name the business problem and what the reader
-// ends up with. No "this page describes".
-[What business problem does this solve, and what does the reader have running at the end?]
+A multiplayer game emits thousands of events a second: players join, score, pick up items, win. The leaderboard must update in real time, achievements must fire the moment a streak completes, and analysts want every match in a database. You build all three on one event stream, each as an independent consumer, so a slow database never delays the leaderboard.
 
 After completing this solution, you will be able to:
 
-* [ ] [Outcome 1: an observable, verifiable capability]
-* [ ] [Outcome 2]
-* [ ] [Outcome 3]
+* [ ] Publish Protobuf events with a Schema Registry contract and evolve that contract without breaking a running consumer
+* [ ] Fan one topic out to three consumer groups that scale, fail, and replay independently
+* [ ] Keep stateful, per-player logic correct across a rebalance by relying on key-based partitioning
+* [ ] Land a stream in Postgres with Redpanda Connect and route every bad record to a dead-letter topic
+* [ ] Prove the whole system with exact assertions: counts, sums, lags
 
 == What you build
 
-[Two or three sentences on the running system: the services, the topics that connect them, and what a user of the system sees.]
+A game simulator produces `GameEvent` records to two topics. Three consumers read them: a Go leaderboard service that keeps scores in Redis and serves a live dashboard, a Go achievements service that detects streaks and wins and publishes them back to Redpanda, and a Redpanda Connect pipeline that writes match history to Postgres. Redpanda Console shows every record decoded.
 
-* [Component 1 and its role]
-* [Component 2 and its role]
-* [Component 3 and its role]
+* *Game simulator* (Go, franz-go): deterministic event stream, idempotent producer, admin API to burst load or inject a poison record.
+* *`game.player-events`* and *`game.match-events`*: the two source topics, keyed by `player_id` and `match_id`.
+* *Schema Registry*: holds the `GameEvent` Protobuf schema as subjects `<topic>-value` with `BACKWARD` compatibility.
+* *Leaderboard service* (Go, Redis): consumer group `leaderboard`, `ZINCRBY` per score change, dashboard with server-sent events, scales to three instances.
+* *Achievements service* (Go): consumer group `achievements`, per-player state kept in memory because every player lives on one partition, produces to `game.achievements`.
+* *Redpanda Connect*: consumer group `connect-history`, decodes with Schema Registry, flattens the `oneof`, inserts into Postgres, routes failures to `game.player-events.dlq`.
+* *Redpanda Console*: decodes Protobuf records with the same schemas.
 
 == Architecture
 
-image::architecture.svg[Architecture of Multiplayer Gaming]
+image::architecture.svg[Architecture: the simulator produces to two Redpanda topics; the leaderboard service, the achievements service, and Redpanda Connect each read game.player-events in their own consumer group; results land in Redis, game.achievements, and Postgres]
 
-[Walk the diagram left to right: where events originate, which topics carry them, which consumers read them, and where results land.]
+Left to right: the simulator looks the `GameEvent` schema up in Schema Registry (it never registers one; the contract is created in step 3) and produces every event about a player to `game.player-events`, keyed by `player_id`, and every match lifecycle event to `game.match-events`, keyed by `match_id`. Three consumer groups read `game.player-events`. The leaderboard group applies `score_changed` deltas to Redis sorted sets and serves the dashboard. The achievements group folds each player's events into a small in-memory state and produces `achievement_unlocked` events to `game.achievements`. The `connect-history` group, a Redpanda Connect pipeline, decodes each record through Schema Registry, flattens it, and inserts it into Postgres; a record it cannot decode goes to `game.player-events.dlq` with the error attached. Console reads all four topics with the same schemas.
 
 === Why Redpanda
 
-[Name the Redpanda capabilities this design depends on and what each buys the reader. Link the canonical Product Docs page for each; do not re-explain it.]
-
-* [Capability, for example independent consumer groups fan out one stream to many services] (xref:streaming:develop:consume-data/consumer-offsets.adoc[])
-* [Capability]
-* [Capability]
+* *Independent consumer groups fan one stream out.* Each of the three consumers keeps its own offsets, so scaling the leaderboard, redeploying the achievements service, or a slow Postgres never touches the others. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* *Per-key ordering.* A record key selects the partition, so every event of one player is delivered in order to exactly one consumer instance. That is what lets the achievements service keep per-player state locally instead of in a shared store. xref:streaming:develop:produce-data/configure-producers.adoc[]
+* *Replay.* Offsets are the consumer's, not the broker's. Step 8 wipes Redis, seeks the group to the start, and rebuilds an identical leaderboard from the log. xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
+* *Schema Registry as the contract.* Producers and consumers agree on a Protobuf schema by ID, compatibility rules make evolution safe, and Console and Redpanda Connect decode records with no extra configuration. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* *Redpanda Connect for the sink.* Decode, flatten, insert, dead-letter: fifty lines of YAML, no code. xref:connect:components:outputs/sql_insert.adoc[]
 
 == Prerequisites
 
-* Docker Engine 24 or later with Docker Compose v2
-* [CPU/RAM the compose stack needs, for example 4 CPU and 8 GB RAM]
-* [Any client tooling the reader runs on the host, with version]
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
+* `curl` and `make` on the host (every `rpk`, `psql`, and `redis-cli` command runs inside a container)
+* Optional: Go 1.25 or later, only if you want to run the unit tests outside Docker
 * Approximately {page-solution-duration} minutes
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
 
-// Steps are rendered from :page-solution-steps: by the solution layout. Do not list
-// them here.
+// Steps are rendered from :page-solution-steps: by the solution layout.
 
 == Production considerations
 
-This solution runs on a single broker with no authentication so that it starts in seconds. Before you reuse the design in production, work through this table.
+This solution runs on a single broker with no authentication so that it starts in a minute. Before you reuse the design in production, work through this table.
 
 [cols="1,2,2"]
 |===
 | Area | In this solution | In production
 
 | Brokers and replication
-| [One broker, replication factor 1]
-| [Three or more brokers, replication factor 3, rack awareness. Link the deployment docs.]
+| One broker in `dev-container` mode, replication factor 1.
+| Three or more brokers, replication factor 3, rack awareness. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
 
 | Security
-| [Plaintext, no authentication]
-| [TLS, SASL/SCRAM or mTLS, ACLs per service. Link the security docs.]
+| Plaintext listeners, no authentication, every service is a superuser.
+| TLS on every listener, SASL/SCRAM or mTLS per service, ACLs that let the simulator write only its two topics and each consumer group read only what it needs. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:security/authentication.adoc[], xref:streaming:manage:security/authorization/acl.adoc[]
 
 | Partitions
-| [Fixed partition counts sized for the demo]
-| [Size partitions for peak throughput and consumer parallelism. Link the partition guidance.]
+| `game.player-events` has 6 partitions, the others 3 and 1, sized for a laptop.
+| Size for peak throughput and for the parallelism of the largest consumer group; the partition count is the ceiling on consumer instances. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
 
 | Schema validation
-| [Schemas registered, no broker-side validation]
-| [Enable schema ID validation on the topics. Link the schema registry docs.]
+| Schemas are registered and consumers reject unknown IDs, but the broker accepts any bytes (step 6 proves it with a poison record).
+| Enable schema ID validation on `game.player-events` and `game.match-events` so the broker rejects a record whose schema ID is not registered under the topic's subject. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| [One instance per consumer group]
-| [Scale on consumer lag; keep instances at or below partition count.]
+| One instance per group; step 8 scales the leaderboard to three by hand.
+| Scale on consumer group lag, keep instances at or below the partition count, and use static group membership for stateful services so a restart does not trigger a rebalance. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
-| [Local disk, default retention]
-| [Tiered Storage for long retention and replay. Link the Tiered Storage docs.]
+| `game.player-events` keeps 7 days on local disk; the other topics use the cluster default.
+| Tiered Storage: long retention and replay from object storage without growing local disks. xref:streaming:manage:tiered-storage.adoc[]
 
 | Idempotency and delivery
-| [At-least-once with idempotent producers]
-| [Transactions or exactly-once where the sink needs it. Link the producer docs.]
+| Idempotent producer with `acks=all`; consumers commit after writing, so a crash can replay a batch. Postgres inserts are `ON CONFLICT DO NOTHING`; Redis increments are not (step 5 shows the fix).
+| Idempotent sinks everywhere (the `processed:<partition>:<offset>` key from step 5), or transactions where a consumer also produces. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:develop:transactions.adoc[]
 
 | Dead-letter handling
-| [DLQ topic, no alerting]
-| [Alert on DLQ growth, replay tooling, retention policy for the DLQ.]
+| Redpanda Connect routes undecodable records to `game.player-events.dlq` with the error as a header. The Go services log and skip them.
+| Alert on dead-letter topic growth, keep the original key and headers so records can be replayed after a fix, and give the DLQ its own retention. xref:connect:configuration:error_handling.adoc[]
 
 | Observability
-| [Console only]
-| [Prometheus metrics, dashboards, alerts on lag and under-replicated partitions. Link the monitoring docs.]
+| Redpanda Console, the dashboard's lag counter, and `rpk group describe`.
+| Prometheus metrics from the brokers and from Redpanda Connect, dashboards, alerts on consumer lag and under-replicated partitions. xref:streaming:manage:monitoring.adoc[], xref:connect:guides:monitoring.adoc[]
 
 | Disaster recovery
-| [None]
-| [Shadowing to a second cluster. Link the Shadowing docs.]
+| None.
+| Shadowing replicates topics, consumer offsets, and schemas to a second cluster so the leaderboard can fail over. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
 
 | Analytics and lakehouse
-| [Optional Iceberg profile]
-| [Iceberg topics with a catalog. Link the Iceberg docs.]
+| Postgres holds the match history for queries.
+| Iceberg topics write `game.match-events` and `game.player-events` straight to a lakehouse table for analysts, with no pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
 |===
 
 == Clean up
@@ -147,7 +127,8 @@ make clean
 
 == Related docs
 
-// The solution layout also renders :page-solution-related-docs:. Use this list for
-// anything that needs a sentence of context.
-* xref:streaming:develop:consume-data/consumer-offsets.adoc[] - [why it matters here]
-* [Next canonical page]
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[] explains the consumer group mechanics every step of this solution relies on.
+* xref:streaming:develop:produce-data/idempotent-producers.adoc[] is the producer setting that makes the retry in step 4 safe.
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] covers subjects, compatibility levels, and the wire format that step 3 exercises.
+* xref:connect:components:outputs/sql_insert.adoc[] is the output the pipeline in step 6 builds on.
+* xref:streaming:console:config/deserialization.adoc[] describes how Console decodes Protobuf with Schema Registry, which `console-config.yaml` enables.
