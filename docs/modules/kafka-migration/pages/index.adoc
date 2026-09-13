@@ -1,0 +1,158 @@
+= Kafka Migration
+// Overview page of the kafka-migration solution. Every attribute below is part of the
+// metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
+// flags placeholder attribute values and bracketed placeholder lines like the ones
+// in this template; replace them all before opening a PR.
+:page-layout: solution
+:page-topic-type: solution
+// One sentence, 200 characters or fewer. What the reader builds and why it matters.
+:description: [One sentence describing what the reader builds and the problem it solves.]
+// vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
+// and publishes <slug>-<version>.zip when a merged version has no tag yet.
+:page-solution-version: vX.Y.Z
+// beginner | intermediate | advanced
+:page-solution-difficulty: intermediate
+// Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
+:page-solution-duration: 45
+// draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
+:page-solution-status: draft
+// Uncomment to feature this solution on the landing page.
+// :page-solution-featured: true
+// authenticated | public | none
+:page-solution-download: authenticated
+// Subset of: self-managed, cloud (default both)
+:page-solution-platforms: self-managed, cloud
+// Comma list of the technologies the reader touches (Redpanda, Redpanda Connect, Go, Postgres...)
+:page-solution-technologies: [Redpanda, Redpanda Connect, ...]
+// Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
+:page-categories: [Stream Processing, Integration]
+// Optional comma list of business use cases (Real-time analytics, Migration...)
+// :page-solution-use-cases:
+// Optional persona ids from docs/modules/ROOT/partials/personas.yaml
+// :personas: streaming_developer, platform_operator
+// Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec
+// tests/doc-detective/specs/<id>.json. Rename step.adoc to your first step id.
+:page-solution-steps: step
+// Fully qualified resource IDs of the canonical Product Docs pages this solution applies.
+:page-solution-related-docs: [streaming:develop:consume-data/consumer-offsets.adoc, connect:components:outputs/sql_insert.adoc]
+// Optional: ids of solutions that pair well with this one
+// :page-solution-related-solutions:
+// Required when status is deprecated: id of the solution that replaces this one
+// :page-solution-superseded-by:
+
+// Intro: two short paragraphs, 50-80 words in total. First the business problem,
+// then what the reader builds and has running at the end. No "this page describes".
+[What business problem does this solve, and why is it hard to do well?]
+
+[What does the reader build, and what do they have running at the end?]
+
+// Three to five observable outcomes as literal checkboxes. Solutions do not use
+// :learning-objective-N: attributes.
+After completing this solution, you will be able to:
+
+* [ ] [Outcome 1: an observable, verifiable capability]
+* [ ] [Outcome 2]
+* [ ] [Outcome 3]
+
+== What you build
+
+[Two or three sentences on the running system: the services, the topics that connect them, and what a user of the system sees.]
+
+* [Component 1 and its role]
+* [Component 2 and its role]
+* [Component 3 and its role]
+
+== Architecture
+
+image::architecture.svg[Architecture of Kafka Migration]
+
+[Walk the diagram left to right: where events originate, which topics carry them, which consumers read them, and where results land.]
+
+=== Why Redpanda
+
+[Name the Redpanda capabilities this design depends on and what each buys the reader. Link the canonical Product Docs page for each; do not re-explain it.]
+
+* [Capability, for example independent consumer groups fan out one stream to many services] (xref:streaming:develop:consume-data/consumer-offsets.adoc[])
+* [Capability]
+* [Capability]
+
+== Prerequisites
+
+* Docker Engine 24 or later with Docker Compose v2
+* [CPU/RAM the compose stack needs, for example 4 CPU and 8 GB RAM]
+* [Any client tooling the reader runs on the host, with version]
+* Approximately {page-solution-duration} minutes
+
+You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
+
+// Steps are rendered from :page-solution-steps: by the solution layout. Do not list
+// them here.
+
+== Production considerations
+
+This solution runs on a single broker with no authentication so that it starts in seconds. Before you reuse the design in production, work through this table.
+
+[cols="1,2,2"]
+|===
+| Area | In this solution | In production
+
+| Brokers and replication
+| [One broker, replication factor 1]
+| [Three or more brokers, replication factor 3, rack awareness. Link the deployment docs.]
+
+| Security
+| [Plaintext, no authentication]
+| [TLS, SASL/SCRAM or mTLS, ACLs per service. Link the security docs.]
+
+| Partitions
+| [Fixed partition counts sized for the demo]
+| [Size partitions for peak throughput and consumer parallelism. Link the partition guidance.]
+
+| Schema validation
+| [Schemas registered, no broker-side validation]
+| [Enable schema ID validation on the topics. Link the schema registry docs.]
+
+| Consumer scaling
+| [One instance per consumer group]
+| [Scale on consumer lag; keep instances at or below partition count.]
+
+| Data retention
+| [Local disk, default retention]
+| [Tiered Storage for long retention and replay. Link the Tiered Storage docs.]
+
+| Idempotency and delivery
+| [At-least-once with idempotent producers]
+| [Transactions or exactly-once where the sink needs it. Link the producer docs.]
+
+| Dead-letter handling
+| [DLQ topic, no alerting]
+| [Alert on DLQ growth, replay tooling, retention policy for the DLQ.]
+
+| Observability
+| [Console only]
+| [Prometheus metrics, dashboards, alerts on lag and under-replicated partitions. Link the monitoring docs.]
+
+| Disaster recovery
+| [None]
+| [Shadowing to a second cluster. Link the Shadowing docs.]
+
+| Analytics and lakehouse
+| [Optional Iceberg profile]
+| [Iceberg topics with a catalog. Link the Iceberg docs.]
+|===
+
+== Clean up
+
+Stop the stack and delete its volumes:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=clean]
+----
+
+== Related docs
+
+// The solution layout also renders :page-solution-related-docs:. Use this list for
+// anything that needs a sentence of context.
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[] - [why it matters here]
+* [Next canonical page]

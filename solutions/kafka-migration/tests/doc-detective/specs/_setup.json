@@ -1,0 +1,23 @@
+{
+  "specId": "_setup",
+  "description": "Start and seed Kafka Migration once before the step specs run (beforeAny in .doc-detective.json). Never selected as a step spec: only ids listed in :page-solution-steps: are.",
+  "tests": [
+    {
+      "testId": "_setup",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make up",
+            "timeout": 300000
+          }
+        },
+        {
+          "runShell": {
+            "command": "make seed",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}
