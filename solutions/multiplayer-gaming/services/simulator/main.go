@@ -22,7 +22,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sr"
 
-	"multiplayer-gaming/services/internal/env"
+	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
 	"multiplayer-gaming/services/simulator/sim"
@@ -77,18 +77,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := env.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := env.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
-	schemaFile := env.String("SCHEMA_FILE", "/proto/game_events.proto")
-	playersFile := env.String("PLAYERS_FILE", "/sample-data/players.json")
-	httpAddr := env.String("HTTP_ADDR", ":8090")
+	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
+	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
+	playersFile := envvar.String("PLAYERS_FILE", "/sample-data/players.json")
+	httpAddr := envvar.String("HTTP_ADDR", ":8090")
 
 	cfg := sim.Config{
-		Seed:          env.Int64("SIM_SEED", 42),
-		Players:       env.Int("SIM_PLAYERS", 24),
-		MatchDuration: time.Duration(env.Int("SIM_MATCH_DURATION", 60)) * time.Second,
-		Tick:          time.Duration(env.Int("SIM_TICK_MS", 200)) * time.Millisecond,
-		Region:        env.String("SIM_REGION", "eu-west"),
+		Seed:          envvar.Int64("SIM_SEED", 42),
+		Players:       envvar.Int("SIM_PLAYERS", 24),
+		MatchDuration: time.Duration(envvar.Int("SIM_MATCH_DURATION", 60)) * time.Second,
+		Tick:          time.Duration(envvar.Int("SIM_TICK_MS", 200)) * time.Millisecond,
+		Region:        envvar.String("SIM_REGION", "eu-west"),
 	}
 	if b, err := os.ReadFile(playersFile); err == nil {
 		if err := json.Unmarshal(b, &cfg.Roster); err != nil {
@@ -101,8 +101,8 @@ func main() {
 	s := &simulator{
 		gen:    sim.New(cfg),
 		serdes: map[string]*schemaSerde{},
-		rate:   env.Int("SIM_RATE", 100),
-		max:    env.Int64("SIM_EVENTS_MAX", 3000),
+		rate:   envvar.Int("SIM_RATE", 100),
+		max:    envvar.Int64("SIM_EVENTS_MAX", 3000),
 		acked: map[string]*atomic.Int64{
 			sim.TopicPlayerEvents: {},
 			sim.TopicMatchEvents:  {},

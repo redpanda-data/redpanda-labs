@@ -26,7 +26,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sr"
 
-	"multiplayer-gaming/services/internal/env"
+	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
 )
@@ -61,23 +61,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := env.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := env.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
+	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
 	host, _ := os.Hostname()
 	s := &service{
-		group:    env.String("GROUP", "leaderboard"),
-		topic:    env.String("TOPIC", "game.player-events"),
+		group:    envvar.String("GROUP", "leaderboard"),
+		topic:    envvar.String("TOPIC", "game.player-events"),
 		instance: host,
-		dedup:    env.Bool("LEADERBOARD_DEDUP", false),
+		dedup:    envvar.Bool("LEADERBOARD_DEDUP", false),
 	}
 	s.lagErr.Store("")
 
-	s.rdb = redis.NewClient(&redis.Options{Addr: env.String("REDIS_ADDR", "redis:6379")})
+	s.rdb = redis.NewClient(&redis.Options{Addr: envvar.String("REDIS_ADDR", "redis:6379")})
 	if err := s.rdb.Ping(ctx).Err(); err != nil {
 		log.Fatalf("redis: %v", err)
 	}
 
-	go s.serve(env.String("HTTP_ADDR", ":8080"))
+	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
 
 	srClient, err := sr.NewClient(sr.URLs(srURL))
 	if err != nil {

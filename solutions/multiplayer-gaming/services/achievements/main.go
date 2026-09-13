@@ -24,7 +24,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sr"
 
 	"multiplayer-gaming/services/achievements/rules"
-	"multiplayer-gaming/services/internal/env"
+	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
 )
@@ -50,21 +50,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := env.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := env.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
-	schemaFile := env.String("SCHEMA_FILE", "/proto/game_events.proto")
-	group := env.String("GROUP", "achievements")
+	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
+	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
+	group := envvar.String("GROUP", "achievements")
 	host, _ := os.Hostname()
 	s := &service{
 		rules:    rules.Default,
-		inTopic:  env.String("TOPIC", "game.player-events"),
-		outTopic: env.String("OUT_TOPIC", "game.achievements"),
+		inTopic:  envvar.String("TOPIC", "game.player-events"),
+		outTopic: envvar.String("OUT_TOPIC", "game.achievements"),
 		instance: host,
 		players:  map[string]*rules.PlayerState{},
 		byPart:   map[int32]map[string]struct{}{},
 		unlocked: map[string]int64{},
 	}
-	go s.serve(env.String("HTTP_ADDR", ":8080"))
+	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
 
 	srClient, err := sr.NewClient(sr.URLs(srURL))
 	if err != nil {
