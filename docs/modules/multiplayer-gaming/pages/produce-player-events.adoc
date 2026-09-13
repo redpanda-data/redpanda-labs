@@ -90,12 +90,12 @@ include::example$services/internal/schema/schema.go[]
 ----
 ====
 
-.services/internal/env/env.go
+.services/internal/envvar/env.go
 [%collapsible]
 ====
 [,go]
 ----
-include::example$services/internal/env/env.go[]
+include::example$services/internal/envvar/env.go[]
 ----
 ====
 
