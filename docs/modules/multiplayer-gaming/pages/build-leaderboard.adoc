@@ -1,30 +1,38 @@
 = Build the live leaderboard
 :page-layout: solution-step
-:description: Read game.player-events in the leaderboard consumer group, apply every score change to Redis sorted sets, and serve a dashboard that updates twice a second.
+:description: Aggregate scores in the leaderboard consumer group, publish each player's total to the compacted topic game.leaderboard, and serve a dashboard that only reads that topic.
 :page-solution-step-duration: 7
 
-The leaderboard service has been consuming since the simulator started in xref:produce-player-events.adoc[]. Here you open its dashboard, check its numbers against Redis, and read the consumer loop: when it commits, why that is at-least-once, and what the fix looks like.
+The leaderboard service has been consuming since the simulator started in xref:produce-player-events.adoc[]. Here you open the dashboard, read the topic it is built from, and follow a score change through the service: how the total is computed, why the service publishes the total rather than the change, and how a compacted topic turns that stream of totals into a leaderboard that any reader can load from the start.
 
 == What you do
 
-. Open the dashboard at http://localhost:3000. It shows the top 10, the number of members in the `leaderboard` group, and the group's consumer lag. The dashboard is the leaderboard binary started with `LEADERBOARD_ROLE=dashboard`: it reads Redis and asks the broker for the group's lag, but joins no group, so its address never changes when you scale the consumers in xref:scale-and-replay.adoc[].
+. Open the dashboard at http://localhost:3000. It shows the top 10 with display names, the number of players on the board, how many records it has read from `game.leaderboard`, and the `leaderboard` group's member count and consumer lag. The dashboard joins no consumer group: it reads `game.leaderboard` from the first record and keeps the latest entry per player in a map.
 
-. Ask Redis directly:
+. Look at the topic the dashboard reads. It is compacted, and it rolls a new segment every minute:
 +
 [,bash]
 ----
-docker compose exec -T redis redis-cli ZREVRANGE leaderboard:global 0 2 WITHSCORES
-docker compose exec -T redis redis-cli ZCARD leaderboard:global
+docker compose exec -T rpk rpk topic describe game.leaderboard -c
 ----
 +
-The same three players and scores as the dashboard, and 24 members: every player scored at least once in 3000 events.
-
-. Look at one match's board. Match IDs are `m-00001` upward:
+`cleanup.policy` is `compact` and `segment.ms` is `60000`. Each record is one `LeaderboardEntry`, keyed by `player_id`:
 +
 [,bash]
 ----
-curl -s 'http://localhost:3000/api/top?match=m-00001'
+docker compose exec -T rpk rpk topic consume game.leaderboard -o start -n 24 --use-schema-registry=value
 ----
++
+Every value carries an absolute `score`, not a delta, plus the `game.player-events` partition and offset it was computed from.
+
+. Count the players on the board the way compaction sees them, one live record per key:
++
+[,bash]
+----
+docker compose exec -T rpk rpk topic consume game.leaderboard -o :end -f '%k\n' | sort -u | wc -l
+----
++
+`24`: every player scored at least once in 3000 events. Run the command without `sort -u` and the count is the number of records still on the log. Right after seeding it is 1729, one per `score_changed`. Within a minute or two it drops to 24: compaction keeps the newest record of each key and deletes the rest. Records produced since the last segment rolled are still uncompacted, so the total is usually 24 plus a short tail.
 
 The consumer loop:
 
@@ -33,32 +41,55 @@ The consumer loop:
 include::example$services/leaderboard/main.go[tags=consumer]
 ----
 
-And what it does with each record:
+What it does with each record:
 
 [,go]
 ----
 include::example$services/leaderboard/main.go[tags=apply]
 ----
 
+And what it publishes:
+
+[,protobuf]
+----
+include::example$proto/game_events.proto[tags=leaderboard]
+----
+
 == Why
 
-A leaderboard is a sorted set, and a score change is an increment, so each `score_changed` becomes two `ZINCRBY` calls: one on `leaderboard:global`, one on `leaderboard:match:<match_id>`. Redis keeps the set ordered; the dashboard reads the top 10 with `ZREVRANGE` and pushes it to the browser over server-sent events every 500 ms, so the page never polls.
+A leaderboard is a per-player total, and the consumer that owns a player's partition sees every one of that player's score changes, in order. So the service aggregates where the data already is: it adds each `score_changed` delta to an in-memory total for that player. Nothing else is needed to compute the board.
 
-The service commits offsets by hand, after the Redis writes of a batch succeed. That order matters. Commit first and a crash between the commit and the write loses score changes for good. Write first and a crash between the write and the commit replays the batch on restart: the same increments applied twice. The service chooses the second failure mode, at-least-once, because a duplicate is visible and fixable and a loss is neither. The fix for the duplicate is a few lines and is already in the code, off by default (see _In production_).
+It then publishes the total, never the delta. A delta is an instruction ("add 15") and applying it twice is a bug. A total is a fact ("p014 has 795") and publishing it twice is harmless. That single choice is what makes the rest of this solution safe: a redelivered batch, a rebalance, or the full replay in xref:scale-and-replay.adoc[] can only ever write the same fact again.
 
-`skipped` in a consumer instance's `/healthz` counts the records that are not `score_changed` (joins, item pickups, leaves). They are read, ignored, and committed like the rest; a consumer group's offset is per partition, not per event type.
+The topic is compacted, so it converges to one record per player: a materialized view of the board, stored in Redpanda, with no database. Any reader that consumes `game.leaderboard` from the start ends up holding the complete board without replaying a single game event. The dashboard is exactly that reader, and it is deliberately thin: a map, a sort, and an HTTP handler. It never decodes a `GameEvent`.
+
+The service commits offsets by hand, after the entries of a batch are acknowledged, and it blocks a rebalance until the batch in hand is committed. A crash between the publish and the commit replays the batch, and because each entry records the source offset it was computed from, the replayed records are recognized and skipped (`duplicates_skipped` in the service's `/healthz`). Publishing totals makes a duplicate harmless; the offset makes it a no-op.
 
 == Why Redpanda
 
-The leaderboard group's offsets are its own. Redpanda Connect and the achievements service read the same partitions at their own pace, and a slow Postgres in xref:persist-match-history.adoc[] changes nothing here. The lag number on the dashboard comes from the same place `rpk group describe` reads: the difference between the group's committed offset and the partition's high watermark. See xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+Compaction is a topic property, `cleanup.policy=compact`, and the broker does the rest in the background: it rewrites closed segments so that only the newest record per key survives. That is what lets a topic act as a key-value store that streams. `segment.ms` is set low here (60 seconds) so you can watch it happen; production values are minutes to hours. The `leaderboard` group's offsets are its own, so Redpanda Connect and the achievements service read the same partitions at their own pace, and a slow Postgres in xref:persist-match-history.adoc[] changes nothing here. See xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[] and xref:streaming:develop:consume-data/consumer-offsets.adoc[].
 
 == What happens inside
 
-On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. For each `score_changed` the service pipelines the two `ZINCRBY` calls and an `EXPIRE` on the match key in one round trip to Redis. When the whole batch is applied, `CommitUncommittedOffsets` writes the next offset of every partition it read from into `__consumer_offsets`. A record whose schema ID is not registered under `game.player-events-value` (xref:persist-match-history.adoc[] produces one) is counted as `poison_skipped` and committed past; the service decides that a record it cannot read should not stop the board.
+On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. The first record of each partition triggers `seed`:
 
-A second background loop asks the broker for the group's lag and member count every second; in dashboard role that loop is all the binary runs, and it is what xref:scale-and-replay.adoc[] makes visible.
+[,go]
+----
+include::example$services/leaderboard/main.go[tags=seed]
+----
 
-The complete service, for building along:
+On a fresh stack every partition starts at offset 0, so the service logs `rebuilding its totals from scratch` six times (five, if one partition received no player) and computes as it reads. For each `score_changed` it updates the total and produces a `LeaderboardEntry` keyed by `player_id`. When the whole batch is applied, `Flush` waits for the broker to acknowledge the entries, `CommitUncommittedOffsets` writes the next offset of every partition into `__consumer_offsets`, and `AllowRebalance` lets a pending rebalance proceed. A record whose schema ID is not registered under `game.player-events-value` (xref:persist-match-history.adoc[] produces one) is counted as `poison_skipped` and committed past; a record the service cannot read should not stop the board.
+
+On `game.leaderboard`, the producer hashes `player_id` to one of three partitions, so each player's entries land in one partition in order, which is all compaction needs to keep the right one. Every minute the active segment of each partition closes; Redpanda's compaction pass, which runs every 10 seconds, rewrites the closed segments and drops the superseded entries. The `rpk` count in step 3 shrinks toward 24.
+
+The dashboard's reader and the map it fills:
+
+[,go]
+----
+include::example$services/dashboard/main.go[tags=read]
+----
+
+The complete code, for building along:
 
 .services/leaderboard/main.go
 [%collapsible]
@@ -69,7 +100,34 @@ include::example$services/leaderboard/main.go[]
 ----
 ====
 
-The dashboard page `services/leaderboard/static/index.html` is a build-along attachment; it is plain HTML and one `EventSource`.
+.services/internal/board/board.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/internal/board/board.go[]
+----
+====
+
+.services/dashboard/main.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/dashboard/main.go[]
+----
+====
+
+.services/internal/topics/topics.go
+[%collapsible]
+====
+[,go]
+----
+include::example$services/internal/topics/topics.go[]
+----
+====
+
+The dashboard page `services/dashboard/static/index.html` is a build-along attachment; it is plain HTML and one `EventSource`.
 
 == Verify
 
@@ -80,45 +138,43 @@ Run:
 curl -s 'http://localhost:3000/api/top?n=3'
 ----
 
-Expected output (the beginning; the `status` object follows):
+Expected output:
 
 [.solution-verify]
 [,text]
 ----
 {
-  "match": "",
   "top": [
     {
       "rank": 1,
       "player_id": "p014",
+      "display_name": "Sable",
       "score": 795
     },
     {
       "rank": 2,
-      "player_id": "p024",
+      "player_id": "p021",
+      "display_name": "Corvid",
       "score": 715
     },
     {
       "rank": 3,
-      "player_id": "p021",
+      "player_id": "p024",
+      "display_name": "Zephyr",
       "score": 715
     }
+  ]
+}
 ----
 
-These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (xref:scale-and-replay.adoc[]). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error. `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/api/top` asks a consumer instance directly; its `status` includes the partitions it owns.
+These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`; ties are ordered by `player_id`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (xref:scale-and-replay.adoc[]). An empty `top` means the dashboard has not caught up with the topic yet, or the service has not published: `curl -s http://localhost:3000/api/status` shows `records_read` and `caught_up`, and `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/healthz` shows the partitions a service instance owns and how many entries it has published.
 
 == In production
 
 [.production-note]
-Set `LEADERBOARD_DEDUP=true` in `.env` to switch on the exactly-once effect. The partition and offset of a record are unique for the life of the topic, so a key `processed:<partition>:<offset>` set atomically with the increments makes a replayed record a no-op. The code is already in the service:
-
-[,go]
-----
-include::example$services/leaderboard/main.go[tags=dedup]
-----
-
-See the Idempotency and delivery row in xref:index.adoc#_production_considerations[Production considerations].
+The board on `game.leaderboard` is the source of truth for every reader, and the dashboard's in-memory map is enough to serve a top 10. When you need per-player rank queries at scale ("where is p014?"), serve them from Redis or another key-value store that is itself just one more consumer of `game.leaderboard`, loaded from the start and kept current from the tail. Give the topic a `segment.ms` and `min.cleanable.dirty.ratio` sized for your write rate, and keep publishing absolute totals. See the Idempotency and delivery and Data retention rows in xref:index.adoc#_production_considerations[Production considerations], and xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[].
 
 .Files for this step
-* link:{attachmentsdir}/services/leaderboard/static/index.html[services/leaderboard/static/index.html]
+* link:{attachmentsdir}/services/dashboard/static/index.html[services/dashboard/static/index.html]
 * link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
+* link:{attachmentsdir}/proto/game_events.proto[proto/game_events.proto]
