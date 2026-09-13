@@ -116,8 +116,12 @@ jobs:
           node-version: '22'
       - name: Raise the AIO limit
         run: sudo sysctl -w fs.aio-max-nr=1048576
+      - name: Install a virtual display
+        # A step that records a page runs headed Chrome (the only engine that
+        # can record a browser); the runner has no display, so give it one.
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
       - name: Run the step specs
-        run: tools/run-doc-detective.sh "${{ matrix.slug }}"
+        run: xvfb-run -a -s "-screen 0 1280x800x24" tools/run-doc-detective.sh "${{ matrix.slug }}"
       - name: Upload results
         if: failure()
         uses: actions/upload-artifact@v4

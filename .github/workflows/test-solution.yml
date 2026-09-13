@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      doc-detective:
+        description: Run the generated Doc Detective specs (every documented command, plus the media the pages show) instead of seed and verify, and upload any regenerated media
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,13 +53,49 @@ jobs:
           fi
 
       - name: Start the stack
+        if: ${{ !inputs.doc-detective }}
         run: docker compose up -d --wait --wait-timeout 600
 
       - name: Seed
+        if: ${{ !inputs.doc-detective }}
         run: make seed
 
       - name: Verify
+        if: ${{ !inputs.doc-detective }}
         run: ./scripts/verify.sh
+
+      # The Doc Detective path replays every documented command from a clean
+      # stack (its setup spec runs make up, its teardown make clean), including
+      # make verify, and regenerates the media the pages show.
+      - uses: actions/setup-node@v4
+        if: inputs.doc-detective
+        with:
+          node-version: '22'
+
+      - name: Install a virtual display
+        if: inputs.doc-detective
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      - name: Run the generated Doc Detective specs
+        if: inputs.doc-detective
+        working-directory: .
+        run: xvfb-run -a -s "-screen 0 1280x800x24" tools/run-doc-detective.sh "${{ inputs.slug }}"
+
+      - name: Upload regenerated media
+        if: inputs.doc-detective && always()
+        working-directory: .
+        run: |
+          if [ -n "$(git status --porcelain "docs/modules/${{ inputs.slug }}/images")" ]; then
+            echo "media changed:"; git status --porcelain "docs/modules/${{ inputs.slug }}/images"
+            echo "changed=true" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.doc-detective && env.changed == 'true'
+        with:
+          name: media-${{ inputs.slug }}
+          path: docs/modules/${{ inputs.slug }}/images/
+          if-no-files-found: ignore
 
       - name: Collect logs
         if: failure()

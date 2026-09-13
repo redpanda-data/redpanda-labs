@@ -1,5 +1,8 @@
 # Runs every solution against the latest Redpanda, Console, and Connect images
-# and opens (or updates) one issue when anything fails.
+# through its generated Doc Detective specs, opens (or updates) one issue when
+# anything fails, and opens a pull request when the run regenerated the media
+# the pages show (screenshots and recordings are captured by the tests, never
+# edited by hand).
 name: nightly
 
 on:
@@ -40,6 +43,53 @@ jobs:
     with:
       slug: ${{ matrix.slug }}
       latest-images: true
+      doc-detective: true
+
+  # Every solution job uploads a media-<slug> artifact when its Doc Detective
+  # run changed docs/modules/<slug>/images. Put them back into a checkout and
+  # open one pull request for the lot.
+  media:
+    needs: [matrix, solution]
+    if: always() && needs.matrix.outputs.slugs != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: media-*
+          path: ${{ runner.temp }}/media
+      - name: Place the regenerated media
+        id: place
+        run: |
+          slugs=""
+          for d in "$RUNNER_TEMP"/media/media-*; do
+            [ -d "$d" ] || continue
+            slug=${d##*/media-}
+            mkdir -p "docs/modules/$slug/images"
+            cp -R "$d"/. "docs/modules/$slug/images/"
+            slugs="$slugs $slug"
+          done
+          if [ -n "$(git status --porcelain docs/modules/*/images)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "slugs=$(echo $slugs | tr ' ' ',')" >> "$GITHUB_OUTPUT"
+            git status --porcelain docs/modules/*/images
+          fi
+      - name: Open the media pull request
+        if: steps.place.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: nightly/refresh-media
+          title: "Refresh generated media for ${{ steps.place.outputs.slugs }}"
+          commit-message: "Refresh generated media for ${{ steps.place.outputs.slugs }}"
+          body: |
+            The nightly Doc Detective run regenerated the screenshots or recordings under `docs/modules/*/images` for: ${{ steps.place.outputs.slugs }}.
+
+            Media is captured by the tests, never edited by hand. Review the images, then merge.
+          add-paths: docs/modules/*/images/*
+          delete-branch: true
 
   report:
     needs: [matrix, solution]
