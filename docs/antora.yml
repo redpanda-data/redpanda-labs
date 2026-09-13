@@ -1,0 +1,18 @@
+name: solutions
+title: Solutions
+version: ~
+start_page: index.adoc
+asciidoc:
+  attributes:
+    component-metadata:
+      title: "Solutions"
+      description: "End-to-end, runnable reference architectures built on Redpanda."
+      # Amber. Distinct from Streaming (#4D7C0F), Connect (#A21CAF),
+      # Cloud (#1D4ED8), ADP (#7C3AED), and the retired Labs teal (#227093).
+      color: "#A16207"
+      icon: "rocket"
+      order: 5
+    # Persona definitions live in the ROOT partial so the solutions-catalog
+    # extension can read them through the content catalog and writers can
+    # edit one file. Resource ID, not a path.
+    solutions-personas: solutions:ROOT:partial$personas.yaml

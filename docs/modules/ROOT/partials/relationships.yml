@@ -1,0 +1,26 @@
+# Editorial relationships between Product Docs pages and Solutions.
+#
+# The solutions-catalog extension (docs-extensions-and-macros) reads this
+# partial through the content catalog and validates it against
+# docs-data/solutions-relationships.schema.json. Entries here override the
+# category-based scoring: an approved edge is shown with a high score, a
+# rejected edge is never shown, and a pending edge (written by the ML
+# suggestion job) is ignored until an editor reviews it.
+#
+# Entry schema:
+#
+#   - solution: <solution id>          module name under docs/modules/, for
+#                                      example multiplayer-gaming
+#     doc: <resource id>               fully qualified page ID, for example
+#                                      streaming:develop:consume-data/consumer-offsets.adoc
+#     status: approved | rejected | pending
+#     source: editor | ml
+#     confidence: 0.0-1.0              optional for editor entries
+#     reason: <one sentence>           why the pair is (or is not) related
+#     reviewedBy: <github handle>      required when status is approved or rejected
+#     reviewedAt: YYYY-MM-DD           required when status is approved or rejected
+#
+# The same (solution, doc) pair may appear only once. An entry that names a
+# solution or doc that does not exist builds with an "orphaned" warning.
+version: 1
+relationships: []

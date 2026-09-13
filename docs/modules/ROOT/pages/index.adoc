@@ -1,0 +1,6 @@
+= Redpanda Solutions
+:page-layout: solutions-home
+:description: End-to-end, runnable reference architectures built on Redpanda. Each solution ships with working code, step-by-step guidance, and a verification script that proves the outcome.
+
+// The card grid on this page is rendered by the solutions-home layout from the
+// solutions-catalog component attribute. Do not list solutions here by hand.

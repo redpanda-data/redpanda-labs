@@ -1,7 +1,9 @@
-# Redpanda Labs Documentation Personas
+# Redpanda Solutions personas
 #
-# These personas represent the target audience for Redpanda Labs documentation.
-# Use these when assigning :personas: attributes to lab pages.
+# These personas represent the target audience for Redpanda Solutions.
+# Use their ids in the :personas: attribute of a solution overview page.
+# The solutions-catalog extension reads this partial through the Antora
+# content catalog (solutions:ROOT:partial$personas.yaml).
 #
 # Many personas are shared with rp-connect-docs. Reuse these IDs where applicable:
 #   - data_engineer: Builds data pipelines
@@ -10,16 +12,16 @@
 #   - evaluator: Assessing solutions for their organization
 
 schema_version: "1.0"
-repository: redpanda-labs
+repository: solutions
 
 personas:
-  # Shared with rp-connect-docs - included here for labs context
+  # Shared with rp-connect-docs - included here for solutions context
   - id: data_engineer
     name: Data Engineer
     description: Designs and builds data pipelines
     experience_level: intermediate
     typical_content_types:
-      - lab
+      - solution
       - how-to
       - cookbook
 
@@ -28,7 +30,7 @@ personas:
     description: Works with Kafka/Redpanda streaming systems
     experience_level: advanced
     typical_content_types:
-      - lab
+      - solution
       - concepts
       - how-to
 
@@ -37,7 +39,7 @@ personas:
     description: Deploys and maintains systems in production
     experience_level: intermediate
     typical_content_types:
-      - lab
+      - solution
       - how-to
       - troubleshooting
 
@@ -46,11 +48,11 @@ personas:
     description: Assessing Redpanda for their organization
     experience_level: beginner
     typical_content_types:
-      - lab
+      - solution
       - overview
       - concepts
 
-  # Labs-specific persona
+  # Solutions-specific persona
   - id: developer
     name: Application Developer
     description: Builds applications that produce or consume streaming data
@@ -69,6 +71,6 @@ personas:
       - Client library examples
       - Code samples in multiple languages
     typical_content_types:
-      - lab
+      - solution
       - tutorial
       - how-to
