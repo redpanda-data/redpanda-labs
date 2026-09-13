@@ -1,0 +1,13 @@
+{
+  "$comment": "Doc Detective config for the examples module. Run from anywhere: paths in the specs are relative to the spec file. Requires Docker, rpk, Go (rpk transform build fetches TinyGo), and Rust with the wasm32-wasip1 target.",
+  "relativePathBase": "file",
+  "logLevel": "info",
+  "recursive": true,
+  "shell": "bash",
+  "input": ["specs"],
+  "runOn": [
+    {
+      "platforms": ["linux", "mac"]
+    }
+  ]
+}

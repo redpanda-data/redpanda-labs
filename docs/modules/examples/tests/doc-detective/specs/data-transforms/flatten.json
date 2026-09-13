@@ -1,0 +1,87 @@
+{
+  "specId": "data-transforms-flatten",
+  "description": "Flatten JSON messages",
+  "tests": [
+    {
+      "testId": "data-transforms-flatten-run",
+      "description": "Run the Flatten JSON messages example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-flatten --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create src sink",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten",
+            "timeout": 300000
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform deploy --input-topic=src --output-topic=sink --var 'RP_FLATTEN_DELIM=.'",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce src",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume sink --num 1",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten",
+            "stdio": "/iss_position\\.longitude/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-flatten-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-flatten",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/go/flatten",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}

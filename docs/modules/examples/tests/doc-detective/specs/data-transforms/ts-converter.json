@@ -1,0 +1,102 @@
+{
+  "specId": "data-transforms-ts-converter",
+  "description": "Convert timestamps with Rust",
+  "tests": [
+    {
+      "testId": "data-transforms-ts-converter-run",
+      "description": "Run the Convert timestamps with Rust example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-ts-converter --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rustup target add wasm32-wasip1",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create src sink",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "runShell": {
+            "command": "bash ./create-schema.sh",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter",
+            "timeout": 600000
+          }
+        },
+        {
+          "runShell": {
+            "command": "bash ./deploy-transform.sh",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "bash ./produce.sh",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter"
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume sink --use-schema-registry=value -n 1 -o -1",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter",
+            "stdio": "/T\\d\\d:\\d\\d:\\d\\d/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-ts-converter-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-ts-converter",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/rust/ts-converter",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}
