@@ -1,0 +1,3 @@
+docker compose up -d producer orders-consumer
+waiting for orders-service to commit offsets on every partition
+orders-service has committed offsets on 12 partitions

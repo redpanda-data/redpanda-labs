@@ -1,0 +1,13 @@
+TOPIC        STATUS
+shop.orders  OK
+TOPIC                   STATUS
+shop.customer-profiles  OK
+TOPIC                  STATUS
+shop.inventory-events  OK
+TOPIC        STATUS
+shop.alerts  OK
+NAME                    PARTITIONS  REPLICAS
+shop.alerts             3           1
+shop.customer-profiles  6           1
+shop.inventory-events   8           1
+shop.orders             12          1

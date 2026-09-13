@@ -1,0 +1,18 @@
+Created user "migrator".
+Created user "migrator".
+PRINCIPAL      HOST  RESOURCE-TYPE  RESOURCE-NAME      RESOURCE-PATTERN-TYPE  OPERATION         PERMISSION  ERROR
+User:migrator  *     CLUSTER        kafka-cluster      LITERAL                DESCRIBE          ALLOW
+User:migrator  *     GROUP          orders-service     LITERAL                DESCRIBE          ALLOW
+User:migrator  *     GROUP          redpanda-migrator  LITERAL                READ              ALLOW
+User:migrator  *     TOPIC          shop.              PREFIXED               DESCRIBE_CONFIGS  ALLOW
+User:migrator  *     TOPIC          shop.              PREFIXED               READ              ALLOW
+PRINCIPAL      HOST  RESOURCE-TYPE  RESOURCE-NAME   RESOURCE-PATTERN-TYPE  OPERATION         PERMISSION  ERROR
+User:migrator  *     CLUSTER        kafka-cluster   LITERAL                DESCRIBE          ALLOW
+User:migrator  *     GROUP          orders-service  LITERAL                READ              ALLOW
+User:migrator  *     TOPIC          shop.           PREFIXED               ALTER             ALLOW
+User:migrator  *     TOPIC          shop.           PREFIXED               CREATE            ALLOW
+User:migrator  *     TOPIC          shop.           PREFIXED               DESCRIBE_CONFIGS  ALLOW
+User:migrator  *     TOPIC          shop.           PREFIXED               READ              ALLOW
+User:migrator  *     TOPIC          shop.           PREFIXED               WRITE             ALLOW
+SUBJECT   MODE    ERROR
+{GLOBAL}  IMPORT  

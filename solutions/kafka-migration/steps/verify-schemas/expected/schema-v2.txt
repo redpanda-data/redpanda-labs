@@ -1,0 +1,2 @@
+SUBJECT            VERSION  ID    TYPE
+shop.orders-value  2        5     AVRO

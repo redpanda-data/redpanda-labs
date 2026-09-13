@@ -1,0 +1,6 @@
+TOPIC                    LAG
+shop.alerts              26
+shop.customer-profiles   25
+shop.inventory-events    67
+shop.orders              133
+TOTAL                    251

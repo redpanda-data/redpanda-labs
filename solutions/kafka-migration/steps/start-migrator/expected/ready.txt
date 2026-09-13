@@ -1,0 +1,1 @@
+{"statuses":[{"label":"","path":"input","connected":true},{"label":"","path":"output","connected":true}]}

@@ -1,0 +1,5 @@
+CONTEXT  SUBJECT
+default  shop.alerts-value
+default  shop.customer-profiles-value
+default  shop.inventory-events-value
+default  shop.orders-value

@@ -1,0 +1,3 @@
+redpanda_migrator_cg_offsets_committed_total{group="orders-service",label="",path="root.input"} 12
+redpanda_migrator_sr_schemas_created_total{label="",path="root.input"} 8
+redpanda_migrator_topics_created_total{label="",path="root.input"} 4

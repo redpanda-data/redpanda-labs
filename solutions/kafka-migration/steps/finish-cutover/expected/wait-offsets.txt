@@ -1,0 +1,1 @@
+orders-service: 12 partitions, committed offsets identical on source and target
