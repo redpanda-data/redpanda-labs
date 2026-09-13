@@ -6,7 +6,6 @@
   "scripts": {
     "build": "antora --to-dir local-docs --fetch tools/local-antora-playbook.yml",
     "serve": "wds --node-resolve --open / --watch --root-dir local-docs --port 5002",
-    "start": "cross-env-shell LIVERELOAD=true npx gulp",
     "check-metadata": "tools/check-metadata.sh",
     "new-solution": "tools/new-solution.sh"
   },
@@ -18,20 +17,8 @@
     "@sntke/antora-mermaid-extension": "^0.0.6"
   },
   "devDependencies": {
-    "@octokit/core": "^6.1.2",
-    "@octokit/plugin-retry": "^7.1.1",
-    "@octokit/rest": "^21.0.1",
     "@web/dev-server": "^0.2.1",
-    "cross-env": "^7.0.3",
-    "doc-detective": "^2.17.0",
-    "gulp": "^4.0.2",
-    "gulp-connect": "^5.7.0",
     "open": "^9.1.0",
     "semver": "^7.6.3"
-  },
-  "overrides": {
-    "vinyl-fs": {
-      "glob-stream": "~7.0"
-    }
   }
 }

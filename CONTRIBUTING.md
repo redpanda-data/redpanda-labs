@@ -85,8 +85,8 @@ docs/modules/<slug>/
 ```
 
 `tools/new-solution.sh <slug>` creates all of it. The slug is the directory
-name, the Antora module name, and the solution id (`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`).
-`progress`, `download`, `api`, `index`, `ROOT`, and `examples` are reserved.
+name, the Antora module name, and the solution id. The slug rule (`SLUG_RE`)
+and the reserved ids (`RESERVED_IDS`) are defined once in `tools/lib.sh`.
 
 ### The `examples` module is not a solution
 
@@ -111,7 +111,7 @@ checking categories against the shared list).
 | `:page-layout:` | yes | `solution` | `solution-step` on step pages |
 | `:page-topic-type:` | yes | `solution` | |
 | `:description:` | yes | one sentence, 200 chars or fewer | Card text, meta description, search snippet |
-| `:page-solution-version:` | yes | `vX.Y.Z` | The only version input. Drives the tag `<slug>/<version>` and asset `<slug>-<version>.zip`. Bump on any change a reader would notice. |
+| `:page-solution-version:` | yes | `vX.Y.Z` | The only version input. Drives the tag `<slug>/<version>` and asset `<slug>-<version>.zip`. Released only when status is `published` or `deprecated`. Bump on any change a reader would notice. Keep each attribute on one line. |
 | `:page-solution-difficulty:` | yes | `beginner`, `intermediate`, `advanced` | |
 | `:page-solution-duration:` | yes | integer minutes, 5 to 600 | Whole build-along path |
 | `:page-solution-status:` | yes | `draft`, `published`, `deprecated` | Drafts build only with `SOLUTIONS_INCLUDE_DRAFTS=true`. Deprecated publishes with a banner and leaves recommendations. |
@@ -181,7 +181,9 @@ Title is an imperative verb phrase ("Register the schemas"). Then, in order:
 ## Verification standard
 
 - `make up` waits for every healthcheck (`docker compose up -d --wait`). Every
-  service in the compose file has a healthcheck.
+  service in the compose file has a healthcheck. Run one stack at a time, or
+  set different host ports in `.env` (`CONSOLE_PORT`, `REDPANDA_KAFKA_PORT`,
+  and the other `*_PORT` variables from `.env.example`) for each.
 - `make seed` is idempotent and deterministic. Seed data is committed under
   `sample-data/`; generated data comes from a service with a fixed seed and an
   event cap so counts are exact.
@@ -290,9 +292,11 @@ that replays the step's Verify section (and the commands that lead to it) as
 4. Review against the checklist above. Preview the pages on the docs-site
    deploy preview (drafts render there).
 5. Publish: set `:page-solution-status: published`, set
-   `:page-solution-version: v1.0.0`, pin versions in `.env.example`, merge. The
-   release workflow tags `<slug>/v1.0.0`, uploads `<slug>-v1.0.0.zip`, and
-   triggers the site build.
+   `:page-solution-version: v1.0.0`, pin versions in `.env.example`, merge.
+   Drafts are never released, so this is the first release: the workflow
+   creates the release `<slug>/v1.0.0` (which creates the tag) with
+   `<slug>-v1.0.0.zip`, then posts the site build hook. Any version already
+   released is left alone, so a re-run is safe.
 6. Change: bump the version on any reader-visible change; the next merge
    releases it. Fixes that change nothing a reader sees do not need a bump.
 7. Deprecate: set `deprecated` and `:page-solution-superseded-by:`. The page

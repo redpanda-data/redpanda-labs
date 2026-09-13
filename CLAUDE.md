@@ -30,8 +30,8 @@ connect-plugins/, setup-tests/           frozen labs content awaiting migration
 
 ## The contract
 
-- Slug = directory = module = solution id. Reserved: `progress`, `download`,
-  `api`, `index`, `ROOT`, `examples`.
+- Slug = directory = module = solution id. The slug regex and the reserved
+  ids are defined once in `tools/lib.sh` (`SLUG_RE`, `RESERVED_IDS`).
 - Every attribute on the overview page is part of the contract
   (CONTRIBUTING.md, "Metadata reference"). `:page-solution-steps:` is the only
   source of step order; there is no nav.adoc.
@@ -39,8 +39,9 @@ connect-plugins/, setup-tests/           frozen labs content awaiting migration
   `solutions/<slug>/tests/doc-detective/specs/<id>.json`, and every non-index
   page is a step. `tools/check-metadata.sh` enforces this.
 - `:page-solution-version:` (vX.Y.Z) is the only version input. On merge to
-  main the release workflow tags `<slug>/<version>` and publishes
-  `<slug>-<version>.zip` if that tag does not exist yet.
+  main the release workflow creates the release `<slug>/<version>` with
+  `<slug>-<version>.zip` for published or deprecated solutions that have no
+  release yet; drafts are never released. Every run posts the Netlify hook.
 - `:page-solution-status:` is `draft` until the solution is reviewed. Drafts
   build only when `SOLUTIONS_INCLUDE_DRAFTS=true`.
 
