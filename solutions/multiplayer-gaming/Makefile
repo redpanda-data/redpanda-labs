@@ -80,16 +80,19 @@ clean: .env ## Stop the services and delete their volumes
 # stack plus MinIO, points Redpanda at the bucket, and restarts the broker so
 # cloud_storage_enabled takes effect. Only the local broker can do this; the
 # steps and `make verify` never depend on it.
-TIERED_CONFIG := cloud_storage_enabled=true \
-  cloud_storage_api_endpoint=minio cloud_storage_api_endpoint_port=9000 \
+# cloud_storage_enabled must come last: Redpanda refuses it until the
+# endpoint, bucket, and credentials are set.
+TIERED_CONFIG := cloud_storage_api_endpoint=minio cloud_storage_api_endpoint_port=9000 \
   cloud_storage_disable_tls=true cloud_storage_url_style=path \
   cloud_storage_region=local cloud_storage_bucket=$${TIERED_BUCKET:-redpanda-tiered} \
   cloud_storage_access_key=$${MINIO_ROOT_USER:-minio} cloud_storage_secret_key=$${MINIO_ROOT_PASSWORD:-minio-dev-only} \
-  cloud_storage_segment_max_upload_interval_sec=60
+  cloud_storage_segment_max_upload_interval_sec=60 \
+  cloud_storage_enabled=true
 
 tiered-up: .env ## Start the stack with MinIO and switch Tiered Storage on (local broker only)
 	COMPOSE_PROFILES=local,tiered $(COMPOSE) up -d --build --wait
-	@set -a; . ./.env; set +a; for kv in $(TIERED_CONFIG); do $(RPK) cluster config set $${kv%%=*} $${kv#*=} >/dev/null; done
+	COMPOSE_PROFILES=local,tiered $(COMPOSE) run --rm minio-init
+	@set -a; . ./.env; set +a; for kv in $(TIERED_CONFIG); do $(RPK) cluster config set $${kv%%=*} $${kv#*=} >/dev/null || exit 1; done
 	$(COMPOSE) restart redpanda
 	COMPOSE_PROFILES=local,tiered $(COMPOSE) up -d --wait
 	@$(RPK) cluster config get cloud_storage_enabled

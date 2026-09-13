@@ -345,11 +345,13 @@ services:
       timeout: 3s
       retries: 12
 
-  # Creates the bucket once, then exits 0.
+  # Creates the bucket, then exits. Its own profile keeps `up --wait` from
+  # treating that exit as a failure; `make tiered-up` runs it with
+  # `docker compose run --rm minio-init`.
   minio-init:
     image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
     container_name: multiplayer-gaming-minio-init
-    profiles: ["tiered"]
+    profiles: ["tiered-init"]
     entrypoint: ["/bin/sh", "-c"]
     command:
       - mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing "local/$$TIERED_BUCKET" && mc ls local
