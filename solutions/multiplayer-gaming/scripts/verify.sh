@@ -34,16 +34,26 @@ CONNECT=http://localhost:${CONNECT_PORT:-4195}
 
 # </dev/null: docker compose exec forwards stdin, which would eat the loop input in check 5.
 psql_q() { docker compose exec -T postgres psql -U "${POSTGRES_USER:-game}" -d "${POSTGRES_DB:-game}" -tA -c "$1" 2>/dev/null </dev/null | tr -d '[:space:]'; }
-redis_q() { docker compose exec -T redis redis-cli --raw "$@" 2>/dev/null </dev/null; }
+# The compacted topic, read from the start to the current end and reduced the
+# way compaction reduces it: the last record per key wins. One "player=score"
+# line per player, so the checks below do not depend on how far compaction
+# has run. Keys and decoded values come out of rpk; awk keeps the last score
+# it sees for each key.
+board() {
+  rpk_exec topic consume game.leaderboard -o :end --use-schema-registry=value -f '%k\t%v\n' 2>/dev/null </dev/null \
+    | awk -F'\t' '{ s=$2; sub(/.*"score": *"?/, "", s); sub(/[^-0-9].*/, "", s); last[$1]=s } END { for (k in last) printf "%s=%s\n", k, last[k] }'
+}
+board_top10() { board | sort -t= -k2,2nr -k1,1 | head -10; }
 hwm() { rpk_exec topic describe "$1" -p 2>/dev/null </dev/null | awk 'NR>1 {s+=$NF} END {print s+0}'; }
 partitions() { rpk_exec topic describe "$1" -p 2>/dev/null </dev/null | awk 'NR>1 {n++} END {print n+0}'; }
 stat() { curl -fsS "$SIM/stats" 2>/dev/null | sed -nE "s/.*\"$1\": *([0-9]+).*/\1/p" | head -1; }
 stat_topic() { curl -fsS "$SIM/stats" 2>/dev/null | tr -d '\n ' | sed -nE "s/.*\"acked\":\{[^}]*\"$1\":([0-9]+).*/\1/p"; }
 
 # tag::checks[]
-# 1. The four topics exist with the documented partition counts.
-shape="game.player-events=$(partitions game.player-events) game.match-events=$(partitions game.match-events) game.achievements=$(partitions game.achievements) game.player-events.dlq=$(partitions game.player-events.dlq)"
-assert_eq "topics and partitions" "game.player-events=6 game.match-events=3 game.achievements=3 game.player-events.dlq=1" "$shape"
+# 1. The five topics exist with the documented partition counts, and the
+#    leaderboard topic is compacted.
+shape="game.player-events=$(partitions game.player-events) game.match-events=$(partitions game.match-events) game.achievements=$(partitions game.achievements) game.leaderboard=$(partitions game.leaderboard) game.player-events.dlq=$(partitions game.player-events.dlq) cleanup.policy=$(rpk_exec topic describe game.leaderboard -c 2>/dev/null </dev/null | awk '$1=="cleanup.policy" {print $2}')"
+assert_eq "topics and partitions" "game.player-events=6 game.match-events=3 game.achievements=3 game.leaderboard=3 game.player-events.dlq=1 cleanup.policy=compact" "$shape"
 
 # 2. Every record the simulator had acknowledged is on the log, and no more.
 #    Before any burst the total is exactly SIM_EVENTS_MAX.
@@ -62,17 +72,23 @@ lag_total() { rpk_exec group describe leaderboard achievements connect-history 2
 retry 30 2 sh -c '[ "$(docker compose exec -T rpk rpk group describe leaderboard achievements connect-history 2>/dev/null | awk '"'"'$1 ~ /^game\./ && $6 ~ /^[0-9]+$/ {s+=$6} END {print s+0}'"'"')" = "0" ]' >/dev/null
 assert_eq "consumer groups leaderboard, achievements, connect-history have lag 0" 0 "$(lag_total)"
 
-# 4. The leaderboard has one member per scoring player known to Postgres.
-assert_eq "Redis leaderboard:global has one entry per scoring player" "$(psql_q "SELECT COUNT(DISTINCT player_id) FROM player_events WHERE event_type='score_changed'")" "$(redis_q ZCARD leaderboard:global)"
+# 4. After dedupe by key, game.leaderboard holds one live entry per player
+#    that ever scored, according to Postgres.
+snapshot=$(board)
+assert_eq "game.leaderboard has one live entry per scoring player (last record per key)" "$(psql_q "SELECT COUNT(DISTINCT player_id) FROM player_events WHERE event_type='score_changed'")" "$(printf '%s\n' "$snapshot" | grep -c .)"
 
-# 5. The top 10 scores in Redis equal the sum of deltas in Postgres.
-top=$(redis_q ZREVRANGE leaderboard:global 0 9 WITHSCORES | paste - - | awk '{printf "%s=%s\n", $1, $2}' | sort)
+# 5. The top 10 totals on game.leaderboard equal the sum of deltas in Postgres,
+#    and the dashboard, which reads the same topic, serves the same ten.
+top=$(printf '%s\n' "$snapshot" | sort -t= -k2,2nr -k1,1 | head -10 | sort)
 ids=$(printf '%s\n' "$top" | cut -d= -f1 | sed "s/.*/'&'/" | paste -sd, -)
 db=$(psql_q "SELECT string_agg(player_id || '=' || total, ',' ORDER BY player_id) FROM (SELECT player_id, SUM(delta) AS total FROM player_events WHERE event_type='score_changed' AND player_id IN ($ids) GROUP BY 1) t")
-if [ "$(printf '%s\n' "$top" | wc -l | tr -d ' ')" = "10" ] && [ "$(printf '%s\n' "$top" | paste -sd, -)" = "$db" ]; then
-  pass "top 10 Redis scores equal SUM(delta) in Postgres"
+dash_top() { curl -fsS "$LEADERBOARD/api/top" 2>/dev/null | tr -d '\n ' | grep -oE '"player_id":"[^"]+","display_name":"[^"]*","score":-?[0-9]+' | sed -E 's/"player_id":"([^"]+)","display_name":"[^"]*","score":(-?[0-9]+)/\1=\2/' | sort | paste -sd, -; }
+dash_agrees() { [ "$(dash_top)" = "$db" ]; }
+retry 10 1 dash_agrees >/dev/null
+if [ "$(printf '%s\n' "$top" | wc -l | tr -d ' ')" = "10" ] && [ "$(printf '%s\n' "$top" | paste -sd, -)" = "$db" ] && [ "$(dash_top)" = "$db" ]; then
+  pass "top 10 totals on game.leaderboard equal SUM(delta) in Postgres and the dashboard's /api/top"
 else
-  fail "top 10 Redis scores equal SUM(delta) in Postgres (redis: $(printf '%s\n' "$top" | paste -sd, -); postgres: $db)"
+  fail "top 10 totals on game.leaderboard equal SUM(delta) in Postgres and the dashboard's /api/top (topic: $(printf '%s\n' "$top" | paste -sd, -); postgres: $db; dashboard: $(dash_top))"
 fi
 
 # 6. Every finished match has a history row.
