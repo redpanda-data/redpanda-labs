@@ -138,10 +138,13 @@ Derived at build time, never authored: `page-solution-id`, `page-solution-repo`,
 
 1. Title: the outcome, not the technology ("Multiplayer game events with a
    live leaderboard", not "Redpanda + Go + Redis").
-2. Intro, 25 to 40 words: the business problem and what the reader has running
-   at the end.
+2. Intro: two short paragraphs, 50 to 80 words in total. The first names the
+   business problem; the second says what the reader builds and what they
+   have running at the end.
 3. "After completing this solution, you will be able to:" with three to five
-   checkbox outcomes. Each one is observable.
+   outcomes as literal checkboxes (`* [ ] ...`). Each one is observable.
+   Solutions use these literal checkboxes, not `:learning-objective-N:`
+   attributes.
 4. `== What you build`: the running system in two or three sentences plus a
    bullet per component.
 5. `== Architecture`: diagram (`images/architecture.svg`), a left-to-right walk
@@ -171,11 +174,15 @@ Title is an imperative verb phrase ("Register the schemas"). Then, in order:
 - `== Why Redpanda`: the capability that makes this step simple, linked.
 - `== What happens inside`: what the brokers, consumer groups, Schema Registry,
   or Connect do when the commands run. Only the behaviour this step exercises.
-- `== Verify`: one exact command and its expected output, then the one or two
-  most likely failures and their fixes. This section is what the step's Doc
-  Detective spec replays.
+- Verification: either a `== Verify` section or a `[.solution-verify]` block,
+  with one exact command and its expected output, then the one or two most
+  likely failures and their fixes. This is what the step's Doc Detective spec
+  replays. A published step must have one or the other.
 - `== In production`: one or two sentences in a `[.production-note]` block,
   linking the Production considerations row or the canonical page.
+
+Both `[.solution-verify]` and `[.production-note]` render as styled callouts
+in the solution layouts.
 - `.Files for this step`: the attachments a build-along reader needs.
 
 ## Verification standard

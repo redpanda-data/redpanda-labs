@@ -40,10 +40,14 @@
 // Required when status is deprecated: id of the solution that replaces this one
 // :page-solution-superseded-by:
 
-// Intro: 1-2 sentences, 25-40 words. Name the business problem and what the reader
-// ends up with. No "this page describes".
-[What business problem does this solve, and what does the reader have running at the end?]
+// Intro: two short paragraphs, 50-80 words in total. First the business problem,
+// then what the reader builds and has running at the end. No "this page describes".
+[What business problem does this solve, and why is it hard to do well?]
 
+[What does the reader build, and what do they have running at the end?]
+
+// Three to five observable outcomes as literal checkboxes. Solutions do not use
+// :learning-objective-N: attributes.
 After completing this solution, you will be able to:
 
 * [ ] [Outcome 1: an observable, verifiable capability]
