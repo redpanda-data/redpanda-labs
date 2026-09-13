@@ -1,4 +1,4 @@
-# Editorial relationships between Product Docs pages and Solutions.
+# Editorial relationships between Product Docs pages and solutions.
 #
 # The solutions-catalog extension (docs-extensions-and-macros) reads this
 # partial through the content catalog and validates it against
