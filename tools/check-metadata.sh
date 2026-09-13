@@ -19,6 +19,8 @@
 #     [,<lang>]) and contains only include:: lines: no literal code in pages
 #   - tools/gen-dd-specs.mjs --check passes: every step page yields at least one runnable
 #     command block and one expected-output check, and every command tag it references exists
+#   - every image:: or video:: target in a solution page exists under images/ and is an output
+#     of a steps/<step-id>/media.json screenshot or record step, or is architecture.svg
 #   - no template placeholders are left: in attribute values ([...], __x__, vX.Y.Z,
 #     the step id "step") and in page bodies (bracket-only placeholder lines, __title__),
 #     and no ifdef::env-* conditionals or github.com/redpanda-data/(redpanda-labs|solutions) links
@@ -342,6 +344,21 @@ for slug in $slugs; do
   if grep -qE '^image::architecture\.svg\[' "$page" && [ ! -f "$module/images/architecture.svg" ]; then
     err "$module/images/architecture.svg" "missing; the overview includes image::architecture.svg[]"
   fi
+
+  # Media: every other image or video a page shows is produced by the test run
+  # (a screenshot or record step in steps/<step-id>/media.json), never edited
+  # by hand.
+  media_outputs=""
+  if command -v node >/dev/null; then
+    media_outputs=$(node "$root/tools/gen-dd-specs.mjs" "$slug" --media 2>/dev/null | awk -F'\t' '{n=split($2,a,"/"); print a[n]}')
+  fi
+  while IFS= read -r f; do
+    while IFS=: read -r ln target; do
+      [ "$target" = "architecture.svg" ] && continue
+      [ -f "$module/images/$target" ] || err "$f:$ln" "$target is not in $module/images/"
+      in_list "$target" $media_outputs || err "$f:$ln" "$target is not produced by any steps/<step-id>/media.json screenshot or record step (media is captured by the test run, never added by hand)"
+    done < <(grep -nE '^(image|video)::[^\[]+\[' "$f" | sed -E 's/^([0-9]+):(image|video)::([^[]+)\[.*/\1:\3/')
+  done < <(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null)
 
   # Symlinks
   while IFS= read -r l; do
