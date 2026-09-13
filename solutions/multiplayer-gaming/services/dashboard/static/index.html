@@ -45,10 +45,17 @@
   const rows = document.getElementById('rows');
   const $ = (id) => document.getElementById(id);
   let last = {};
+  let lastPayload = '';
   const es = new EventSource('/events');
   es.onmessage = (m) => {
+    // Repaint only when something changed: the stream arrives twice a second
+    // whether or not the board moved, and an idle page should stay still.
     const d = JSON.parse(m.data);
     const s = d.status || {};
+    delete s.updated_at;
+    const payload = JSON.stringify(d);
+    if (payload === lastPayload) return;
+    lastPayload = payload;
     $('topic').textContent = s.topic || '-';
     $('players').textContent = s.players ?? '-';
     $('records').textContent = s.records_read ?? '-';
