@@ -214,6 +214,11 @@ func (s *simulator) run(ctx context.Context) {
 	}
 }
 
+// end::loop[]
+
+// tag::produce[]
+// produceOne serializes the next event, prefixes the schema ID header, and
+// hands the record to the client; the callback counts acknowledgements.
 func (s *simulator) produceOne(ctx context.Context, burst bool) {
 	ev := s.gen.Next()
 	s.genN.Add(1)
@@ -245,7 +250,7 @@ func (s *simulator) produceOne(ctx context.Context, burst bool) {
 	})
 }
 
-// end::loop[]
+// end::produce[]
 
 // tag::poison[]
 // Poison writes one record whose schema ID (2147483647) is registered nowhere.

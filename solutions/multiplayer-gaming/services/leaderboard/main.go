@@ -138,7 +138,7 @@ func main() {
 		return
 	}
 
-	// tag::consumer[]
+	// tag::client[]
 	// A member of the `leaderboard` group. Offsets are committed by hand after
 	// the entries of a batch are acknowledged by the broker, never before: a
 	// crash between the publish and the commit replays the batch, and the
@@ -190,7 +190,10 @@ func main() {
 	// plain Close would wait for a rebalance that this loop is blocking.
 	defer s.cl.CloseAllowingRebalance()
 	s.ready.Store(true)
+	// end::client[]
 
+	// tag::consumer[]
+	// Poll, apply, flush, commit, then let a pending rebalance through.
 	for ctx.Err() == nil {
 		fetches := s.cl.PollRecords(ctx, 500)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
@@ -255,15 +258,7 @@ func (s *service) apply(ctx context.Context, r *kgo.Record) error {
 		s.skipped.Add(1)
 		return nil
 	}
-	p := s.players[pid]
-	if p == nil {
-		p = &player{partition: r.Partition, offset: -1}
-		s.players[pid] = p
-		if s.byPart[r.Partition] == nil {
-			s.byPart[r.Partition] = map[string]struct{}{}
-		}
-		s.byPart[r.Partition][pid] = struct{}{}
-	}
+	p := s.playerFor(pid, r.Partition)
 	if j := ev.GetPlayerJoined(); j != nil {
 		p.name = j.GetDisplayName()
 		s.skipped.Add(1)
@@ -286,6 +281,9 @@ func (s *service) apply(ctx context.Context, r *kgo.Record) error {
 	return s.publish(ctx, pid, p)
 }
 
+// end::apply[]
+
+// tag::publish[]
 // publish sends the player's absolute total to game.leaderboard, keyed by
 // player_id so compaction keeps the newest one. Produce is asynchronous; the
 // consumer loop flushes before it commits.
@@ -312,7 +310,22 @@ func (s *service) publish(ctx context.Context, pid string, p *player) error {
 	return nil
 }
 
-// end::apply[]
+// end::publish[]
+
+// playerFor returns the player's state, creating it on the partition the
+// player's events live on.
+func (s *service) playerFor(pid string, partition int32) *player {
+	p := s.players[pid]
+	if p == nil {
+		p = &player{partition: partition, offset: -1}
+		s.players[pid] = p
+		if s.byPart[partition] == nil {
+			s.byPart[partition] = map[string]struct{}{}
+		}
+		s.byPart[partition][pid] = struct{}{}
+	}
+	return p
+}
 
 // tag::seed[]
 // seed prepares the state for a partition this instance has just started

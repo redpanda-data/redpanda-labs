@@ -128,6 +128,12 @@ func (g *Generator) Next() *gamepb.GameEvent {
 	return ev
 }
 
+// end::next[]
+
+// tag::step[]
+// step advances the simulated clock by one tick: fill the lobby, end a match
+// that has run its length, or let one player in a running match score or pick
+// up an item.
 func (g *Generator) step() {
 	// Fill the lobby: every group of MatchSize idle players starts a match.
 	if len(g.idle) >= g.cfg.MatchSize {
@@ -156,7 +162,7 @@ func (g *Generator) step() {
 	}})
 }
 
-// end::next[]
+// end::step[]
 
 // delta is mostly positive so leaderboards climb; the negatives are what
 // break hot streaks.

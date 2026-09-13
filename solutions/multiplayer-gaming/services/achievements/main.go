@@ -99,7 +99,7 @@ func main() {
 		time.Sleep(2 * time.Second)
 	}
 
-	// tag::consumer[]
+	// tag::client[]
 	// State lives with the partition. When a rebalance takes partitions away,
 	// their players are forgotten here and rebuilt by whichever instance gets
 	// them next, from that instance's committed offset onward.
@@ -131,7 +131,9 @@ func main() {
 		log.Fatalf("kafka client: %v", err)
 	}
 	defer s.cl.Close()
+	// end::client[]
 
+	// tag::consumer[]
 	for ctx.Err() == nil {
 		fetches := s.cl.PollRecords(ctx, 500)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
@@ -189,7 +191,17 @@ func (s *service) handle(ctx context.Context, r *kgo.Record) error {
 		s.unlocked[u.Achievement]++
 	}
 	s.mu.Unlock()
+	return s.produceUnlocks(ctx, ev, unlocks)
+}
 
+// end::handle[]
+
+// tag::produce[]
+// produceUnlocks writes one achievement_unlocked event per unlock, keyed by
+// the same player_id as the source event so the achievements topic is ordered
+// per player too. The caller commits the source offset only after these
+// produces are acknowledged.
+func (s *service) produceUnlocks(ctx context.Context, ev *gamepb.GameEvent, unlocks []rules.Unlock) error {
 	for _, u := range unlocks {
 		out := &gamepb.GameEvent{
 			EventId:    achievementID(ev, u),
@@ -229,7 +241,7 @@ func achievementID(ev *gamepb.GameEvent, u rules.Unlock) string {
 	return "ach-" + hex.EncodeToString(sum[:8])
 }
 
-// end::handle[]
+// end::produce[]
 
 func (s *service) serve(addr string) {
 	mux := http.NewServeMux()

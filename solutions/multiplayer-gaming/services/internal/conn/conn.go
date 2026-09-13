@@ -48,6 +48,9 @@ func FromEnv() Config {
 	return c
 }
 
+// end::config[]
+
+// tag::clients[]
 // KafkaOpts returns the franz-go options for this cluster: seed brokers, TLS
 // when enabled, and SASL/SCRAM when a mechanism is set. Append the options
 // specific to one client (consumer group, producer settings) after them.
@@ -79,7 +82,7 @@ func (c Config) SchemaRegistry() (*sr.Client, error) {
 	return sr.NewClient(opts...)
 }
 
-// end::config[]
+// end::clients[]
 
 // Describe is a one-line summary for logs, without the password.
 func (c Config) Describe() string {

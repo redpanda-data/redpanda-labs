@@ -103,6 +103,8 @@ output:
                   batching:
                     count: 100
                     period: 500ms
+# end::output[]
+# tag::dlq[]
     # Second choice: the dead-letter topic, with the original bytes, key, and
     # headers plus the error, so the record can be inspected and replayed.
     - processors:
@@ -120,7 +122,7 @@ output:
         key: ${! @kafka_key }
         metadata:
           include_patterns: [ "^event_type$", "^error$", "^kafka_topic$", "^kafka_partition$", "^kafka_offset$" ]
-# end::output[]
+# end::dlq[]
 
 http:
   address: 0.0.0.0:4195

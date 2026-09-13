@@ -72,6 +72,7 @@ lag_total() { rpk_exec group describe leaderboard achievements connect-history 2
 retry 30 2 sh -c '[ "$(docker compose exec -T rpk rpk group describe leaderboard achievements connect-history 2>/dev/null | awk '"'"'$1 ~ /^game\./ && $6 ~ /^[0-9]+$/ {s+=$6} END {print s+0}'"'"')" = "0" ]' >/dev/null
 assert_eq "consumer groups leaderboard, achievements, connect-history have lag 0" 0 "$(lag_total)"
 
+# tag::board[]
 # 4. After dedupe by key, game.leaderboard holds one live entry per player
 #    that ever scored, according to Postgres.
 snapshot=$(board)
@@ -90,6 +91,7 @@ if [ "$(printf '%s\n' "$top" | wc -l | tr -d ' ')" = "10" ] && [ "$(printf '%s\n
 else
   fail "top 10 totals on game.leaderboard equal SUM(delta) in Postgres and the dashboard's /api/top (topic: $(printf '%s\n' "$top" | paste -sd, -); postgres: $db; dashboard: $(dash_top))"
 fi
+# end::board[]
 
 # 6. Every finished match has a history row.
 assert_eq "match_history rows equal match_ended events" "$(stat match_ended)" "$(psql_q "SELECT COUNT(*) FROM match_history")"

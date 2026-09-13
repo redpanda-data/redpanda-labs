@@ -64,6 +64,9 @@ func WaitForSchema(ctx context.Context, cl *sr.Client, subject, schemaText strin
 	}
 }
 
+// end::lookup[]
+
+// tag::serde[]
 // NewProducerSerde encodes one Protobuf message type in the Confluent wire
 // format (magic byte, schema ID, Protobuf message index, payload) with one
 // fixed schema ID. index is the message's position in the .proto file:
@@ -91,7 +94,7 @@ func IndexOf(m proto.Message) int {
 	panic(fmt.Sprintf("schema: no message index for %T", m))
 }
 
-// end::lookup[]
+// end::serde[]
 
 // tag::decoder[]
 // Decoder decodes the records of one subject into one Protobuf message type.
