@@ -29,7 +29,7 @@ The first run builds the three Go service images and pulls Redpanda, Console, Re
 
 . Open Redpanda Console at http://localhost:8080. The cluster has one broker and no topics of yours yet.
 
-The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all nine containers pass:
+The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all ten containers pass:
 
 [,yaml]
 ----
@@ -38,7 +38,7 @@ include::example$docker-compose.yml[tags=redpanda]
 
 == Why
 
-The stack is nine containers, and the interesting ones are the three that read the same topic. Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect and the two Go consumers do the same for the subject they decode with.
+The stack is ten containers, and the interesting ones are the three that read the same topic. Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect and the two Go consumers do the same for the subject they decode with.
 
 == Why Redpanda
 

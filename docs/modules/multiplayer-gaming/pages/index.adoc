@@ -33,7 +33,7 @@ A game simulator produces `GameEvent` records to two topics. Three consumers rea
 * *Game simulator* (Go, franz-go): deterministic event stream, idempotent producer, admin API to burst load or inject a poison record.
 * *`game.player-events`* and *`game.match-events`*: the two source topics, keyed by `player_id` and `match_id`.
 * *Schema Registry*: holds the `GameEvent` Protobuf schema as subjects `<topic>-value` with `BACKWARD` compatibility.
-* *Leaderboard service* (Go, Redis): consumer group `leaderboard`, `ZINCRBY` per score change, dashboard with server-sent events, scales to three instances.
+* *Leaderboard service* (Go, Redis): consumer group `leaderboard`, `ZINCRBY` per score change, scales to three instances; the same binary in dashboard role serves the live top 10 over server-sent events on a fixed port.
 * *Achievements service* (Go): consumer group `achievements`, per-player state kept in memory because every player lives on one partition, produces to `game.achievements`.
 * *Redpanda Connect*: consumer group `connect-history`, decodes with Schema Registry, flattens the `oneof`, inserts into Postgres, routes failures to `game.player-events.dlq`.
 * *Redpanda Console*: decodes Protobuf records with the same schemas.

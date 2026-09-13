@@ -7,7 +7,7 @@ The leaderboard service has been consuming since step 4. Here you open its dashb
 
 == What you do
 
-. Open the dashboard at http://localhost:3000. It shows the top 10, the instance name, the partitions this instance owns, its consumer lag, and how many records it applied.
+. Open the dashboard at http://localhost:3000. It shows the top 10, the number of members in the `leaderboard` group, and the group's consumer lag. The dashboard is the leaderboard binary started with `LEADERBOARD_ROLE=dashboard`: it reads Redis and asks the broker for the group's lag, but joins no group, so its address never changes when you scale the consumers in step 8.
 
 . Ask Redis directly:
 +
@@ -46,7 +46,7 @@ A leaderboard is a sorted set, and a score change is an increment, so each `scor
 
 The service commits offsets by hand, after the Redis writes of a batch succeed. That order matters. Commit first and a crash between the commit and the write loses score changes for good. Write first and a crash between the write and the commit replays the batch on restart: the same increments applied twice. The service chooses the second failure mode, at-least-once, because a duplicate is visible and fixable and a loss is neither. The fix for the duplicate is a few lines and is already in the code, off by default (see _In production_).
 
-`skipped` on the dashboard counts the records that are not `score_changed` (joins, item pickups, leaves). They are read, ignored, and committed like the rest; a consumer group's offset is per partition, not per event type.
+`skipped` in a consumer instance's `/healthz` counts the records that are not `score_changed` (joins, item pickups, leaves). They are read, ignored, and committed like the rest; a consumer group's offset is per partition, not per event type.
 
 == Why Redpanda
 
@@ -56,7 +56,7 @@ The leaderboard group's offsets are its own. Redpanda Connect and the achievemen
 
 On startup the client joins the group `leaderboard`, and the group coordinator assigns it all six partitions because it is the only member. `PollRecords` fetches up to 500 records across those partitions. For each `score_changed` the service pipelines the two `ZINCRBY` calls and an `EXPIRE` on the match key in one round trip to Redis. When the whole batch is applied, `CommitUncommittedOffsets` writes the next offset of every partition it read from into `__consumer_offsets`. A record whose schema ID is not registered under `game.player-events-value` (step 6 produces one) is counted as `poison_skipped` and committed past; the service decides that a record it cannot read should not stop the board.
 
-A second background loop asks the broker for the group's lag every second, which is what the dashboard shows and what step 8 makes visible.
+A second background loop asks the broker for the group's lag and member count every second; in dashboard role that loop is all the binary runs, and it is what step 8 makes visible.
 
 The complete service, for building along:
 
@@ -105,7 +105,7 @@ Expected output (the beginning; the `status` object follows):
     }
 ----
 
-These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (step 8). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error.
+These exact scores follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. Different numbers mean a different seed or cap in `.env`, or a simulator that was bursting (step 8). A `lag` above 0 in `status` that does not fall means Redis is refusing writes; `docker compose logs leaderboard-service` shows the error. `docker compose exec -T leaderboard-service wget -qO- http://localhost:8080/api/top` asks a consumer instance directly; its `status` includes the partitions it owns.
 
 == In production
 

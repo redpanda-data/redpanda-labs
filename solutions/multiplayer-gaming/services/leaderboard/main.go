@@ -1,7 +1,9 @@
 // The leaderboard service consumes game.player-events in the consumer group
-// `leaderboard`, applies every score_changed delta to Redis sorted sets, and
-// serves a live dashboard. Run more than one instance and the group splits the
-// six partitions between them.
+// `leaderboard` and applies every score_changed delta to Redis sorted sets.
+// Run more than one instance and the group splits the six partitions between
+// them. The same binary started with LEADERBOARD_ROLE=dashboard joins no
+// group: it only reads Redis and the group's lag and serves the dashboard on
+// a fixed port, so scaling the consumers never moves the dashboard's address.
 package main
 
 import (
@@ -46,6 +48,7 @@ type service struct {
 	group    string
 	topic    string
 	instance string
+	role     string
 	dedup    bool
 
 	processed atomic.Int64
@@ -53,6 +56,7 @@ type service struct {
 	poison    atomic.Int64
 	dupes     atomic.Int64
 	lag       atomic.Int64
+	members   atomic.Int64
 	lagErr    atomic.Value
 	assigned  sync.Map // partition -> struct{}
 }
@@ -68,6 +72,7 @@ func main() {
 		group:    envvar.String("GROUP", "leaderboard"),
 		topic:    envvar.String("TOPIC", "game.player-events"),
 		instance: host,
+		role:     envvar.String("LEADERBOARD_ROLE", "consumer"),
 		dedup:    envvar.Bool("LEADERBOARD_DEDUP", false),
 	}
 	s.lagErr.Store("")
@@ -78,6 +83,19 @@ func main() {
 	}
 
 	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
+
+	if s.role == "dashboard" {
+		// No consumer group membership: a plain client for the admin API, so
+		// the lag and member count shown are the consumers', not ours.
+		cl, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.ClientID("leaderboard-dashboard"))
+		if err != nil {
+			log.Fatalf("kafka client: %v", err)
+		}
+		defer cl.Close()
+		s.adm = kadm.NewClient(cl)
+		s.watchLag(ctx)
+		return
+	}
 
 	srClient, err := sr.NewClient(sr.URLs(srURL))
 	if err != nil {
@@ -248,6 +266,7 @@ func (s *service) watchLag(ctx context.Context) {
 			continue
 		}
 		s.lag.Store(l.Lag.Total())
+		s.members.Store(int64(len(l.Members)))
 		s.lagErr.Store("")
 	}
 }
@@ -280,7 +299,9 @@ func (s *service) status(ctx context.Context) map[string]any {
 	players, _ := s.rdb.ZCard(ctx, globalKey).Result()
 	return map[string]any{
 		"instance":           s.instance,
+		"role":               s.role,
 		"group":              s.group,
+		"members":            s.members.Load(),
 		"topic":              s.topic,
 		"partitions":         parts,
 		"lag":                s.lag.Load(),

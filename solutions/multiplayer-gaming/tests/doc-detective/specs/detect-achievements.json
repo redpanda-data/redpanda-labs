@@ -9,7 +9,7 @@
       "steps": [
         {
           "runShell": {
-            "command": "docker compose exec -T rpk rpk topic consume game.achievements -o start -n 1 --use-schema-registry value",
+            "command": "docker compose exec -T rpk rpk topic consume game.achievements -o start -n 1 --use-schema-registry=value",
             "timeout": 60000,
             "stdio": "/achievementUnlocked/"
           }

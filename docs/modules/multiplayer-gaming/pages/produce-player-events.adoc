@@ -23,7 +23,7 @@ make seed
 [,bash]
 ----
 docker compose exec -T rpk rpk topic consume game.player-events -p 1 -o start -n 2 \
-  --use-schema-registry value
+  --use-schema-registry=value
 ----
 
 The producer configuration is a few lines of franz-go:

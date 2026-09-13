@@ -20,7 +20,7 @@ curl -s http://localhost:3010/healthz
 +
 [,bash]
 ----
-docker compose exec -T rpk rpk topic consume game.achievements -o start -n 2 --use-schema-registry value
+docker compose exec -T rpk rpk topic consume game.achievements -o start -n 2 --use-schema-registry=value
 ----
 +
 Each record is a `GameEvent` with the `achievementUnlocked` case set, keyed by the same `player_id` as the event that triggered it, with headers `event_type` and `achievement`.

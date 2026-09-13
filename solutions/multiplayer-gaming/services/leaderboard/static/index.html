@@ -28,12 +28,11 @@
 <main>
   <h1>Live leaderboard</h1>
   <div class="meta">
-    <span>instance <b id="instance">-</b></span>
-    <span>partitions <b id="partitions">-</b></span>
+    <span>group <b id="group">-</b></span>
+    <span>members <b id="members">-</b></span>
     <span id="lagwrap">consumer lag <b id="lag">-</b></span>
     <span>players <b id="players">-</b></span>
-    <span>applied <b id="processed">-</b></span>
-    <span>poison skipped <b id="poison">-</b></span>
+
   </div>
   <table>
     <thead><tr><th>#</th><th>Player</th><th style="text-align:right">Score</th><th style="width:40%"></th></tr></thead>
@@ -48,13 +47,11 @@
   es.onmessage = (m) => {
     const d = JSON.parse(m.data);
     const s = d.status || {};
-    $('instance').textContent = s.instance || '-';
-    $('partitions').textContent = (s.partitions || []).sort((a, b) => a - b).join(',') || '-';
+    $('group').textContent = s.group || '-';
+    $('members').textContent = s.members ?? '-';
     $('lag').textContent = s.lag ?? '-';
     $('lagwrap').className = s.lag > 0 ? 'lag-hot' : '';
     $('players').textContent = s.players ?? '-';
-    $('processed').textContent = s.processed ?? '-';
-    $('poison').textContent = s.poison_skipped ?? '-';
     const max = d.top.length ? d.top[0].score : 1;
     rows.innerHTML = '';
     for (const e of d.top) {

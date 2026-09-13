@@ -15,7 +15,7 @@
         },
         {
           "runShell": {
-            "command": "docker compose exec -T rpk rpk topic consume game.player-events -p 1 -o start -n 1 --use-schema-registry value",
+            "command": "docker compose exec -T rpk rpk topic consume game.player-events -p 1 -o start -n 1 --use-schema-registry=value",
             "timeout": 60000,
             "stdio": "/eventId/"
           }

@@ -23,7 +23,7 @@ Then open:
 
 | URL | What |
 |---|---|
-| http://localhost:3000 | live leaderboard (top 10, consumer lag, partitions of this instance) |
+| http://localhost:3000 | live leaderboard dashboard (top 10, group members, consumer lag) |
 | http://localhost:8080 | Redpanda Console, Protobuf records decoded through Schema Registry |
 | http://localhost:8090/stats | simulator counters; `POST /burst?rate=&seconds=` and `POST /poison` |
 | http://localhost:3010/healthz | achievements service: players tracked, unlocks by name |
@@ -33,7 +33,7 @@ Then open:
 
 | Path | Purpose |
 |---|---|
-| `docker-compose.yml` | Redpanda, Console, an `rpk` helper, Redis, Postgres, Redpanda Connect, and the three Go services |
+| `docker-compose.yml` | Redpanda, Console, an `rpk` helper, Redis, Postgres, Redpanda Connect, the three Go services, and the leaderboard dashboard (the leaderboard binary in dashboard role) |
 | `Makefile` | `up`, `down`, `topics`, `schemas`, `seed`, `verify`, `logs`, `clean`, `proto`, `test`, `test-docs` |
 | `proto/game_events.proto` | the `GameEvent` contract (version 2); `proto/history/` holds version 1 and a deliberately breaking change |
 | `buf.yaml`, `buf.gen.yaml` | `make proto` regenerates `services/internal/gamepb/` with buf in a container |

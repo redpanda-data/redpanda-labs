@@ -24,7 +24,7 @@ docker compose up -d --scale leaderboard-service=3 --no-recreate --wait leaderbo
 docker compose exec -T rpk rpk group describe leaderboard
 ----
 +
-`MEMBERS 3`, and the partition table shows two partitions per member. The dashboards at http://localhost:3001 and http://localhost:3002 each show their own instance name and partitions; all three read the same Redis and show the same top 10.
+`MEMBERS 3`, and the partition table shows two partitions per member. The dashboard at http://localhost:3000 now shows `members 3`; it did not move, because it is not a group member. Each consumer instance reports the partitions it owns: `docker compose exec -T --index 2 leaderboard-service wget -qO- http://localhost:8080/api/top` shows the second one's.
 
 . Snapshot the board, then destroy and rebuild it. Stop the consumers, wipe Redis, seek the group to the start of every partition, start the consumers again:
 +
@@ -64,7 +64,7 @@ Consumer group offsets are the consumer's, not the broker's, and `rpk group seek
 
 During the burst the simulator's ticker fires 2000 times a second and the producer batches records per partition; the leaderboard applies them at Redis round-trip speed, so its committed offsets fall behind the high watermarks and `Lag.Total()` in the service rises. When the burst ends the group drains the difference.
 
-When the second and third instances join, the coordinator triggers a rebalance with the cooperative-sticky protocol. Partitions are revoked from the first instance in a first round and assigned to the newcomers in a second; the `OnPartitionsRevoked` and `OnPartitionsAssigned` callbacks in the service update the partition list the dashboard shows. Uncommitted work on a revoked partition is committed before the partition moves.
+When the second and third instances join, the coordinator triggers a rebalance with the cooperative-sticky protocol. Partitions are revoked from the first instance in a first round and assigned to the newcomers in a second; the `OnPartitionsRevoked` and `OnPartitionsAssigned` callbacks in the service update the partition list each instance reports. Uncommitted work on a revoked partition is committed before the partition moves.
 
 `FLUSHALL` empties Redis. `rpk group seek leaderboard --to start` writes offset 0 for each of the six partitions into `__consumer_offsets` on behalf of the group. When the instances start again they fetch from 0, apply every `score_changed` again in the original per-partition order, and the sorted set converges on the same members with the same scores, because addition is commutative across partitions and ordered within one. `before.txt` and `after.txt` are identical; the poison record and the burst are replayed too, and are handled the same way.
 
