@@ -21,6 +21,24 @@ make clean    # stop and delete volumes
 host ports (`CONSOLE_PORT`, `LEADERBOARD_PORT`, and the other `*_PORT`
 variables). Change them there when another stack already uses the defaults.
 
+### Run against Redpanda Cloud
+
+The same stack runs against a Redpanda Cloud Serverless cluster. In `.env`,
+set `COMPOSE_PROFILES=` (empty, so the local `redpanda` and `console`
+containers are skipped), `REDPANDA_BROKERS` to the bootstrap server URL,
+`REDPANDA_TLS_ENABLED=true`, `REDPANDA_SASL_MECHANISM=SCRAM-SHA-256`, the
+user and password, `REDPANDA_SCHEMA_REGISTRY_URL`, and
+`REDPANDA_TOPIC_REPLICAS=3`. The Go services (`services/internal/conn`), the
+`rpk` helper, and the Connect pipeline all read those variables; nothing
+else changes. `make tiered-up` is local only.
+
+### Tiered Storage extension
+
+`make tiered-up` starts the local stack plus MinIO (compose profile
+`tiered`), points Redpanda at the bucket, and restarts the broker with
+`cloud_storage_enabled=true`. It is the overview page's "Extend this
+solution" section, not a step: `make verify` never depends on it.
+
 Then open (default ports):
 
 | URL | What |
@@ -35,8 +53,8 @@ Then open (default ports):
 
 | Path | Purpose |
 |---|---|
-| `docker-compose.yml` | Redpanda, Console, an `rpk` helper, Postgres, Redpanda Connect, the three Go services, and the leaderboard dashboard (a fourth Go program that only reads `game.leaderboard`) |
-| `Makefile` | `up`, `down`, `topics`, `schemas`, `seed`, `verify`, `logs`, `clean`, `proto`, `test`, `test-docs` |
+| `docker-compose.yml` | Redpanda and Console (profile `local`), an `rpk` helper, Postgres, Redpanda Connect, the three Go services, the leaderboard dashboard (a fourth Go program that only reads `game.leaderboard`), and MinIO (profile `tiered`) |
+| `Makefile` | `up`, `down`, `topics`, `schemas`, `seed`, `verify`, `logs`, `clean`, `proto`, `test`, `test-docs`, `tiered-up` |
 | `proto/game_events.proto` | the `GameEvent` contract (version 2) and the `LeaderboardEntry` published to `game.leaderboard`; `proto/history/` holds version 1 and a deliberately breaking change |
 | `buf.yaml`, `buf.gen.yaml` | `make proto` regenerates `services/internal/gamepb/` with buf in a container |
 | `services/` | one Go module: `simulator`, `leaderboard` (aggregates and publishes totals), `dashboard` (reads the compacted topic), `achievements`, shared `internal/` packages, one `Dockerfile` |
