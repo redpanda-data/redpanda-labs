@@ -1,5 +1,5 @@
-# One image recipe for the three Go services. docker-compose.yml passes
-# SERVICE=simulator|leaderboard|achievements as a build argument.
+# One image recipe for the four Go programs. docker-compose.yml passes
+# SERVICE=simulator|leaderboard|dashboard|achievements as a build argument.
 FROM golang:1.26-alpine AS build
 ARG SERVICE
 WORKDIR /src

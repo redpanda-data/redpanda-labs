@@ -1,111 +1,116 @@
 // The leaderboard service consumes game.player-events in the consumer group
-// `leaderboard` and applies every score_changed delta to Redis sorted sets.
-// Run more than one instance and the group splits the six partitions between
-// them. The same binary started with LEADERBOARD_ROLE=dashboard joins no
-// group: it only reads Redis and the group's lag and serves the dashboard on
-// a fixed port, so scaling the consumers never moves the dashboard's address.
+// `leaderboard`, keeps each player's running total in memory, and publishes
+// that total to the compacted topic game.leaderboard after every
+// score_changed. It publishes state, never deltas: the same total sent twice
+// changes nothing, so a replay is harmless by construction. Run more than one
+// instance and the group splits the six source partitions between them; each
+// instance owns the players on its partitions and nobody else's.
+//
+// The service serves nothing but /healthz. The dashboard is a separate
+// program (services/dashboard) that reads game.leaderboard.
 package main
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sr"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"multiplayer-gaming/services/internal/board"
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
+	"multiplayer-gaming/services/internal/topics"
 )
 
-//go:embed static/index.html
-var static embed.FS
-
-const globalKey = "leaderboard:global"
-
-func matchKey(id string) string { return "leaderboard:match:" + id }
+// player is the in-memory state for one player: the total so far and the
+// source offset it was computed up to.
+type player struct {
+	name      string
+	score     int64
+	partition int32
+	offset    int64 // last game.player-events offset included in score; -1 when none
+}
 
 type service struct {
-	rdb      *redis.Client
 	cl       *kgo.Client
-	adm      *kadm.Client
 	dec      *schema.Decoder
+	serde    *sr.Serde
+	brokers  []string
+	srURL    string
 	group    string
 	topic    string
+	outTopic string
 	instance string
-	role     string
-	dedup    bool
 
-	processed atomic.Int64
-	skipped   atomic.Int64
-	poison    atomic.Int64
-	dupes     atomic.Int64
-	lag       atomic.Int64
-	members   atomic.Int64
-	lagErr    atomic.Value
-	assigned  sync.Map // partition -> struct{}
+	mu       sync.Mutex
+	players  map[string]*player
+	byPart   map[int32]map[string]struct{}
+	assigned map[int32]bool
+	seeded   map[int32]bool
+
+	processed  atomic.Int64
+	skipped    atomic.Int64
+	poison     atomic.Int64
+	duplicates atomic.Int64
+	published  atomic.Int64
+	produceErr atomic.Value
+	ready      atomic.Bool
 }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
 	host, _ := os.Hostname()
 	s := &service{
+		brokers:  envvar.List("KAFKA_BROKERS", "redpanda:9092"),
+		srURL:    envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081"),
 		group:    envvar.String("GROUP", "leaderboard"),
 		topic:    envvar.String("TOPIC", "game.player-events"),
+		outTopic: envvar.String("OUT_TOPIC", board.Topic),
 		instance: host,
-		role:     envvar.String("LEADERBOARD_ROLE", "consumer"),
-		dedup:    envvar.Bool("LEADERBOARD_DEDUP", false),
+		players:  map[string]*player{},
+		byPart:   map[int32]map[string]struct{}{},
+		assigned: map[int32]bool{},
+		seeded:   map[int32]bool{},
 	}
-	s.lagErr.Store("")
-
-	s.rdb = redis.NewClient(&redis.Options{Addr: envvar.String("REDIS_ADDR", "redis:6379")})
-	if err := s.rdb.Ping(ctx).Err(); err != nil {
-		log.Fatalf("redis: %v", err)
-	}
-
+	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
 	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
 
-	if s.role == "dashboard" {
-		// No consumer group membership: a plain client for the admin API, so
-		// the lag and member count shown are the consumers', not ours.
-		cl, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.ClientID("leaderboard-dashboard"))
-		if err != nil {
-			log.Fatalf("kafka client: %v", err)
-		}
-		defer cl.Close()
-		s.adm = kadm.NewClient(cl)
-		s.watchLag(ctx)
-		return
-	}
-
-	srClient, err := sr.NewClient(sr.URLs(srURL))
+	srClient, err := sr.NewClient(sr.URLs(s.srURL))
 	if err != nil {
 		log.Fatalf("schema registry client: %v", err)
 	}
 	if err := schema.WaitForRegistry(ctx, srClient); err != nil {
 		log.Fatal(err)
 	}
-	// The subject exists once step 3 has run. Until then there is nothing to
-	// decode, so wait rather than guess.
+	text, err := schema.ReadFile(schemaFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// This service is a producer too: it needs the leaderboard subject to
+	// exist before it writes anything, exactly like the simulator.
+	outID, err := schema.WaitForSchema(ctx, srClient, schema.Subject(s.outTopic), text, func() {
+		log.Printf("schema for %s not registered yet; run `make schemas`", schema.Subject(s.outTopic))
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.serde = schema.NewProducerSerde(outID, &gamepb.LeaderboardEntry{}, schema.IndexOf(&gamepb.LeaderboardEntry{}))
 	for {
 		s.dec, err = schema.NewDecoder(ctx, srClient, schema.Subject(s.topic))
 		if err == nil {
@@ -117,38 +122,67 @@ func main() {
 		log.Printf("waiting for subject %s: %v", schema.Subject(s.topic), err)
 		time.Sleep(2 * time.Second)
 	}
+	// Both topics are created by the reader (step 2). Wait for them before
+	// joining the group, so the first fetch is a real one.
+	plain, err := kgo.NewClient(kgo.SeedBrokers(s.brokers...), kgo.ClientID("leaderboard-wait-"+host))
+	if err != nil {
+		log.Fatalf("kafka client: %v", err)
+	}
+	topics.Wait(ctx, plain, s.topic, s.outTopic)
+	plain.Close()
+	if ctx.Err() != nil {
+		return
+	}
 
 	// tag::consumer[]
 	// A member of the `leaderboard` group. Offsets are committed by hand after
-	// the Redis writes of a batch succeed, never before: a crash between the
-	// write and the commit replays the batch (at-least-once), a crash between
-	// the commit and the write would lose it.
+	// the entries of a batch are acknowledged by the broker, never before: a
+	// crash between the publish and the commit replays the batch, and the
+	// source offset carried in every entry makes that replay a no-op. A
+	// rebalance waits (BlockRebalanceOnPoll) until the batch in hand is
+	// published and committed, so a partition never moves with work in flight.
 	s.cl, err = kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+		kgo.SeedBrokers(s.brokers...),
 		kgo.ConsumerGroup(s.group),
 		kgo.ConsumeTopics(s.topic),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
+		kgo.BlockRebalanceOnPoll(),
+		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
 		kgo.ClientID("leaderboard-"+host),
 		kgo.OnPartitionsAssigned(func(_ context.Context, _ *kgo.Client, m map[string][]int32) {
-			for _, ps := range m[s.topic] {
-				s.assigned.Store(ps, struct{}{})
+			// State is loaded lazily, on the first record of each partition,
+			// so this callback stays quick.
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, p := range m[s.topic] {
+				s.assigned[p] = true
 			}
 			log.Printf("assigned partitions %v", m[s.topic])
 		}),
 		kgo.OnPartitionsRevoked(func(_ context.Context, _ *kgo.Client, m map[string][]int32) {
-			for _, ps := range m[s.topic] {
-				s.assigned.Delete(ps)
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for _, p := range m[s.topic] {
+				for pid := range s.byPart[p] {
+					delete(s.players, pid)
+				}
+				delete(s.byPart, p)
+				delete(s.seeded, p)
+				delete(s.assigned, p)
 			}
-			log.Printf("revoked partitions %v", m[s.topic])
+			log.Printf("revoked partitions %v, dropped their player state", m[s.topic])
 		}),
 	)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}
-	defer s.cl.Close()
-	s.adm = kadm.NewClient(s.cl)
-	go s.watchLag(ctx)
+	// Leave the group on shutdown so `rpk group seek` sees an empty group at
+	// once instead of after the session timeout. With BlockRebalanceOnPoll the
+	// plain Close would wait for a rebalance that this loop is blocking.
+	defer s.cl.CloseAllowingRebalance()
+	s.ready.Store(true)
 
 	for ctx.Err() == nil {
 		fetches := s.cl.PollRecords(ctx, 500)
@@ -160,27 +194,38 @@ func main() {
 		})
 		var batchErr error
 		fetches.EachRecord(func(r *kgo.Record) {
-			if batchErr != nil {
+			if batchErr == nil {
+				batchErr = s.apply(ctx, r)
+			}
+		})
+		// Wait for every entry of the batch to be acknowledged before the
+		// offsets that produced them are committed.
+		if err := s.cl.Flush(ctx); err != nil && batchErr == nil {
+			batchErr = err
+		}
+		if pe, _ := s.produceErr.Load().(string); pe != "" && batchErr == nil {
+			batchErr = errors.New(pe)
+		}
+		if batchErr != nil {
+			if ctx.Err() != nil {
 				return
 			}
-			batchErr = s.apply(ctx, r)
-		})
-		if batchErr != nil {
-			// Do not commit: the batch is redelivered after the next poll.
-			log.Printf("batch failed, will replay: %v", batchErr)
-			time.Sleep(time.Second)
-			continue
+			// Fail fast. The offsets of this batch are not committed, so the
+			// restarted instance fetches it again from the last commit.
+			log.Fatalf("batch failed, exiting so the batch is replayed from the last commit: %v", batchErr)
 		}
 		if err := s.cl.CommitUncommittedOffsets(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("commit: %v", err)
 		}
+		s.cl.AllowRebalance()
 	}
 	// end::consumer[]
 }
 
 // tag::apply[]
-// apply turns one record into Redis writes. Only score_changed moves the
-// board; the other event types are skipped but still committed.
+// apply folds one record into the player's total and publishes the total.
+// Only score_changed moves the board; player_joined supplies the display
+// name; everything else is skipped but still committed.
 func (s *service) apply(ctx context.Context, r *kgo.Record) error {
 	ev, err := s.dec.Decode(ctx, r.Value)
 	if err != nil {
@@ -191,194 +236,152 @@ func (s *service) apply(ctx context.Context, r *kgo.Record) error {
 		}
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.seeded[r.Partition] {
+		if err := s.seed(ctx, r.Partition, r.Offset); err != nil {
+			return err
+		}
+	}
+	pid := ev.GetPlayerId()
+	if pid == "" {
+		s.skipped.Add(1)
+		return nil
+	}
+	p := s.players[pid]
+	if p == nil {
+		p = &player{partition: r.Partition, offset: -1}
+		s.players[pid] = p
+		if s.byPart[r.Partition] == nil {
+			s.byPart[r.Partition] = map[string]struct{}{}
+		}
+		s.byPart[r.Partition][pid] = struct{}{}
+	}
+	if j := ev.GetPlayerJoined(); j != nil {
+		p.name = j.GetDisplayName()
+		s.skipped.Add(1)
+		return nil
+	}
 	sc := ev.GetScoreChanged()
 	if sc == nil {
 		s.skipped.Add(1)
 		return nil
 	}
-	if s.dedup {
-		return s.applyOnce(ctx, r, ev, sc)
+	if r.Offset <= p.offset {
+		// Already included in the total this instance loaded from
+		// game.leaderboard: a redelivered record after a crash or a rebalance.
+		s.duplicates.Add(1)
+		return nil
 	}
-	pipe := s.rdb.TxPipeline()
-	pipe.ZIncrBy(ctx, globalKey, float64(sc.GetDelta()), ev.GetPlayerId())
-	pipe.ZIncrBy(ctx, matchKey(ev.GetMatchId()), float64(sc.GetDelta()), ev.GetPlayerId())
-	pipe.Expire(ctx, matchKey(ev.GetMatchId()), 24*time.Hour)
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("redis: %w", err)
-	}
+	p.score += sc.GetDelta()
+	p.offset = r.Offset
 	s.processed.Add(1)
+	return s.publish(ctx, pid, p)
+}
+
+// publish sends the player's absolute total to game.leaderboard, keyed by
+// player_id so compaction keeps the newest one. Produce is asynchronous; the
+// consumer loop flushes before it commits.
+func (s *service) publish(ctx context.Context, pid string, p *player) error {
+	entry := &gamepb.LeaderboardEntry{
+		PlayerId:        pid,
+		DisplayName:     p.name,
+		Score:           p.score,
+		UpdatedAt:       timestamppb.Now(),
+		SourcePartition: p.partition,
+		SourceOffset:    p.offset,
+	}
+	value, err := s.serde.Encode(entry)
+	if err != nil {
+		return fmt.Errorf("encode entry: %w", err)
+	}
+	s.cl.Produce(ctx, &kgo.Record{Topic: s.outTopic, Key: []byte(pid), Value: value}, func(_ *kgo.Record, err error) {
+		if err != nil {
+			s.produceErr.Store(fmt.Sprintf("produce %s: %v", s.outTopic, err))
+			return
+		}
+		s.published.Add(1)
+	})
 	return nil
 }
 
 // end::apply[]
 
-// tag::dedup[]
-// applyOnce is the production shape of apply, enabled with LEADERBOARD_DEDUP=true.
-// The partition and offset of a record are unique for the life of the topic,
-// so a key processed:<partition>:<offset> set atomically alongside the
-// increments turns at-least-once delivery into exactly-once effect: a replayed
-// record finds its key and changes nothing.
-var applyOnceScript = redis.NewScript(`
-if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[3]) == false then
-  return 0
-end
-redis.call('ZINCRBY', KEYS[2], ARGV[1], ARGV[2])
-redis.call('ZINCRBY', KEYS[3], ARGV[1], ARGV[2])
-redis.call('EXPIRE', KEYS[3], ARGV[3])
-return 1
-`)
-
-func (s *service) applyOnce(ctx context.Context, r *kgo.Record, ev *gamepb.GameEvent, sc *gamepb.ScoreChanged) error {
-	processedKey := fmt.Sprintf("processed:%d:%d", r.Partition, r.Offset)
-	n, err := applyOnceScript.Run(ctx, s.rdb,
-		[]string{processedKey, globalKey, matchKey(ev.GetMatchId())},
-		sc.GetDelta(), ev.GetPlayerId(), int64((24*time.Hour)/time.Second),
-	).Int()
-	if err != nil {
-		return fmt.Errorf("redis: %w", err)
-	}
-	if n == 0 {
-		s.dupes.Add(1)
+// tag::seed[]
+// seed prepares the state for a partition this instance has just started
+// reading, before its first record is applied. firstOffset is where the
+// group's committed offset put us. At the start of the log there is nothing
+// to load: every record is about to be re-read, so the totals are rebuilt from
+// scratch and republished, and the compacted topic converges to the same
+// values. Anywhere else, the entries already on game.leaderboard for this
+// partition's players are the totals up to their source_offset, and apply
+// skips anything at or below it.
+func (s *service) seed(ctx context.Context, partition int32, firstOffset int64) error {
+	s.seeded[partition] = true
+	if firstOffset == 0 {
+		log.Printf("partition %d starts at the beginning of the log: rebuilding its totals from scratch", partition)
 		return nil
 	}
-	s.processed.Add(1)
+	entries, err := board.Snapshot(ctx, s.brokers, s.srURL, s.outTopic, "leaderboard-seed-"+s.instance)
+	if err != nil {
+		return fmt.Errorf("load %s: %w", s.outTopic, err)
+	}
+	n := 0
+	for pid, e := range entries {
+		if e.GetSourcePartition() != partition {
+			continue
+		}
+		s.players[pid] = &player{name: e.GetDisplayName(), score: e.GetScore(), partition: partition, offset: e.GetSourceOffset()}
+		if s.byPart[partition] == nil {
+			s.byPart[partition] = map[string]struct{}{}
+		}
+		s.byPart[partition][pid] = struct{}{}
+		n++
+	}
+	log.Printf("partition %d resumes at offset %d: loaded %d player totals from %s", partition, firstOffset, n, s.outTopic)
 	return nil
 }
 
-// end::dedup[]
+// end::seed[]
 
-func (s *service) watchLag(ctx context.Context) {
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		lags, err := s.adm.Lag(ctx, s.group)
-		if err != nil {
-			s.lagErr.Store(err.Error())
-			continue
-		}
-		l, ok := lags[s.group]
-		if !ok || l.Error() != nil {
-			continue
-		}
-		s.lag.Store(l.Lag.Total())
-		s.members.Store(int64(len(l.Members)))
-		s.lagErr.Store("")
+func (s *service) status() map[string]any {
+	s.mu.Lock()
+	parts := make([]int32, 0, len(s.assigned))
+	for p := range s.assigned {
+		parts = append(parts, p)
 	}
-}
-
-type entry struct {
-	Rank   int     `json:"rank"`
-	Player string  `json:"player_id"`
-	Score  float64 `json:"score"`
-}
-
-func (s *service) top(ctx context.Context, match string, n int) ([]entry, error) {
-	key := globalKey
-	if match != "" {
-		key = matchKey(match)
-	}
-	zs, err := s.rdb.ZRevRangeWithScores(ctx, key, 0, int64(n-1)).Result()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]entry, 0, len(zs))
-	for i, z := range zs {
-		out = append(out, entry{Rank: i + 1, Player: fmt.Sprint(z.Member), Score: z.Score})
-	}
-	return out, nil
-}
-
-func (s *service) status(ctx context.Context) map[string]any {
-	var parts []int32
-	s.assigned.Range(func(k, _ any) bool { parts = append(parts, k.(int32)); return true })
-	players, _ := s.rdb.ZCard(ctx, globalKey).Result()
+	players := len(s.players)
+	s.mu.Unlock()
+	sort.Slice(parts, func(i, j int) bool { return parts[i] < parts[j] })
+	pe, _ := s.produceErr.Load().(string)
 	return map[string]any{
+		"status":             "ok",
 		"instance":           s.instance,
-		"role":               s.role,
 		"group":              s.group,
-		"members":            s.members.Load(),
 		"topic":              s.topic,
+		"out_topic":          s.outTopic,
+		"ready":              s.ready.Load(),
 		"partitions":         parts,
-		"lag":                s.lag.Load(),
-		"lag_error":          s.lagErr.Load(),
+		"players":            players,
 		"processed":          s.processed.Load(),
+		"published":          s.published.Load(),
 		"skipped":            s.skipped.Load(),
 		"poison_skipped":     s.poison.Load(),
-		"duplicates_dropped": s.dupes.Load(),
-		"dedup":              s.dedup,
-		"players":            players,
-		"updated_at":         time.Now().UTC().Format(time.RFC3339),
+		"duplicates_skipped": s.duplicates.Load(),
+		"produce_error":      pe,
 	}
 }
 
-// tag::http[]
 func (s *service) serve(addr string) {
 	mux := http.NewServeMux()
-	sub, err := fs.Sub(static, "static")
-	if err != nil {
-		log.Fatal(err)
-	}
-	mux.Handle("/", http.FileServer(http.FS(sub)))
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.rdb.Ping(r.Context()).Err(); err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-		writeJSON(w, map[string]any{"status": "ok", "instance": s.instance, "group": s.group})
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(s.status())
 	})
-	mux.HandleFunc("/api/top", func(w http.ResponseWriter, r *http.Request) {
-		n, _ := strconv.Atoi(r.URL.Query().Get("n"))
-		if n <= 0 || n > 100 {
-			n = 10
-		}
-		top, err := s.top(r.Context(), r.URL.Query().Get("match"), n)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, map[string]any{"match": r.URL.Query().Get("match"), "top": top, "status": s.status(r.Context())})
-	})
-	// Server-sent events: one snapshot every 500 ms, no polling from the page.
-	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-			return
-		}
-		t := time.NewTicker(500 * time.Millisecond)
-		defer t.Stop()
-		for {
-			top, err := s.top(r.Context(), "", 10)
-			if err == nil {
-				b, _ := json.Marshal(map[string]any{"top": top, "status": s.status(r.Context())})
-				fmt.Fprintf(w, "data: %s\n\n", b)
-				flusher.Flush()
-			}
-			select {
-			case <-r.Context().Done():
-				return
-			case <-t.C:
-			}
-		}
-	})
-	log.Printf("dashboard on %s", addr)
+	log.Printf("health on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("http: %v", err)
 	}
-}
-
-// end::http[]
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
 }

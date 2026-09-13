@@ -22,17 +22,19 @@
   tr.moved td { animation: flash .6s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--accent) 35%, var(--row)); } to { background: var(--row); } }
   .bar { height: 3px; background: var(--accent); width: 0; transition: width .4s; }
+  .id { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-left: 6px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Live leaderboard</h1>
   <div class="meta">
+    <span>topic <b id="topic">-</b></span>
+    <span>players <b id="players">-</b></span>
+    <span>records read <b id="records">-</b></span>
     <span>group <b id="group">-</b></span>
     <span>members <b id="members">-</b></span>
     <span id="lagwrap">consumer lag <b id="lag">-</b></span>
-    <span>players <b id="players">-</b></span>
-
   </div>
   <table>
     <thead><tr><th>#</th><th>Player</th><th style="text-align:right">Score</th><th style="width:40%"></th></tr></thead>
@@ -47,17 +49,19 @@
   es.onmessage = (m) => {
     const d = JSON.parse(m.data);
     const s = d.status || {};
+    $('topic').textContent = s.topic || '-';
+    $('players').textContent = s.players ?? '-';
+    $('records').textContent = s.records_read ?? '-';
     $('group').textContent = s.group || '-';
     $('members').textContent = s.members ?? '-';
     $('lag').textContent = s.lag ?? '-';
     $('lagwrap').className = s.lag > 0 ? 'lag-hot' : '';
-    $('players').textContent = s.players ?? '-';
     const max = d.top.length ? d.top[0].score : 1;
     rows.innerHTML = '';
     for (const e of d.top) {
       const tr = document.createElement('tr');
       if (last[e.player_id] !== undefined && last[e.player_id] !== e.score) tr.className = 'moved';
-      tr.innerHTML = `<td class="n">${e.rank}</td><td>${e.player_id}</td><td class="n">${e.score}</td><td><div class="bar" style="width:${Math.round(100 * e.score / max)}%"></div></td>`;
+      tr.innerHTML = `<td class="n">${e.rank}</td><td>${e.display_name || e.player_id} <span class="id">${e.player_id}</span></td><td class="n">${e.score}</td><td><div class="bar" style="width:${Math.round(100 * e.score / max)}%"></div></td>`;
       rows.appendChild(tr);
       last[e.player_id] = e.score;
     }
