@@ -34,6 +34,10 @@ services:
       - --smp 1
       - --memory 1G
       - --default-log-level=info
+      # Let game.leaderboard roll a segment every minute (segment.ms=60000) so
+      # compaction is visible during the walkthrough. The cluster default
+      # clamps segment.ms to 10 minutes.
+      - --set redpanda.log_segment_ms_min=60000
     ports:
       - "${REDPANDA_SR_PORT:-18081}:18081"
       - "${REDPANDA_PROXY_PORT:-18082}:18082"
@@ -103,19 +107,6 @@ services:
   # end::rpk[]
 
   # tag::stores[]
-  redis:
-    image: redis:7-alpine
-    container_name: multiplayer-gaming-redis
-    ports:
-      - "${REDIS_PORT:-16379}:6379"
-    networks:
-      - redpanda
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   postgres:
     image: postgres:16-alpine
     container_name: multiplayer-gaming-postgres
@@ -206,7 +197,8 @@ services:
 
   # No container_name and no published port, so `docker compose up -d --scale
   # leaderboard-service=3` can run three members of the group side by side.
-  # The dashboard is the same binary in dashboard role, below, on a fixed port.
+  # It reads game.player-events and publishes totals to game.leaderboard; the
+  # dashboard below reads that topic on a fixed port.
   leaderboard-service:
     build:
       context: ./services
@@ -215,19 +207,21 @@ services:
     environment:
       KAFKA_BROKERS: redpanda:9092
       SCHEMA_REGISTRY_URL: http://redpanda:8081
-      REDIS_ADDR: redis:6379
+      SCHEMA_FILE: /proto/game_events.proto
       GROUP: leaderboard
       TOPIC: game.player-events
+      OUT_TOPIC: game.leaderboard
       HTTP_ADDR: ":8080"
-      LEADERBOARD_ROLE: consumer
-      LEADERBOARD_DEDUP: ${LEADERBOARD_DEDUP:-false}
+    volumes:
+      - ./proto:/proto:ro
     networks:
       - redpanda
     depends_on:
       redpanda:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+    # A batch that cannot be published exits the process; the restart replays
+    # it from the last committed offset.
+    restart: on-failure
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null || exit 1"]
       interval: 5s
@@ -239,23 +233,20 @@ services:
     build:
       context: ./services
       args:
-        SERVICE: leaderboard
+        SERVICE: dashboard
     container_name: multiplayer-gaming-leaderboard-dashboard
     environment:
       KAFKA_BROKERS: redpanda:9092
-      REDIS_ADDR: redis:6379
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      TOPIC: game.leaderboard
       GROUP: leaderboard
-      TOPIC: game.player-events
       HTTP_ADDR: ":8080"
-      LEADERBOARD_ROLE: dashboard
     ports:
       - "${LEADERBOARD_PORT:-3000}:8080"
     networks:
       - redpanda
     depends_on:
       redpanda:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null || exit 1"]

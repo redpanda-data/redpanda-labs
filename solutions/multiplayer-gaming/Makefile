@@ -11,7 +11,7 @@ RPK := $(COMPOSE) exec -T rpk rpk
 BUF_VERSION ?= 1.57.2
 GO_IMAGE ?= golang:1.26-alpine
 
-TOPICS := game.player-events game.match-events game.achievements game.player-events.dlq
+TOPICS := game.player-events game.match-events game.achievements game.leaderboard game.player-events.dlq
 SUBJECTS := game.player-events-value game.match-events-value game.achievements-value
 
 .PHONY: help up down topics schemas seed verify logs clean proto test test-docs
@@ -29,16 +29,17 @@ down: .env ## Stop the services, keep data volumes
 	$(COMPOSE) down
 
 # tag::topics[]
-topics: ## Create the four topics (idempotent)
+topics: ## Create the five topics (idempotent)
 	@$(RPK) topic create game.player-events -p 6 -r 1 -c retention.ms=604800000 || $(RPK) topic describe game.player-events >/dev/null
 	@$(RPK) topic create game.match-events -p 3 -r 1 || $(RPK) topic describe game.match-events >/dev/null
 	@$(RPK) topic create game.achievements -p 3 -r 1 || $(RPK) topic describe game.achievements >/dev/null
+	@$(RPK) topic create game.leaderboard -p 3 -r 1 -c cleanup.policy=compact -c segment.ms=60000 || $(RPK) topic describe game.leaderboard >/dev/null
 	@$(RPK) topic create game.player-events.dlq -p 1 -r 1 || $(RPK) topic describe game.player-events.dlq >/dev/null
 	@$(RPK) topic list
 # end::topics[]
 
 # tag::schemas[]
-schemas: ## Register the GameEvent schema (v1, then BACKWARD, then v2) for every topic (idempotent)
+schemas: ## Register the GameEvent schema (v1, then BACKWARD, then v2) for the event topics, and the current file for game.leaderboard (idempotent)
 	@for s in $(SUBJECTS); do \
 	  $(RPK) registry schema create $$s --schema /proto/history/game_events.v1.proto --type protobuf >/dev/null; \
 	done
@@ -46,8 +47,9 @@ schemas: ## Register the GameEvent schema (v1, then BACKWARD, then v2) for every
 	@for s in $(SUBJECTS); do \
 	  $(RPK) registry schema create $$s --schema /proto/game_events.proto --type protobuf >/dev/null; \
 	done
+	@$(RPK) registry schema create game.leaderboard-value --schema /proto/game_events.proto --type protobuf >/dev/null
 	@$(RPK) registry subject list
-	@$(RPK) registry schema list $(SUBJECTS)
+	@$(RPK) registry schema list $(SUBJECTS) game.leaderboard-value
 # end::schemas[]
 
 # tag::seed[]
