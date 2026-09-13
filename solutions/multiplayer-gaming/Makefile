@@ -25,7 +25,7 @@ help: ## List targets
 up: .env ## Build the services, start every container, wait until all healthchecks pass
 	$(COMPOSE) up -d --build --wait
 
-down: ## Stop the services, keep data volumes
+down: .env ## Stop the services, keep data volumes
 	$(COMPOSE) down
 
 # tag::topics[]
@@ -64,10 +64,10 @@ seed: topics schemas ## Let the simulator produce SIM_EVENTS_MAX events and wait
 verify: ## Prove the outcome; prints PASS (n/n) or FAIL
 	./scripts/verify.sh
 
-logs: ## Follow the logs of every service
+logs: .env ## Follow the logs of every service
 	$(COMPOSE) logs -f --tail=100
 
-clean: ## Stop the services and delete their volumes
+clean: .env ## Stop the services and delete their volumes
 	$(COMPOSE) down -v --remove-orphans
 
 proto: ## Regenerate services/internal/gamepb from proto/game_events.proto (buf in a container)
