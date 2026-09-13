@@ -55,13 +55,7 @@ include::example$steps/persist-match-history/expected/poison.txt[]
 include::example$steps/persist-match-history/commands.sh[tag=dlq]
 ----
 +
-.Expected output
-[source,text]
-----
-include::example$steps/persist-match-history/expected/dlq.txt[]
-----
-+
-The record keeps its key `poison`, its `event_type` header, and gains `error`, `kafka_topic`, `kafka_partition`, and `kafka_offset` headers: everything needed to inspect it and replay it after a fix.
+The record keeps its key `poison`, its `event_type` header, and gains `error`, `kafka_topic`, `kafka_partition`, and `kafka_offset` headers (in no fixed order): everything needed to inspect it and replay it after a fix.
 
 The pipeline, in three parts. The input joins its own consumer group on both topics:
 
