@@ -28,6 +28,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"multiplayer-gaming/services/internal/board"
+	"multiplayer-gaming/services/internal/conn"
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 )
@@ -57,8 +58,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	cfg := conn.FromEnv()
 	host, _ := os.Hostname()
 	d := &dashboard{
 		topic:    envvar.String("TOPIC", board.Topic),
@@ -71,7 +71,12 @@ func main() {
 
 	// The group's lag and member count come from the admin API, not from
 	// membership: the dashboard watches the consumers, it is not one of them.
-	adminCl, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.ClientID("leaderboard-dashboard-admin"))
+	log.Printf("connecting to %s", cfg.Describe())
+	adminOpts, err := cfg.KafkaOpts(kgo.ClientID("leaderboard-dashboard-admin"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	adminCl, err := kgo.NewClient(adminOpts...)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}
@@ -83,7 +88,7 @@ func main() {
 	// steps 2 and 3), then reads from the start of every partition. The map
 	// holds the latest entry per key, which is exactly what compaction leaves
 	// on the topic; the dashboard just gets there first.
-	d.reader, err = board.Open(ctx, brokers, srURL, d.topic, "leaderboard-dashboard-"+host)
+	d.reader, err = board.Open(ctx, cfg, d.topic, "leaderboard-dashboard-"+host)
 	if err != nil {
 		if ctx.Err() != nil {
 			return

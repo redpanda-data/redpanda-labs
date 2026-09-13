@@ -21,6 +21,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sr"
 
+	"multiplayer-gaming/services/internal/conn"
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
@@ -77,8 +78,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	rp := conn.FromEnv()
 	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
 	playersFile := envvar.String("PLAYERS_FILE", "/sample-data/players.json")
 	httpAddr := envvar.String("HTTP_ADDR", ":8090")
@@ -116,14 +116,18 @@ func main() {
 	// acks=all waits for the full in-sync replica set, and the sticky key
 	// partitioner hashes the record key the same way the Java client does, so
 	// every event of one player lands on one partition, in order.
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	log.Printf("connecting to %s", rp.Describe())
+	opts, err := rp.KafkaOpts(
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
 		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
 		kgo.ProducerLinger(5*time.Millisecond),
 		kgo.ClientID("game-simulator"),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}
@@ -139,7 +143,7 @@ func main() {
 	topics.Wait(ctx, cl, sim.TopicPlayerEvents, sim.TopicMatchEvents)
 
 	s.setState("waiting_for_schema")
-	srClient, err := sr.NewClient(sr.URLs(srURL))
+	srClient, err := rp.SchemaRegistry()
 	if err != nil {
 		log.Fatalf("schema registry client: %v", err)
 	}

@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"multiplayer-gaming/services/internal/board"
+	"multiplayer-gaming/services/internal/conn"
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
@@ -49,8 +50,7 @@ type service struct {
 	cl       *kgo.Client
 	dec      *schema.Decoder
 	serde    *sr.Serde
-	brokers  []string
-	srURL    string
+	cfg      conn.Config
 	group    string
 	topic    string
 	outTopic string
@@ -77,8 +77,7 @@ func main() {
 
 	host, _ := os.Hostname()
 	s := &service{
-		brokers:  envvar.List("KAFKA_BROKERS", "redpanda:9092"),
-		srURL:    envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081"),
+		cfg:      conn.FromEnv(),
 		group:    envvar.String("GROUP", "leaderboard"),
 		topic:    envvar.String("TOPIC", "game.player-events"),
 		outTopic: envvar.String("OUT_TOPIC", board.Topic),
@@ -91,7 +90,8 @@ func main() {
 	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
 	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
 
-	srClient, err := sr.NewClient(sr.URLs(s.srURL))
+	log.Printf("connecting to %s", s.cfg.Describe())
+	srClient, err := s.cfg.SchemaRegistry()
 	if err != nil {
 		log.Fatalf("schema registry client: %v", err)
 	}
@@ -124,7 +124,11 @@ func main() {
 	}
 	// Both topics are created by the reader (step 2). Wait for them before
 	// joining the group, so the first fetch is a real one.
-	plain, err := kgo.NewClient(kgo.SeedBrokers(s.brokers...), kgo.ClientID("leaderboard-wait-"+host))
+	plainOpts, err := s.cfg.KafkaOpts(kgo.ClientID("leaderboard-wait-" + host))
+	if err != nil {
+		log.Fatal(err)
+	}
+	plain, err := kgo.NewClient(plainOpts...)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}
@@ -141,8 +145,7 @@ func main() {
 	// source offset carried in every entry makes that replay a no-op. A
 	// rebalance waits (BlockRebalanceOnPoll) until the batch in hand is
 	// published and committed, so a partition never moves with work in flight.
-	s.cl, err = kgo.NewClient(
-		kgo.SeedBrokers(s.brokers...),
+	opts, err := s.cfg.KafkaOpts(
 		kgo.ConsumerGroup(s.group),
 		kgo.ConsumeTopics(s.topic),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
@@ -175,6 +178,10 @@ func main() {
 			log.Printf("revoked partitions %v, dropped their player state", m[s.topic])
 		}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.cl, err = kgo.NewClient(opts...)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}
@@ -322,7 +329,7 @@ func (s *service) seed(ctx context.Context, partition int32, firstOffset int64) 
 		log.Printf("partition %d starts at the beginning of the log: rebuilding its totals from scratch", partition)
 		return nil
 	}
-	entries, err := board.Snapshot(ctx, s.brokers, s.srURL, s.outTopic, "leaderboard-seed-"+s.instance)
+	entries, err := board.Snapshot(ctx, s.cfg, s.outTopic, "leaderboard-seed-"+s.instance)
 	if err != nil {
 		return fmt.Errorf("load %s: %w", s.outTopic, err)
 	}

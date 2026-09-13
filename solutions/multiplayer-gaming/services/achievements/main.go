@@ -24,6 +24,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sr"
 
 	"multiplayer-gaming/services/achievements/rules"
+	"multiplayer-gaming/services/internal/conn"
 	"multiplayer-gaming/services/internal/envvar"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
@@ -50,8 +51,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	brokers := envvar.List("KAFKA_BROKERS", "redpanda:9092")
-	srURL := envvar.String("SCHEMA_REGISTRY_URL", "http://redpanda:8081")
+	cfg := conn.FromEnv()
 	schemaFile := envvar.String("SCHEMA_FILE", "/proto/game_events.proto")
 	group := envvar.String("GROUP", "achievements")
 	host, _ := os.Hostname()
@@ -66,7 +66,8 @@ func main() {
 	}
 	go s.serve(envvar.String("HTTP_ADDR", ":8080"))
 
-	srClient, err := sr.NewClient(sr.URLs(srURL))
+	log.Printf("connecting to %s", cfg.Describe())
+	srClient, err := cfg.SchemaRegistry()
 	if err != nil {
 		log.Fatalf("schema registry client: %v", err)
 	}
@@ -102,8 +103,7 @@ func main() {
 	// State lives with the partition. When a rebalance takes partitions away,
 	// their players are forgotten here and rebuilt by whichever instance gets
 	// them next, from that instance's committed offset onward.
-	s.cl, err = kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	opts, err := cfg.KafkaOpts(
 		kgo.ConsumerGroup(group),
 		kgo.ConsumeTopics(s.inTopic),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
@@ -123,6 +123,10 @@ func main() {
 			log.Printf("revoked partitions %v, dropped their player state", m[s.inTopic])
 		}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.cl, err = kgo.NewClient(opts...)
 	if err != nil {
 		log.Fatalf("kafka client: %v", err)
 	}

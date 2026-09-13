@@ -18,8 +18,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/twmb/franz-go/pkg/sr"
 
+	"multiplayer-gaming/services/internal/conn"
 	"multiplayer-gaming/services/internal/gamepb"
 	"multiplayer-gaming/services/internal/schema"
 	"multiplayer-gaming/services/internal/topics"
@@ -43,8 +43,8 @@ type Reader struct {
 
 // Open waits for Schema Registry, the topic's subject, and the topic itself,
 // then returns a Reader positioned at the start of every partition.
-func Open(ctx context.Context, brokers []string, srURL, topic, clientID string) (*Reader, error) {
-	srClient, err := sr.NewClient(sr.URLs(srURL))
+func Open(ctx context.Context, cfg conn.Config, topic, clientID string) (*Reader, error) {
+	srClient, err := cfg.SchemaRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("schema registry client: %w", err)
 	}
@@ -63,12 +63,15 @@ func Open(ctx context.Context, brokers []string, srURL, topic, clientID string) 
 		log.Printf("waiting for subject %s: %v", schema.Subject(topic), err)
 		time.Sleep(2 * time.Second)
 	}
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	opts, err := cfg.KafkaOpts(
 		kgo.ClientID(clientID),
 		kgo.ConsumeTopics(topic),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 	)
+	if err != nil {
+		return nil, err
+	}
+	cl, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("kafka client: %w", err)
 	}
@@ -144,8 +147,8 @@ func (r *Reader) CaughtUp(ends map[int32]int64) bool {
 // Snapshot reads the topic from the start to the end offsets observed when it
 // is called and returns the last entry per key. On a compacted topic that is
 // the whole board: one entry per player.
-func Snapshot(ctx context.Context, brokers []string, srURL, topic, clientID string) (map[string]*gamepb.LeaderboardEntry, error) {
-	r, err := Open(ctx, brokers, srURL, topic, clientID)
+func Snapshot(ctx context.Context, cfg conn.Config, topic, clientID string) (map[string]*gamepb.LeaderboardEntry, error) {
+	r, err := Open(ctx, cfg, topic, clientID)
 	if err != nil {
 		return nil, err
 	}
