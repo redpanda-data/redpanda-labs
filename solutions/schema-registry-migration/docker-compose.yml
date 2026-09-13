@@ -1,46 +1,116 @@
 # Schema Registry Migration: local stack.
 #
-# Start with `make up` (waits for every healthcheck), seed with `make seed`,
-# prove the outcome with `make verify`, tear down with `make clean`.
-# Versions and host ports come from .env (copied from .env.example on first
-# `make up`); the nightly CI run overrides the versions with `latest`. Run one
-# stack at a time, or give each its own host ports in .env.
+# A real Confluent Platform broker and Confluent Schema Registry are the
+# migration source. A Redpanda shadow cluster is the destination: one shadow
+# link replicates the source's schemas over the Schema Registry REST API
+# (API mode, shadow_schema_registry_api) and its topic data over the Kafka
+# API. Redpanda Console is wired to the shadow cluster so you can see what
+# arrived; the Confluent side has no UI here and is driven over REST.
+#
+# Start with `make up` (waits for every healthcheck), seed the source with
+# `make seed`, run the migration with `make migrate`, prove the outcome with
+# `make verify`, tear down with `make clean`. Versions and host ports come
+# from .env (copied from .env.example on first `make up`).
 name: schema-registry-migration
 
 networks:
-  redpanda:
+  migration:
     driver: bridge
 
 volumes:
   redpanda-data: {}
 
 services:
+  # tag::confluent[]
+  # SOURCE: Confluent Platform broker, KRaft mode, single node.
+  confluent-kafka:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-8.3.0}
+    container_name: schema-registry-migration-confluent-kafka
+    hostname: confluent-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_LISTENERS: "PLAINTEXT://confluent-kafka:29092,CONTROLLER://confluent-kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://confluent-kafka:29092,PLAINTEXT_HOST://localhost:${CONFLUENT_KAFKA_PORT:-39092}"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@confluent-kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      # Any fixed base64 UUID works for a single-node cluster.
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xmx512M -Xms256M}
+    ports:
+      - "${CONFLUENT_KAFKA_PORT:-39092}:9092"
+    networks:
+      - migration
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # SOURCE: Confluent Schema Registry, backed by the broker above.
+  confluent-schema-registry:
+    image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-8.3.0}
+    container_name: schema-registry-migration-confluent-schema-registry
+    hostname: confluent-schema-registry
+    depends_on:
+      confluent-kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: confluent-schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "confluent-kafka:29092"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_HEAP_OPTS: ${SCHEMA_REGISTRY_HEAP_OPTS:--Xmx256M}
+    ports:
+      - "${CONFLUENT_SR_PORT:-38081}:8081"
+    networks:
+      - migration
+    healthcheck:
+      # The 8.x image is built on a minimal base without curl or wget, so
+      # probe the port with bash's /dev/tcp instead of an HTTP client.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  # end::confluent[]
+
   # tag::redpanda[]
+  # DESTINATION: the Redpanda shadow cluster. Shadowing is off by default;
+  # enable_shadow_linking turns it on. The shadow link configuration is
+  # mounted at /config for `rpk shadow create`.
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: schema-registry-migration-redpanda
+    hostname: redpanda
     command:
       - redpanda
       - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-19092}
-      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${REDPANDA_PROXY_PORT:-18082}
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-29092}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
       - --mode dev-container
       - --smp 1
+      - --memory 1G
       - --default-log-level=info
+      - --set redpanda.enable_shadow_linking=true
     ports:
-      - "${REDPANDA_SR_PORT:-18081}:18081"
-      - "${REDPANDA_PROXY_PORT:-18082}:18082"
-      - "${REDPANDA_KAFKA_PORT:-19092}:19092"
-      - "${REDPANDA_ADMIN_PORT:-19644}:9644"
+      - "${REDPANDA_KAFKA_PORT:-29092}:29092"
+      - "${REDPANDA_SR_PORT:-28081}:28081"
+      - "${REDPANDA_ADMIN_PORT:-29644}:9644"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     networks:
-      - redpanda
+      - migration
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 10s
@@ -50,27 +120,19 @@ services:
   # end::redpanda[]
 
   # tag::console[]
+  # Redpanda Console, pointed at the shadow cluster only: the place to see
+  # what the link replicated.
   console:
     image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
     container_name: schema-registry-migration-console
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
     environment:
-      CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda:9092"]
-        schemaRegistry:
-          enabled: true
-          urls: ["http://redpanda:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda:9644"]
+      CONFIG_FILEPATH: /etc/console/config.yaml
+    volumes:
+      - ./console-config.yaml:/etc/console/config.yaml:ro
     ports:
-      - "${CONSOLE_PORT:-8080}:8080"
+      - "${CONSOLE_PORT:-8180}:8080"
     networks:
-      - redpanda
+      - migration
     depends_on:
       redpanda:
         condition: service_healthy
@@ -83,8 +145,10 @@ services:
   # end::console[]
 
   # tag::rpk[]
-  # Helper container so `make seed`, scripts/verify.sh, and the Doc Detective
-  # specs can run rpk without a host install: docker compose exec -T rpk rpk ...
+  # Helper container so the Makefile, scripts/verify.sh, and the Doc Detective
+  # specs can run rpk against the shadow cluster without a host install:
+  # docker compose exec -T rpk rpk ... The shadow link configuration and the
+  # pause/resume editor script are mounted where rpk shadow expects them.
   rpk:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
     container_name: schema-registry-migration-rpk
@@ -94,9 +158,10 @@ services:
       RPK_ADMIN_HOSTS: redpanda:9644
       RPK_REGISTRY_HOSTS: redpanda:8081
     volumes:
-      - ./sample-data:/sample-data:ro
+      - ./config:/config:ro
+      - ./scripts:/scripts:ro
     networks:
-      - redpanda
+      - migration
     depends_on:
       redpanda:
         condition: service_healthy
@@ -107,3 +172,36 @@ services:
       retries: 6
       start_period: 5s
   # end::rpk[]
+
+  # tag::client[]
+  # The application side of the migration: a Python client (confluent-kafka,
+  # fastavro, requests, plus curl and jq) that registers schemas on the source
+  # over REST and produces and consumes Avro records in the Confluent wire
+  # format. It starts against the Confluent side and is pointed at Redpanda by
+  # environment variables at cutover.
+  client:
+    build: ./client
+    image: schema-registry-migration-client
+    container_name: schema-registry-migration-client
+    command: ["sleep", "infinity"]
+    environment:
+      SOURCE_SR_URL: http://confluent-schema-registry:8081
+      SOURCE_BOOTSTRAP_SERVERS: confluent-kafka:29092
+      SHADOW_SR_URL: http://redpanda:8081
+      SHADOW_BOOTSTRAP_SERVERS: redpanda:9092
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./schemas:/schemas:ro
+      - ./sample-data:/sample-data:ro
+    networks:
+      - migration
+    depends_on:
+      confluent-schema-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import fastavro, confluent_kafka, requests' && command -v jq >/dev/null"]
+      interval: 5s
+      timeout: 10s
+      retries: 6
+      start_period: 2s
+  # end::client[]

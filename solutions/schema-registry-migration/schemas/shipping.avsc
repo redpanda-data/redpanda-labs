@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "Shipping",
+  "namespace": "com.redpanda.demo",
+  "fields": [
+    {"name": "order_id", "type": "string"},
+    {"name": "destination", "type": "com.redpanda.demo.Address"}
+  ]
+}

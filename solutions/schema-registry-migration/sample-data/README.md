@@ -1,12 +1,16 @@
 # Sample data
 
-Deterministic input for `make seed`. Keep it small (a few KB) and commit it: CI
-and `scripts/verify.sh` count on exact numbers, so a check like "the topic
-holds 3 events" stays true on every run.
+Deterministic input for the produce script. Keep it small and commit it: CI
+and `scripts/verify.sh` count on exact numbers (three orders, two customers,
+one shipment before cutover; one more order after).
 
-| File | Loaded by | Shape |
-|---|---|---|
-| `events.ndjson` | `make seed` (`rpk topic produce`) | one JSON object per line |
+| File | Loaded by | Topic | Subject |
+|---|---|---|---|
+| `orders.json` | `make produce` | `orders` | `orders-value` (Avro, version 2) |
+| `customers.json` | `make produce` | `customers` | `customers-value` (Avro) |
+| `shipping.json` | `make produce` | `shipping` | `shipping-value` (Avro, references `address-value`) |
+| `orders-after-cutover.json` | `make produce-redpanda` | `orders` on the Redpanda cluster | `orders-value`, resolved from the Redpanda Schema Registry |
 
-Generated data belongs in a service (a simulator with a fixed seed), not here.
-Document the generator's seed and event cap so `verify.sh` can assert on them.
+The schemas themselves live in `../schemas/` and are registered on the source
+Confluent Schema Registry by `make register-schemas` and
+`make register-complex-schemas`.

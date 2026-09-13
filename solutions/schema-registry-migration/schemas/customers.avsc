@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "Customer",
+  "namespace": "com.redpanda.demo",
+  "fields": [
+    {"name": "customer_id", "type": "string"},
+    {"name": "email", "type": "string"}
+  ]
+}
