@@ -1,13 +1,13 @@
 = Create the topics
 :page-layout: solution-step
-:description: Create the four topics with explicit partition counts, keys, and retention, and see how the key decides which consumer instance owns a player.
+:description: Create the five topics with explicit partition counts, keys, retention, and one compaction policy, and see how the key decides which consumer instance owns a player.
 :page-solution-step-duration: 5
 
-You create four topics with `rpk`. Each has a deliberate partition count and a stated key, because those two choices decide how far each consumer can scale and which guarantees the consumers in the later steps can rely on.
+You create five topics with `rpk`. Each has a deliberate partition count and a stated key, because those two choices decide how far each consumer can scale and which guarantees the consumers in the later steps can rely on. One of them, `game.leaderboard`, is compacted: it will hold state, not events.
 
 == What you do
 
-. Create the topics. `make topics` runs these four commands and is safe to repeat:
+. Create the topics. `make topics` runs these five commands and is safe to repeat:
 +
 [,bash]
 ----
@@ -26,9 +26,16 @@ include::example$Makefile[tags=topics]
 docker compose exec -T rpk rpk topic describe game.player-events -c
 ----
 +
-`retention.ms` is `604800000` (7 days) and `cleanup.policy` is `delete`.
+`retention.ms` is `604800000` (7 days) and `cleanup.policy` is `delete`. Compare with the leaderboard topic:
++
+[,bash]
+----
+docker compose exec -T rpk rpk topic describe game.leaderboard -c
+----
++
+`cleanup.policy` is `compact` and `segment.ms` is `60000`.
 
-The four topics and the reason for each shape:
+The five topics and the reason for each shape:
 
 [cols="2,1,1,3"]
 |===
@@ -49,6 +56,11 @@ The four topics and the reason for each shape:
 | `player_id`
 | Written by the achievements service. Same key as the source, so a player's achievements are ordered too.
 
+| `game.leaderboard`
+| 3
+| `player_id`
+| Written by the leaderboard service: each player's current total. Compacted, so it converges to one record per player. `segment.ms=60000` makes that visible within minutes in xref:build-leaderboard.adoc[].
+
 | `game.player-events.dlq`
 | 1
 | original key
@@ -60,6 +72,8 @@ The four topics and the reason for each shape:
 The leaderboard and the achievements service are both correct only because the record key is `player_id`. The achievements service (xref:detect-achievements.adoc[]) keeps a small in-memory state per player and never consults a shared store. That is safe only if every event of one player reaches exactly one instance, in the order it was produced. Keying by `player_id` gives that. Keying by `match_id` on `game.match-events` gives the same guarantee for matches, which is what a history sink wants.
 
 The partition counts are the scaling limits. A consumer group cannot have more active members than partitions, so six partitions means the leaderboard can run six instances, no more. Retention on `game.player-events` is 7 days because xref:scale-and-replay.adoc[] replays it; the default would do for the demo, but in a real game the replay window is a product decision.
+
+`game.leaderboard` is the odd one out. It carries totals, not events, and only the newest total per player matters, so its cleanup policy is `compact` instead of `delete`: the broker keeps the latest record for each key and discards the rest. That turns the topic into a table that streams, which is what xref:build-leaderboard.adoc[] builds the dashboard on. Keying it by `player_id` is what makes compaction keep the right record.
 
 == Why Redpanda
 
@@ -88,6 +102,7 @@ Expected output:
 NAME                    PARTITIONS  REPLICAS
 _schemas                1           1
 game.achievements       3           1
+game.leaderboard        3           1
 game.match-events       3           1
 game.player-events      6           1
 game.player-events.dlq  1           1
@@ -98,7 +113,7 @@ game.player-events.dlq  1           1
 == In production
 
 [.production-note]
-Use replication factor 3 and size partitions for peak throughput and for the parallelism of the largest consumer group, not for a laptop. See the Brokers and replication and Partitions rows in xref:index.adoc#_production_considerations[Production considerations].
+Use replication factor 3 and size partitions for peak throughput and for the parallelism of the largest consumer group, not for a laptop. Give the compacted topic a `segment.ms` suited to its write rate rather than the 60 seconds used here. See the Brokers and replication, Partitions, and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
 
 .Files for this step
 * link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

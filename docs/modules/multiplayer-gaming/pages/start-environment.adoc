@@ -1,6 +1,6 @@
 = Start the environment
 :page-layout: solution-step
-:description: Start Redpanda, Console, Redis, Postgres, Redpanda Connect, and the three game services with one command, and see why nothing is produced yet.
+:description: Start Redpanda, Console, Postgres, Redpanda Connect, the three game services, and the leaderboard dashboard with one command, and see why nothing is produced yet.
 :page-solution-step-duration: 5
 
 You bring up the whole stack with one command and watch every service report healthy. Nothing flows yet: the producers refuse to write until you create the topics and the schema contract in the next two steps, and that refusal is the first design decision of this solution.
@@ -25,11 +25,11 @@ make proto
 make up
 ----
 +
-The first run builds the three Go service images and pulls Redpanda, Console, Redis, Postgres, and Redpanda Connect. It takes one to three minutes. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every simulator setting.
+The first run builds the four Go program images and pulls Redpanda, Console, Postgres, and Redpanda Connect. It takes one to three minutes. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every simulator setting.
 
 . Open Redpanda Console at http://localhost:8080. The cluster has one broker and no topics of yours yet.
 
-The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all ten containers pass:
+The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all nine containers pass:
 
 [,yaml]
 ----
@@ -38,7 +38,7 @@ include::example$docker-compose.yml[tags=redpanda]
 
 == Why
 
-The stack is ten containers, and the interesting ones are the three that read the same topic. Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect and the two Go consumers do the same for the subject they decode with.
+The stack is nine containers, and the interesting ones are the three that read the same topic. Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect, the two Go consumers, and the dashboard do the same for the subjects they decode with.
 
 == Why Redpanda
 
@@ -46,14 +46,14 @@ Redpanda runs as a single binary with Schema Registry and the HTTP Proxy built i
 
 == What happens inside
 
-Redpanda starts in `dev-container` mode, advertises `redpanda:9092` inside the compose network and `localhost:19092` outside it, and reports `Healthy: true` to `rpk cluster health` once its single Raft group has a leader. Console connects to the broker, the Admin API, and Schema Registry; because `console-config.yaml` enables Schema Registry and sets no manual Protobuf mappings, Console will decode records by the schema ID in each record as soon as schemas exist:
+Redpanda starts in `dev-container` mode, advertises `redpanda:9092` inside the compose network and `localhost:19092` outside it, and reports `Healthy: true` to `rpk cluster health` once its single Raft group has a leader. The one cluster setting the compose file changes, `log_segment_ms_min=60000`, lets xref:build-leaderboard.adoc[] roll a segment every minute so you can watch compaction. Console connects to the broker, the Admin API, and Schema Registry; because `console-config.yaml` enables Schema Registry and sets no manual Protobuf mappings, Console will decode records by the schema ID in each record as soon as schemas exist:
 
 [,yaml]
 ----
 include::example$console-config.yaml[]
 ----
 
-Redpanda Connect loads `connect/match-history.yaml`, opens its Postgres connections, and joins the consumer group `connect-history` on two topics that do not exist yet. The `redpanda` input keeps retrying metadata until they do. The simulator reaches `waiting_for_topics` and stays there.
+Redpanda Connect loads `connect/match-history.yaml`, opens its Postgres connections, and joins the consumer group `connect-history` on two topics that do not exist yet. The `redpanda` input keeps retrying metadata until they do. The simulator reaches `waiting_for_topics` and stays there; the leaderboard service and the dashboard wait for `game.leaderboard` the same way.
 
 == Verify
 
@@ -72,7 +72,7 @@ Expected output:
   "state": "waiting_for_topics",
 ----
 
-If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `16379`, `18081`, or `19092` already in use on the host (move a port with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `18081`, or `19092` already in use on the host (move a port with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
 
 == In production
 
@@ -91,5 +91,5 @@ In production, the broker cluster, the sinks, and the services are deployed and 
 * link:{attachmentsdir}/postgres/init.sql[postgres/init.sql]
 * link:{attachmentsdir}/sample-data/players.json[sample-data/players.json] and link:{attachmentsdir}/sample-data/README.md[sample-data/README.md]
 * link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
-* link:{attachmentsdir}/services/leaderboard/static/index.html[services/leaderboard/static/index.html]
+* link:{attachmentsdir}/services/dashboard/static/index.html[services/dashboard/static/index.html]
 * link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh]

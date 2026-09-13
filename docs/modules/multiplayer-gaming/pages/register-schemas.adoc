@@ -1,13 +1,13 @@
 = Register the schemas
 :page-layout: solution-step
-:description: Register the GameEvent Protobuf schema for each topic, set BACKWARD compatibility, evolve it to a second version, and watch Schema Registry refuse a breaking change.
+:description: Register the Protobuf schema for each topic, set BACKWARD compatibility, evolve it to a second version, and watch Schema Registry refuse a breaking change.
 :page-solution-step-duration: 5
 
-You register the `GameEvent` Protobuf schema under one subject per topic, set the compatibility level, then register a second version that adds a field. Finally you ask Schema Registry to check a change that would break consumers, and it refuses. When this step ends, the simulator starts producing on its own.
+You register the `GameEvent` Protobuf schema under one subject per event topic, set the compatibility level, then register a second version that adds a field and a message. The same file, registered under `game.leaderboard-value`, is the contract for the leaderboard topic. Finally you ask Schema Registry to check a change that would break consumers, and it refuses. When this step ends, the simulator starts producing on its own.
 
 == What you do
 
-. Register version 1 for each of the three value subjects, set `BACKWARD` compatibility, then register version 2. `make schemas` does all of it and is safe to repeat:
+. Register version 1 for each of the three event subjects, set `BACKWARD` compatibility, then register version 2, and register the current file under `game.leaderboard-value`. `make schemas` does all of it and is safe to repeat:
 +
 [,bash]
 ----
@@ -19,7 +19,7 @@ make schemas
 include::example$Makefile[tags=schemas]
 ----
 
-. Compare the two versions. Version 2 adds one optional field, `region`, to the envelope:
+. Compare the two versions. Version 2 adds one optional field, `region`, to the envelope, and one new top-level message, `LeaderboardEntry`, that xref:build-leaderboard.adoc[] publishes:
 +
 [,protobuf]
 ----
@@ -68,7 +68,7 @@ Schema Registry is part of the broker, stores its state in the `_schemas` topic 
 
 == What happens inside
 
-`rpk registry schema create` posts the `.proto` text to `/subjects/game.player-events-value/versions`. Schema Registry parses it, checks it against the subject's compatibility rule, assigns a global schema ID (1 for version 1, 2 for version 2), and stores it in `_schemas`. Because the text is identical for the three subjects, they share the IDs. Repeating the command with the same text returns the existing ID, which is why `make schemas` is idempotent.
+`rpk registry schema create` posts the `.proto` text to `/subjects/game.player-events-value/versions`. Schema Registry parses it, checks it against the subject's compatibility rule, assigns a global schema ID (1 for version 1, 2 for version 2), and stores it in `_schemas`. Because the text is identical for the three subjects, they share the IDs, and `game.leaderboard-value` gets ID 2 as its only version for the same reason. A record on `game.leaderboard` carries that ID plus a message index that points at `LeaderboardEntry` inside the file, which is how `rpk` and Console know which message to decode it as. Repeating the command with the same text returns the existing ID, which is why `make schemas` is idempotent.
 
 The simulator has been polling `POST /subjects/game.player-events-value` with the exact text of `proto/game_events.proto`, a lookup that answers only when that schema is registered:
 

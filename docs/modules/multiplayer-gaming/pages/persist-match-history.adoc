@@ -65,7 +65,7 @@ include::example$connect/match-history.yaml[tags=output]
 
 == Why
 
-Analysts want match history in a database, and that requirement should cost nothing in code and nothing in latency for the leaderboard. Redpanda Connect meets both: the pipeline is configuration, and its consumer group `connect-history` reads at Postgres speed while the leaderboard group reads at Redis speed.
+Analysts want match history in a database, and that requirement should cost nothing in code and nothing in latency for the leaderboard. Redpanda Connect meets both: the pipeline is configuration, and its consumer group `connect-history` reads at Postgres speed while the leaderboard group reads at broker speed.
 
 The `mapping` flattens the Protobuf `oneof` into two row shapes, one per table, because a relational table wants columns, not a nested `scoreChanged` object. `match_started` records are dropped (`root = deleted()`): the history table is about finished matches, and the `match_ended` event carries the start time. Both inserts end with `ON CONFLICT DO NOTHING` on the event's natural key, so a redelivered record (Connect is at-least-once, like the Go services) inserts nothing twice. The tables:
 
