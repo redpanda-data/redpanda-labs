@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the multiplayer gaming solution</title>
+  <desc id="d">A game simulator produces Protobuf events to two Redpanda topics. Three independent consumer groups read game.player-events: the leaderboard service writes Redis and serves a dashboard, the achievements service produces to game.achievements, and Redpanda Connect writes Postgres with failures routed to a dead-letter topic. Schema Registry holds the contract; Redpanda Console decodes records with it.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --store: #eef2ff; --storeline: #4f5bd5; --svc: #eefbf3; --svcline: #2e8b57; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --store: #1a2140; --storeline: #8b93ff; --svc: #14281c; --svcline: #5fd38d; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .svc { fill: var(--svc); stroke: var(--svcline); stroke-width: 1.2; rx: 8; }
+    .store { fill: var(--store); stroke: var(--storeline); stroke-width: 1.2; rx: 8; }
+    .flow { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .flow.dash { stroke-dasharray: 5 4; }
+    #arrow path { fill: var(--line); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect width="980" height="560" fill="var(--bg)"/>
+
+  <!-- producer -->
+  <rect class="svc" x="20" y="200" width="150" height="96"/>
+  <text class="h" x="95" y="228" text-anchor="middle">Game simulator</text>
+  <text class="muted" x="95" y="248" text-anchor="middle">Go, franz-go</text>
+  <text class="muted" x="95" y="264" text-anchor="middle">idempotent, acks=all</text>
+  <text class="muted" x="95" y="280" text-anchor="middle">Protobuf via Schema Registry</text>
+
+  <!-- redpanda -->
+  <rect class="rp" x="210" y="60" width="270" height="440"/>
+  <text class="h" x="345" y="88" text-anchor="middle" fill="var(--rp)" style="fill: var(--rp)">Redpanda</text>
+  <rect class="box" x="230" y="104" width="230" height="52"/>
+  <text class="h" x="345" y="126" text-anchor="middle">Schema Registry</text>
+  <text class="muted" x="345" y="144" text-anchor="middle">GameEvent, Protobuf, BACKWARD</text>
+
+  <rect class="topic" x="230" y="186" width="230" height="56"/>
+  <text class="mono" x="345" y="208" text-anchor="middle">game.player-events</text>
+  <text class="muted" x="345" y="228" text-anchor="middle">key player_id, 6 partitions, 7 d</text>
+
+  <rect class="topic" x="230" y="262" width="230" height="56"/>
+  <text class="mono" x="345" y="284" text-anchor="middle">game.match-events</text>
+  <text class="muted" x="345" y="304" text-anchor="middle">key match_id, 3 partitions</text>
+
+  <rect class="topic" x="230" y="338" width="230" height="56"/>
+  <text class="mono" x="345" y="360" text-anchor="middle">game.achievements</text>
+  <text class="muted" x="345" y="380" text-anchor="middle">key player_id, 3 partitions</text>
+
+  <rect class="topic" x="230" y="414" width="230" height="56"/>
+  <text class="mono" x="345" y="436" text-anchor="middle">game.player-events.dlq</text>
+  <text class="muted" x="345" y="456" text-anchor="middle">1 partition, poison records</text>
+
+  <!-- producer arrows -->
+  <path class="flow" d="M170,236 L228,214"/>
+  <path class="flow" d="M170,260 L228,290"/>
+  <path class="flow dash" d="M95,200 L95,130 L228,130"/>
+  <text class="muted" x="112" y="122">looks up the schema</text>
+
+  <!-- consumers -->
+  <rect class="svc" x="560" y="90" width="190" height="88"/>
+  <text class="h" x="655" y="116" text-anchor="middle">leaderboard-service</text>
+  <text class="muted" x="655" y="136" text-anchor="middle">group leaderboard, x1..x3</text>
+  <text class="muted" x="655" y="152" text-anchor="middle">ZINCRBY per score_changed</text>
+  <text class="muted" x="655" y="168" text-anchor="middle">dashboard + SSE</text>
+
+  <rect class="svc" x="560" y="236" width="190" height="88"/>
+  <text class="h" x="655" y="262" text-anchor="middle">achievements-service</text>
+  <text class="muted" x="655" y="282" text-anchor="middle">group achievements</text>
+  <text class="muted" x="655" y="298" text-anchor="middle">per-player state, partition-local</text>
+  <text class="muted" x="655" y="314" text-anchor="middle">hot_streak, first_win, veteran</text>
+
+  <rect class="svc" x="560" y="382" width="190" height="104"/>
+  <text class="h" x="655" y="408" text-anchor="middle">Redpanda Connect</text>
+  <text class="muted" x="655" y="428" text-anchor="middle">group connect-history</text>
+  <text class="mono" x="655" y="446" text-anchor="middle" style="font-size:11px">redpanda &gt; schema_registry_decode</text>
+  <text class="mono" x="655" y="462" text-anchor="middle" style="font-size:11px">&gt; mapping &gt; sql_insert</text>
+  <text class="muted" x="655" y="478" text-anchor="middle">fallback: dead-letter topic</text>
+
+  <!-- fan-out arrows from player-events -->
+  <path class="flow" d="M460,200 L558,134"/>
+  <path class="flow" d="M460,214 L558,280"/>
+  <path class="flow" d="M460,228 L558,420"/>
+  <path class="flow" d="M460,300 L558,440"/>
+  <!-- achievements produce back -->
+  <path class="flow" d="M560,310 L462,366"/>
+  <!-- dlq from connect -->
+  <path class="flow dash" d="M560,470 L462,448"/>
+
+  <!-- sinks -->
+  <rect class="store" x="820" y="90" width="140" height="60"/>
+  <text class="h" x="890" y="114" text-anchor="middle">Redis</text>
+  <text class="mono" x="890" y="134" text-anchor="middle" style="font-size:11px">leaderboard:global</text>
+  <path class="flow" d="M750,128 L818,120"/>
+
+  <rect class="store" x="820" y="170" width="140" height="44"/>
+  <text class="h" x="890" y="197" text-anchor="middle">Browser dashboard</text>
+  <path class="flow" d="M750,152 L818,188"/>
+
+  <rect class="store" x="820" y="400" width="140" height="66"/>
+  <text class="h" x="890" y="424" text-anchor="middle">Postgres</text>
+  <text class="mono" x="890" y="442" text-anchor="middle" style="font-size:11px">match_history</text>
+  <text class="mono" x="890" y="457" text-anchor="middle" style="font-size:11px">player_events</text>
+  <path class="flow" d="M750,434 L818,434"/>
+
+  <!-- console -->
+  <rect class="box" x="560" y="510" width="400" height="36"/>
+  <text x="760" y="533" text-anchor="middle">Redpanda Console decodes every topic with the same schemas</text>
+</svg>

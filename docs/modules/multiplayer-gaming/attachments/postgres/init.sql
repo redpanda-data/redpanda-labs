@@ -1,0 +1,1 @@
+../../../../../solutions/multiplayer-gaming/postgres/init.sql

@@ -1,0 +1,12 @@
+# Redpanda Console. With schemaRegistry enabled and no serde.protobuf section,
+# Console fetches Protobuf schemas from Schema Registry by the schema ID in
+# each record and renders game.player-events as JSON.
+kafka:
+  brokers: ["redpanda:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda:9644"]

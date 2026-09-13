@@ -1,0 +1,1 @@
+../../../../../solutions/multiplayer-gaming/services/go.mod
