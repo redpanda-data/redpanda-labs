@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "Alert",
+  "namespace": "com.example.shop",
+  "fields": [
+    {"name": "alert_id", "type": "string"},
+    {"name": "severity", "type": "string"},
+    {"name": "message", "type": "string"},
+    {"name": "raised_at", "type": "long"}
+  ]
+}

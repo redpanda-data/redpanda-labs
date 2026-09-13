@@ -1,0 +1,39 @@
+# The legacy application's consumer: consumer group `orders-service` on
+# shop.orders, decoding through Schema Registry and committing offsets. The
+# same file runs against the source (before the cutover) and against the
+# target (after it): only BROKERS and SCHEMA_REGISTRY_URL change.
+
+# tag::input[]
+input:
+  redpanda:
+    seed_brokers: [ "${BROKERS:source:9092}" ]
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${ADMIN_USER}"
+        password: "${ADMIN_PASSWORD}"
+    topics: [ shop.orders ]
+    consumer_group: orders-service
+    start_offset: earliest
+    commit_period: 1s
+# end::input[]
+
+pipeline:
+  processors:
+    - schema_registry_decode:
+        url: "${SCHEMA_REGISTRY_URL:http://source:8081}"
+        avro_raw_json: true
+        basic_auth:
+          enabled: true
+          username: "${ADMIN_USER}"
+          password: "${ADMIN_PASSWORD}"
+    - mapping: |
+        root = "%s consumed %s from %s/%d@%d (schema id %d)".format(
+          "${CLUSTER_NAME:source}", this.order_id, @kafka_topic, @kafka_partition, @kafka_offset, @schema_id.or(0))
+
+output:
+  stdout: {}
+
+http:
+  enabled: false
+logger:
+  level: WARN

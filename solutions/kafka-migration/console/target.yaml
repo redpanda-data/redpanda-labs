@@ -1,0 +1,15 @@
+# Redpanda Console for the target cluster. Credentials come from the
+# KAFKA_SASL_* and SCHEMAREGISTRY_AUTHENTICATION_BASIC_* environment
+# variables the compose file sets from .env.
+kafka:
+  brokers: ["target:9092"]
+  sasl:
+    enabled: true
+    mechanism: SCRAM-SHA-256
+schemaRegistry:
+  enabled: true
+  urls: ["http://target:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://target:9644"]
