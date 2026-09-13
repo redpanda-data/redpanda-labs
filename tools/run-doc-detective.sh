@@ -9,9 +9,11 @@
 # tools/doc-detective.base.json before running. The engine version is pinned
 # on purpose: a bare `npx doc-detective` self-updates before every run.
 #
-# The specs to run are derived from :page-solution-steps: on the overview page
-# (one spec per step id), so _setup.json and _teardown.json only run through
-# beforeAny/afterAll and nothing has to be registered by hand.
+# The step specs are generated into the run directory by tools/gen-dd-specs.mjs
+# from the pages themselves (every command block, in :page-solution-steps:
+# order), so nothing is committed per step and nothing drifts. _setup.json
+# and _teardown.json (compose up and down) stay hand-written and only run
+# through beforeAny/afterAll.
 set -euo pipefail
 
 DD_VERSION=${DD_VERSION:-4.38.1}
@@ -30,23 +32,30 @@ command -v jq >/dev/null || { echo "run-doc-detective: jq is required" >&2; exit
 
 overview="$root/docs/modules/$slug/pages/index.adoc"
 [ -f "$overview" ] || { echo "run-doc-detective: $overview not found" >&2; exit 2; }
+command -v node >/dev/null || { echo "run-doc-detective: node is required" >&2; exit 2; }
 steps=$(awk 'NR==1 && /^= /{next} /^[[:space:]]*$/{exit} /^:page-solution-steps:/{sub(/^:page-solution-steps:[[:space:]]*/,""); print}' "$overview" | tr ',' ' ')
+
+# BSD mktemp only substitutes trailing X characters, so make a run directory
+# and give the merged config and the generated specs fixed names inside it.
+run_dir=$(mktemp -d "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX")
+merged="$run_dir/config.json"
+trap 'rm -rf "$run_dir"' EXIT
+
+# Generate one spec per step from the pages. --out writes nothing when a page
+# has a problem, and the generator says which.
+node "$root/tools/gen-dd-specs.mjs" "$slug" --out "$run_dir/specs" || { echo "run-doc-detective: spec generation failed" >&2; exit 2; }
 inputs=()
 for s in $steps; do
-  spec="tests/doc-detective/specs/$s.json"
-  [ -f "$dir/$spec" ] || { echo "run-doc-detective: step '$s' has no spec $spec (run tools/check-metadata.sh)" >&2; exit 2; }
+  spec="$run_dir/specs/$s.json"
+  [ -f "$spec" ] || { echo "run-doc-detective: no generated spec for step '$s'" >&2; exit 2; }
   inputs+=("$spec")
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "run-doc-detective: no steps listed in $overview" >&2; exit 2; }
 
 # --input is not variadic in doc-detective 4.38.1, so the step specs go into
-# the merged config's input array. Never pass the specs directory: _setup and
-# _teardown would then run a second time as ordinary specs.
-# BSD mktemp only substitutes trailing X characters, so make a run directory
-# and give the merged config a fixed name inside it.
-run_dir=$(mktemp -d "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX")
-merged="$run_dir/config.json"
-trap 'rm -rf "$run_dir"' EXIT
+# the merged config's input array (absolute paths into the run directory).
+# Never pass the committed specs directory: _setup and _teardown would then
+# run a second time as ordinary specs.
 inputs_json=$(printf '%s\n' "${inputs[@]}" | jq -R . | jq -s .)
 jq -s --argjson inputs "$inputs_json" '.[0] * .[1] * {input: $inputs}' \
   "$root/tools/doc-detective.base.json" "$local_cfg" > "$merged"
@@ -54,7 +63,7 @@ jq -s --argjson inputs "$inputs_json" '.[0] * .[1] * {input: $inputs}' \
 cd "$dir"
 rm -f testResults-*.json
 echo "run-doc-detective: $slug with doc-detective@$DD_VERSION"
-echo "run-doc-detective: specs: ${inputs[*]}"
+echo "run-doc-detective: generated specs for: $steps"
 npx --yes "doc-detective@$DD_VERSION" --config "$merged" &
 pid=$!
 
