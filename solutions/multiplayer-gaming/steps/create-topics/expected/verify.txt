@@ -1,0 +1,7 @@
+NAME                    PARTITIONS  REPLICAS
+_schemas                1           1
+game.achievements       3           1
+game.leaderboard        3           1
+game.match-events       3           1
+game.player-events      6           1
+game.player-events.dlq  1           1

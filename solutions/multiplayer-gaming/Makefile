@@ -17,7 +17,7 @@ TOPICS := game.player-events game.match-events game.achievements game.leaderboar
 REPLICAS := $(or $(shell sed -nE 's/^REDPANDA_TOPIC_REPLICAS=([0-9]+)$$/\1/p' .env 2>/dev/null),1)
 SUBJECTS := game.player-events-value game.match-events-value game.achievements-value
 
-.PHONY: help up down topics schemas seed verify logs clean proto test test-docs tiered-up
+.PHONY: help up down topics schemas seed wait verify logs clean proto test test-docs tiered-up
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "} {printf "  %-10s %s\n", $$1, $$2}'
@@ -64,7 +64,20 @@ seed: topics schemas ## Let the simulator produce SIM_EVENTS_MAX events and wait
 	  if [ "$$state" = "capped" ]; then curl -fsS http://localhost:$$port/stats; exit 0; fi; \
 	  sleep 2; \
 	done; echo "simulator did not reach its cap in time (state: $$state)"; exit 1
+	@$(MAKE) --no-print-directory wait
 # end::seed[]
+
+# tag::wait[]
+wait: ## Wait until every consumer group has caught up (lag 0, stable) and the dashboard has read the whole board
+	@port=$${LEADERBOARD_PORT:-$$(sed -nE 's/^LEADERBOARD_PORT=//p' .env)}; port=$${port:-3000}; \
+	for i in $$(seq 1 180); do \
+	  lag=$$($(RPK) group describe leaderboard achievements connect-history 2>/dev/null </dev/null | awk '$$1=="TOTAL-LAG" {n++; s+=$$2} END {if (n<3) print "x"; else print s+0}'); \
+	  unstable=$$($(RPK) group describe leaderboard achievements connect-history 2>/dev/null </dev/null | awk '$$1=="STATE" && $$2!="Stable" {b=1} END {print b+0}'); \
+	  caught=$$(curl -fsS http://localhost:$$port/api/status 2>/dev/null | grep -c '"caught_up": true'); \
+	  if [ "$$lag" = 0 ] && [ "$$unstable" = 0 ] && [ "$$caught" = 1 ]; then echo "consumer groups leaderboard, achievements, connect-history have lag 0; the dashboard has read the whole board"; exit 0; fi; \
+	  sleep 1; \
+	done; echo "consumer groups did not catch up in time (lag: $$lag)"; exit 1
+# end::wait[]
 
 verify: ## Prove the outcome; prints PASS (n/n) or FAIL
 	./scripts/verify.sh

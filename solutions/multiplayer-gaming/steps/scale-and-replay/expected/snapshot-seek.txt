@@ -1,0 +1,7 @@
+TOPIC               PARTITION  PRIOR-OFFSET  CURRENT-OFFSET
+game.player-events  0          -1            0
+game.player-events  1          1231          0
+game.player-events  2          1880          0
+game.player-events  3          1294          0
+game.player-events  4          1832          0
+game.player-events  5          1298          0

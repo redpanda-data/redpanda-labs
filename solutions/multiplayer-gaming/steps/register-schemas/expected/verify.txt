@@ -1,0 +1,3 @@
+CONTEXT  SUBJECT                   VERSION  ID    TYPE      ERROR
+default  game.player-events-value  1        1     PROTOBUF  
+default  game.player-events-value  2        2     PROTOBUF  

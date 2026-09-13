@@ -1,0 +1,22 @@
+{
+  "top": [
+    {
+      "rank": 1,
+      "player_id": "p014",
+      "display_name": "Sable",
+      "score": 795
+    },
+    {
+      "rank": 2,
+      "player_id": "p021",
+      "display_name": "Corvid",
+      "score": 715
+    },
+    {
+      "rank": 3,
+      "player_id": "p024",
+      "display_name": "Zephyr",
+      "score": 715
+    }
+  ]
+}

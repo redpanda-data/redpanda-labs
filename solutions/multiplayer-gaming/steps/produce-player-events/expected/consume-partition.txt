@@ -1,0 +1,28 @@
+{
+  "topic": "game.player-events",
+  "key": "p020",
+  "value": "{\"eventId\":\"evt-00000003\",\"playerId\":\"p020\",\"matchId\":\"m-00001\",\"occurredAt\":\"2026-09-01T12:00:00.200Z\",\"region\":\"eu-west\",\"playerJoined\":{\"displayName\":\"Isolde\"}}",
+  "headers": [
+    {
+      "key": "event_type",
+      "value": "player_joined"
+    }
+  ],
+  "timestamp": 1789313669907,
+  "partition": 1,
+  "offset": 0
+}
+{
+  "topic": "game.player-events",
+  "key": "p023",
+  "value": "{\"eventId\":\"evt-00000005\",\"playerId\":\"p023\",\"matchId\":\"m-00001\",\"occurredAt\":\"2026-09-01T12:00:00.200Z\",\"region\":\"eu-west\",\"playerJoined\":{\"displayName\":\"Anvil\"}}",
+  "headers": [
+    {
+      "key": "event_type",
+      "value": "player_joined"
+    }
+  ],
+  "timestamp": 1789313669926,
+  "partition": 1,
+  "offset": 1
+}

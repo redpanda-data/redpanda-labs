@@ -1,0 +1,3 @@
+  "players_tracked": 24,
+    "first_win": 22,
+    "hot_streak": 374

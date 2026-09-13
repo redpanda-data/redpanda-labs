@@ -1,0 +1,61 @@
+TOPIC               STATUS
+game.player-events  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC              STATUS
+game.match-events  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC              STATUS
+game.achievements  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC             STATUS
+game.leaderboard  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC                   STATUS
+game.player-events.dlq  TOPIC_ALREADY_EXISTS: The topic has already been created
+NAME                    PARTITIONS  REPLICAS
+_schemas                1           1
+game.achievements       3           1
+game.leaderboard        3           1
+game.match-events       3           1
+game.player-events      6           1
+game.player-events.dlq  1           1
+CONTEXT  SUBJECT
+default  game.achievements-value
+default  game.leaderboard-value
+default  game.match-events-value
+default  game.player-events-value
+CONTEXT  SUBJECT                   VERSION  ID    TYPE      ERROR
+default  game.achievements-value   1        1     PROTOBUF  
+default  game.achievements-value   2        2     PROTOBUF  
+default  game.leaderboard-value    1        2     PROTOBUF  
+default  game.match-events-value   1        1     PROTOBUF  
+default  game.match-events-value   2        2     PROTOBUF  
+default  game.player-events-value  1        1     PROTOBUF  
+default  game.player-events-value  2        2     PROTOBUF  
+waiting for the simulator to reach its event cap
+{
+  "state": "capped",
+  "seed": 42,
+  "players": 24,
+  "rate_per_second": 100,
+  "events_max": 3000,
+  "generated_total": 3000,
+  "acked": {
+    "game.match-events": 102,
+    "game.player-events": 2898
+  },
+  "acked_total": 3000,
+  "produce_errors": 0,
+  "burst_events": 0,
+  "poison_records": 0,
+  "events_by_type": {
+    "item_acquired": 761,
+    "match_ended": 48,
+    "match_started": 54,
+    "player_joined": 216,
+    "player_left": 192,
+    "score_changed": 1729
+  },
+  "sim_time": "2026-09-01T12:08:38Z",
+  "schema_ids": {
+    "game.match-events-value": 2,
+    "game.player-events-value": 2
+  }
+}
+consumer groups leaderboard, achievements, connect-history have lag 0; the dashboard has read the whole board

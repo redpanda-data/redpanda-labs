@@ -1,0 +1,7 @@
+  event_type   | count 
+---------------+-------
+ item_acquired |   761
+ player_joined |   216
+ player_left   |   192
+ score_changed |  1729
+(4 rows)
