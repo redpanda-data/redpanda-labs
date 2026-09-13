@@ -1,0 +1,107 @@
+= Register the source schemas
+:page-layout: solution-step
+:description: Put the first subjects on the Confluent Schema Registry the way an application team would have: two Avro subjects, a BACKWARD compatibility rule, and a second version.
+:page-solution-step-duration: 5
+
+You give the source registry some history to migrate: two Avro subjects, a subject-level compatibility setting, and a second version of one subject that the rule accepts. Everything goes through the Confluent Schema Registry's REST API from inside the client container.
+
+== What you do
+
+. Register the schemas on the source:
++
+[source,bash]
+----
+include::example$steps/register-source-schemas/commands.sh[tag=register]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/register-source-schemas/expected/register.txt[]
+----
++
+Each response carries the global schema ID the registry assigned (`1`, `2`, `3`) and the version within the subject. Those IDs are what every record will carry.
+
+. Read the script. It wraps each schema file in the registry's request body with `jq` and posts it:
++
+[source,bash]
+----
+include::example$scripts/register-schemas.sh[tags=register]
+----
+
+. Compare the two versions of `orders-value`. Version 2 adds `currency` with a default, which is what `BACKWARD` requires: a consumer using version 2 can still read a record written with version 1.
++
+[source,json]
+----
+include::example$schemas/orders-v2.avsc[]
+----
+
+== Why
+
+The properties a migration has to preserve are exactly the ones this step creates: more than one version under a subject, a compatibility level set on the subject rather than inherited from the global default, and schema IDs assigned in an order that the source chose. A registry copy that renumbers IDs or flattens versions breaks every consumer that reads old records. The next steps check each of these on the destination.
+
+== Why Redpanda
+
+Nothing about this step is specific to Redpanda, and that is the point: the source is untouched Confluent Platform, and the shadow link you create next reads it through the same REST endpoints you just used (`/subjects`, `/subjects/<name>/versions`, `/config/<name>`). See xref:streaming:manage:schema-reg/schema-reg-api.adoc[] for the same API on the Redpanda side.
+
+== What happens inside
+
+`POST /subjects/orders-value/versions` makes the Confluent Schema Registry parse the Avro schema, check it against the subject's compatibility level (the global default until the `PUT /config/orders-value` call sets `BACKWARD`), assign the next global ID, and write it to its `_schemas` topic on the Confluent broker. The second `POST` for `orders-value` is checked against version 1 under `BACKWARD` and becomes version 2 with ID `3`. Posting the same schema text again would return the existing ID, which is why `make register-schemas` is safe to repeat.
+
+Complete sources for building along:
+
+.Complete source: scripts/register-schemas.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/register-schemas.sh[]
+----
+====
+
+.Complete source: schemas/orders-v1.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/orders-v1.avsc[]
+----
+====
+
+.Complete source: schemas/customers.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/customers.avsc[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/register-source-schemas/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/register-source-schemas/expected/verify.txt[]
+----
+
+Two subjects, versions `[1,2]` for `orders-value`, and `BACKWARD` on it. If the second `POST` in the script failed with HTTP 409, the schema in `orders-v2.avsc` is not backward compatible with version 1 (the new field needs a default). If `curl` cannot connect, the registry port is not `38081` on your host; check `CONFLUENT_SR_PORT` in `.env`.
+
+== In production
+
+[.production-note]
+Your source registry already has its history. Before you create the link, list the subjects and compatibility levels you expect to see on Redpanda; `make compare` in xref:verify-replication.adoc[] is that list, checked by machine. Schemas that use Confluent-only features (rule sets, metadata, compatibility groups) need a decision before the link is created; see the Dead-letter handling row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/register-schemas.sh[scripts/register-schemas.sh]
+* link:{attachmentsdir}/schemas/orders-v1.avsc[schemas/orders-v1.avsc], link:{attachmentsdir}/schemas/orders-v2.avsc[schemas/orders-v2.avsc], and link:{attachmentsdir}/schemas/customers.avsc[schemas/customers.avsc]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

@@ -1,0 +1,161 @@
+= Start the environment
+:page-layout: solution-step
+:description: Start the Confluent source, the Redpanda shadow cluster with Shadowing enabled, Redpanda Console, and the client with one command, and confirm both registries are empty.
+:page-solution-step-duration: 8
+
+You bring up both sides of the migration with one command: a Confluent broker and Confluent Schema Registry as the source, a Redpanda cluster with Shadowing enabled as the destination, Redpanda Console on the Redpanda side, and the Python client that plays the application. Nothing is replicated yet; the source registry is empty.
+
+== What you do
+
+. Choose one of two paths. Both end with the same running stack.
++
+*Download the complete example* (sign in required). Unzip it and change into `schema-registry-migration/`.
++
+*Or build along.* Create a directory `schema-registry-migration/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`, and `chmod +x` the files under `scripts/`.
+
+. Start everything and wait for the healthchecks:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+The first run pulls the two Confluent images (about 1.5 GB together), Redpanda, and Console, and builds the client image. Allow several minutes for that; every later start takes under a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every host port.
+
+. Confirm the source registry is empty:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=source-empty]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/source-empty.txt[]
+----
+
+. Confirm Shadowing is enabled on the Redpanda cluster:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=shadow-linking]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/shadow-linking.txt[]
+----
+
+. Open Redpanda Console at http://localhost:8180. It is connected to the Redpanda cluster only. The *Schema Registry* page is empty and the topic list holds only `_schemas`, the topic the registry stores its state in.
+
+The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --build --wait`, so the command returns only when all six containers pass. The Redpanda side is one container with the one cluster property this solution needs:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=redpanda]
+----
+
+== Why
+
+A migration rehearsal is only worth something against the real source, so the source here is Confluent Platform itself, not a second Redpanda pretending to be one. The `cp-schema-registry` image has no UI, and that is deliberate: everything you do to the source goes through its REST API, the same way the shadow link reads it.
+
+The client is a separate container because it is the thing that moves. It starts with two environment variables that point at Confluent, `SOURCE_SR_URL` and `SOURCE_BOOTSTRAP_SERVERS`, and in xref:cut-over.adoc[] you point the same code at Redpanda by overriding them. If the client needed a code change to cut over, the migration would not be finished.
+
+== Why Redpanda
+
+Shadowing is part of the broker: `enable_shadow_linking=true` is the only configuration, and the link you create in xref:create-shadow-link.adoc[] runs inside the destination cluster with no separate connector process or replication tooling to deploy. The destination's Schema Registry is built into the same binary, so the registry that receives the subjects is already running. See xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[].
+
+== What happens inside
+
+Confluent's broker starts in KRaft mode as one combined broker and controller and reports healthy when its API answers; the Confluent Schema Registry waits for it and then serves an empty registry on port 8081 inside the network (`38081` on the host). Redpanda starts in `dev-container` mode with `--memory 1G`, advertises `redpanda:9092` inside the compose network and `localhost:29092` outside it, and reports `Healthy: true` once its single Raft group has a leader. Console connects to Redpanda's Kafka API, Schema Registry, and Admin API. The `rpk` helper container has the link configuration mounted at `/config` for the next steps, and the client image is built from `client/Dockerfile` with pinned Python dependencies plus `curl` and `jq`.
+
+The source side of the compose file:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=confluent]
+----
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: console-config.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console-config.yaml[]
+----
+====
+
+.Complete source: client/Dockerfile
+[%collapsible]
+====
+[source,dockerfile]
+----
+include::example$client/Dockerfile[]
+----
+====
+
+.Complete source: client/requirements.txt
+[%collapsible]
+====
+[source,text]
+----
+include::example$client/requirements.txt[]
+----
+====
+
+.Complete source: Makefile
+[%collapsible]
+====
+[source,makefile]
+----
+include::example$Makefile[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (the Confluent broker fails to start its JVM, or Redpanda fails to allocate `--memory 1G`) and one of the host ports already in use (move it with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If `enable_shadow_linking` prints `false`, you started from an older volume; `make clean` and start again.
+
+== In production
+
+[.production-note]
+The two clusters are deployed and secured separately, and the link connects to the source over TLS with credentials scoped to reading topics and the registry. See the Brokers and replication and Security rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/console-config.yaml[console-config.yaml]
+* link:{attachmentsdir}/client/Dockerfile[client/Dockerfile] and link:{attachmentsdir}/client/requirements.txt[client/requirements.txt]
+* link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml]
+* link:{attachmentsdir}/schemas/orders-v1.avsc[schemas/orders-v1.avsc], link:{attachmentsdir}/schemas/orders-v2.avsc[schemas/orders-v2.avsc], link:{attachmentsdir}/schemas/customers.avsc[schemas/customers.avsc], link:{attachmentsdir}/schemas/address.avsc[schemas/address.avsc], link:{attachmentsdir}/schemas/shipping.avsc[schemas/shipping.avsc], link:{attachmentsdir}/schemas/warehouse-event.json[schemas/warehouse-event.json], and link:{attachmentsdir}/schemas/inventory_event.proto[schemas/inventory_event.proto]
+* link:{attachmentsdir}/sample-data/orders.json[sample-data/orders.json], link:{attachmentsdir}/sample-data/customers.json[sample-data/customers.json], link:{attachmentsdir}/sample-data/shipping.json[sample-data/shipping.json], link:{attachmentsdir}/sample-data/orders-after-cutover.json[sample-data/orders-after-cutover.json], and link:{attachmentsdir}/sample-data/README.md[sample-data/README.md]
+* link:{attachmentsdir}/scripts/register-schemas.sh[scripts/register-schemas.sh], link:{attachmentsdir}/scripts/register-complex-schemas.sh[scripts/register-complex-schemas.sh], link:{attachmentsdir}/scripts/compare_registries.py[scripts/compare_registries.py], link:{attachmentsdir}/scripts/produce_topic_data.py[scripts/produce_topic_data.py], link:{attachmentsdir}/scripts/consume_topic_data.py[scripts/consume_topic_data.py], link:{attachmentsdir}/scripts/set-paused.sh[scripts/set-paused.sh], link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh], and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (`chmod +x` them)

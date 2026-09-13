@@ -1,0 +1,157 @@
+= Cut over to Redpanda
+:page-layout: solution-step
+:description: Pause schema replication so the Redpanda registry accepts writes, fail the shadow topics over so they accept records, and produce the next order on Redpanda with the same client.
+:page-solution-step-duration: 5
+
+Both halves are on Redpanda and the source is still the writer. You now make Redpanda the writer: pause schema replication, which lifts the write block on the registry, fail the topics over, which promotes them to ordinary topics, and point the client at Redpanda for its next record. Topic failover cannot be undone, so this is the step to rehearse.
+
+== What you do
+
+. Pause Schema Registry replication:
++
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=pause]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/cut-over/expected/pause.txt[]
+----
++
+`rpk shadow update` has no flags for single fields: it opens the link's configuration in your editor and applies what you save. `make pause` supplies a tiny non-interactive editor that sets `paused: true` under `shadow_schema_registry_api`. To do it by hand instead, run the command below, add `paused: true` under `shadow_schema_registry_api` (the field is absent while it is false, so you add a line), then save and exit. The image sets `EDITOR=nano`, so save with kbd:[Ctrl+O], kbd:[Enter], then kbd:[Ctrl+X]. This command is interactive and is not part of the test run:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=update-by-hand]
+----
+
+. Register a schema on the Redpanda registry, the request that returned `412` in xref:verify-replication.adoc[]:
++
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=allowed]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/cut-over/expected/allowed.txt[]
+----
++
+HTTP `200` and a new ID: applications can register schemas on Redpanda now.
+
+. Fail every shadow topic over. `make failover` runs `rpk shadow failover --all` and waits until each topic reports `FAILED_OVER`:
++
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=failover]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/cut-over/expected/failover.txt[]
+----
+
+. Produce the next order on Redpanda with the same client. The only difference from `make produce` is the two endpoints:
++
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=produce-redpanda]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/cut-over/expected/produce-redpanda.txt[]
+----
++
+The client looked `orders-value` up on the Redpanda registry, got ID `3`, the same ID the Confluent registry assigned, and encoded `ord-2001` with it.
+
+. Only pausing is reversible. If you rehearse the pause on its own, without failing over, `make resume` puts the write block back; a schema registered on Redpanda while paused then shows up as a sync error in `rpk shadow status`. After a failover, resuming schema replication makes no sense, so this command is not part of the test run:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=resume]
+----
+
+== Why
+
+Cut-over is two switches because the link has two tasks. Pausing the registry task stops polling the source and releases the destination context, so new schemas can be registered on Redpanda; that is what your producers need the moment they point at the new registry. Failing the topics over stops fetching from the source and turns the read-only shadow topics into normal topics, so producers can write. The canonical sequence does both together, as one unit, and this step follows it. Doing only one leaves you with a cluster that either accepts schemas but not records or the reverse, and consumers that cannot tell which.
+
+The order of operations in a real cut-over is what protects you from writing to both clusters: stop the producers on Confluent, wait until every topic shows `LAG 0` and `make compare` agrees, pause and fail over, then start the producers against Redpanda. In this walkthrough the producer is you, so the wait is already over.
+
+== Why Redpanda
+
+Failover is a state change on the shadow topics, not a copy: the data is already there, so promoting the three topics is immediate and the new order lands next to the migrated ones with offset `3`. The link stays in place afterwards, with the registry task paused and the topics in `FAILED_OVER`, so `rpk shadow status` still tells the story of what happened. Delete it when you no longer need that record. See xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[], xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-failover.adoc[], and xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-update.adoc[].
+
+== What happens inside
+
+`rpk shadow update` fetches the link configuration, hands it to `$EDITOR`, and posts the result back; the editor script `make pause` uses is three lines of `sed`:
+
+[source,bash]
+----
+include::example$scripts/set-paused.sh[tags=editor]
+----
+
+With `paused: true` the Schema Registry Shadowing task stops its sync loops and drops its ownership of the default context, so the next `POST /subjects/cutover-test/versions` is checked, assigned ID `8`, and written to Redpanda's `_schemas` like any other registration. `rpk shadow failover --all` asks the Admin API to move every topic of the link from `ACTIVE` through `FAILING_OVER` to `FAILED_OVER`; each topic's replication fetcher stops, and the topic's partitions accept produce requests. `make wait-failover` polls `rpk shadow status --print-topic` until all three report `FAILED_OVER`. The client then runs `produce_topic_data.py cutover` with `SR_URL=http://redpanda:8081` and `BOOTSTRAP_SERVERS=redpanda:9092`, reads `sample-data/orders-after-cutover.json`, and produces one record to `orders`.
+
+The Makefile targets for this step:
+
+[source,makefile]
+----
+include::example$Makefile[tags=cutover]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/set-paused.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/set-paused.sh[]
+----
+====
+
+.Complete source: sample-data/orders-after-cutover.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$sample-data/orders-after-cutover.json[]
+----
+====
+
+== Verify
+
+Read everything from Redpanda:
+
+[source,bash]
+----
+include::example$steps/cut-over/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/cut-over/expected/verify.txt[]
+----
+
+Seven records: the six migrated ones and `ord-2001`, decoded with the same three schemas. If `make produce-redpanda` fails with a `NOT_LEADER` or authorization error on `orders`, the topic is not failed over yet; `make wait-failover` shows the state. If the `POST` still returns `412`, the pause did not apply: `docker compose exec -T rpk rpk shadow describe schema-registry-migration --print-registry` should show `PAUSED true`.
+
+== In production
+
+[.production-note]
+Fail a link over as one unit: stop producers, wait for `LAG 0` and a clean `make compare`, pause the registry task and fail the topics over together, then repoint producers and consumers, and never let both clusters accept writes for the same topics. Turn on schema ID validation on the migrated topics afterwards. See the Idempotency and delivery and Schema validation rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/set-paused.sh[scripts/set-paused.sh]
+* link:{attachmentsdir}/sample-data/orders-after-cutover.json[sample-data/orders-after-cutover.json]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

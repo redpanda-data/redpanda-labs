@@ -1,0 +1,165 @@
+= Migrate the topic data
+:page-layout: solution-step
+:description: Produce Avro records to the Confluent broker, decode them with the Confluent registry and then with the Redpanda registry, watch the shadow topics fill, and read everything from Redpanda alone.
+:page-solution-step-duration: 7
+
+So far the source holds schemas and no records. You now produce real Avro records to Confluent using those schemas, decode them three ways to show what the schema ID in each record means, and watch the link replicate the topics to Redpanda.
+
+== What you do
+
+. Produce three orders, two customers, and one shipment to the Confluent broker. Each record is encoded with the latest schema of its subject:
++
+[source,bash]
+----
+include::example$steps/migrate-topic-data/commands.sh[tag=produce]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/migrate-topic-data/expected/produce.txt[]
+----
+
+. Read them back from Confluent, resolving each schema ID against the Confluent registry:
++
+[source,bash]
+----
+include::example$steps/migrate-topic-data/commands.sh[tag=consume-source]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/migrate-topic-data/expected/consume-source.txt[]
+----
+
+. Read the same records from Confluent, but resolve the schema IDs against the Redpanda registry. Only `SR_URL` changes:
++
+[source,bash]
+----
+include::example$steps/migrate-topic-data/commands.sh[tag=consume-shadow-registry]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/migrate-topic-data/expected/consume-shadow-registry.txt[]
+----
++
+Same records, same IDs `2`, `3`, and `5`, decoded by a registry that never saw the producer. That is what ID preservation buys.
+
+. Wait for the link to create the shadow topics and replicate the records, then read their state:
++
+[source,bash]
+----
+include::example$steps/migrate-topic-data/commands.sh[tag=wait-topics]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/migrate-topic-data/expected/wait-topics.txt[]
+----
++
+Each topic is `ACTIVE` with the destination high watermark equal to the source's and `LAG` `0`. The list at the end is the set of topic properties the link copied from the source.
+
+== Why
+
+The migration only works if the bytes in a record and the registry that decodes them agree on what an ID means. The client makes that explicit by framing records itself instead of using a serializer library, so the contract is visible: a `0x00` magic byte, the schema ID as four big-endian bytes, then the Avro body.
+
+[source,python]
+----
+include::example$scripts/produce_topic_data.py[tags=encode]
+----
+
+The three consume runs are the same code with different endpoints, and together they are the argument for the whole design: the second run proves the registry migrated correctly (a consumer that only knows Redpanda's registry decodes Confluent's records), and the third proves the data migrated too.
+
+== Why Redpanda
+
+The link's topic sync creates each shadow topic with the source's partition count and properties and replicates from the earliest offset because the file says `start_at_earliest`, so the whole history moves, not just new records. Consumer groups do not exist on the shadow side yet; the client uses a fresh group per run, so every run reads from the start. See xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] for the topic sync options and xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[] for the status you printed.
+
+== What happens inside
+
+The producer looks up `orders-value/versions/latest` and gets ID `3` (version 2), `customers-value` gets `2`, and `shipping-value` gets `5` along with its reference, which the client resolves by fetching `address-value` version 1 so `fastavro` knows the `Address` type. The Confluent broker auto-creates the three topics on the first produce, one partition each. Within `interval` (10 seconds) the link's source topic sync sees three topics that match its `INCLUDE` filters, creates read-only shadow topics with the same names on Redpanda, copies the listed properties, and starts fetching from offset 0. The status shows `SRC-HWM`, `DST-HWM`, and `LAG` per partition.
+
+The consumer does the lookup in reverse. For every record it reads the ID out of the first five bytes and calls `/schemas/ids/<id>` on whichever registry `SR_URL` names:
+
+[source,python]
+----
+include::example$scripts/consume_topic_data.py[tags=decode]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/produce_topic_data.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/produce_topic_data.py[]
+----
+====
+
+.Complete source: scripts/consume_topic_data.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/consume_topic_data.py[]
+----
+====
+
+.Complete source: sample-data/orders.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$sample-data/orders.json[]
+----
+====
+
+.Complete source: sample-data/customers.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$sample-data/customers.json[]
+----
+====
+
+.Complete source: sample-data/shipping.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$sample-data/shipping.json[]
+----
+====
+
+== Verify
+
+Read everything from Redpanda alone, broker and registry:
+
+[source,bash]
+----
+include::example$steps/migrate-topic-data/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/migrate-topic-data/expected/verify.txt[]
+----
+
+Six records, three schemas, all from `redpanda`. This is the migrated state: data and the schemas that decode it both live on Redpanda, with the source still running. If the consumer prints `0 record(s)`, the shadow topics are not there yet (`make wait-topics` waits for them). If it fails on `/schemas/ids/<id>`, the schema for that ID has not replicated; records can arrive before their schema, so check `make compare` first.
+
+== In production
+
+[.production-note]
+Add `consumer_offset_sync_options` so consumer groups continue from their committed offsets on Redpanda instead of re-reading history, use prefix or regex topic filters, and expect records to arrive up to `tail_interval` before the schemas they reference. See the Consumer scaling and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/produce_topic_data.py[scripts/produce_topic_data.py] and link:{attachmentsdir}/scripts/consume_topic_data.py[scripts/consume_topic_data.py]
+* link:{attachmentsdir}/sample-data/orders.json[sample-data/orders.json], link:{attachmentsdir}/sample-data/customers.json[sample-data/customers.json], and link:{attachmentsdir}/sample-data/shipping.json[sample-data/shipping.json]
