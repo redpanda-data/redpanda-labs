@@ -1,20 +1,23 @@
 # Writing a Redpanda Solution
 
 This is the canonical guide for the `solutions` component. It defines what a
-Solution is, the metadata every Solution carries, the shape of its pages and
+solution is, the metadata every solution carries, the shape of its pages and
 code, the verification bar, and the workflow from proposal to release. CI
 enforces most of it; the rest is the review checklist at the end.
 
-## What a Solution is
+## What a solution is
 
-A Solution is an end-to-end, runnable reference architecture built on Redpanda
+A solution is an end-to-end, runnable reference architecture built on Redpanda
 that solves one named business problem. A reader starts an environment, builds
 the system step by step, verifies that it does what the docs claim, and leaves
 knowing which Redpanda capabilities made the design work and what changes on
 the path to production.
 
-A Solution is not a feature how-to, a quickstart, or a code sample. Those live
-in Product Docs. A Solution links to them and never re-explains them.
+A solution is not a feature how-to, a quickstart, or a code sample. Those live
+in Product Docs. A solution links to them and never re-explains them.
+
+Terminology: write "solution" in lowercase in prose. "Redpanda Solutions" is
+the name of the section and the only capitalized form.
 
 ### Qualification checklist
 
@@ -32,7 +35,7 @@ A proposal qualifies when every item is true:
 - [ ] It has a production path: every shortcut in the demo has a row in the
       Production considerations table with a link to the canonical guidance.
 - [ ] The canonical Product Docs pages it depends on exist. If one is missing,
-      file a DOC ticket first; do not write the concept into the Solution.
+      file a DOC ticket first; do not write the concept into the solution.
 
 ### What does not qualify, and where it goes
 
@@ -56,12 +59,12 @@ Examples:
   Docs. Link `streaming:develop:consume-data/consumer-offsets.adoc`.
 - "The leaderboard and achievements services read `game.player-events` in two
   consumer groups so a slow achievements deploy never delays the leaderboard"
-  is Solution content.
+  is solution content.
 - "Enable schema ID validation with `redpanda.value.schema.id.validation`" is
-  Product Docs. The Solution's Production considerations row says "enable
+  Product Docs. The solution's Production considerations row says "enable
   schema ID validation on both topics" and links it.
 
-## Layout of one Solution
+## Layout of one solution
 
 ```
 solutions/<slug>/                      code, driven by make
@@ -201,14 +204,14 @@ in the solution layouts.
   topic and partition counts, high watermarks against the event cap, consumer
   group lag 0, sink row counts equal to source counts, dead-letter topic empty,
   dashboards and `/ready` endpoints answering.
-- The last step of every Solution runs `scripts/verify.sh` and shows its output.
-- Versions are pinned in `.env.example` before a Solution is `published`. The
+- The last step of every solution runs `scripts/verify.sh` and shows its output.
+- Versions are pinned in `.env.example` before a solution is `published`. The
   nightly workflow overrides them with `latest` and opens an issue when a
-  Solution breaks.
+  solution breaks.
 
 ## Production checklist
 
-Before a Solution goes `published`, every row of the Production considerations
+Before a solution goes `published`, every row of the Production considerations
 table is filled and linked, and the code follows these conventions:
 
 - Producers are idempotent; consumers commit after processing.
@@ -332,5 +335,5 @@ npm run serve
 
 `labs-docs/` and the legacy code directories (`docker-compose/`, `clients/`,
 `data-transforms/`, `kubernetes/`, `connect-plugins/`, `setup-tests/`) are the
-retired Redpanda Labs, frozen until each lab is promoted into a Solution,
+retired Redpanda Labs, frozen until each lab is promoted into a solution,
 extracted into Product Docs, or retired with a redirect. Do not edit them.
