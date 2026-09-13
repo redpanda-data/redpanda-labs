@@ -42,8 +42,11 @@ done
 # --input is not variadic in doc-detective 4.38.1, so the step specs go into
 # the merged config's input array. Never pass the specs directory: _setup and
 # _teardown would then run a second time as ordinary specs.
-merged=$(mktemp "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX.json")
-trap 'rm -f "$merged"' EXIT
+# BSD mktemp only substitutes trailing X characters, so make a run directory
+# and give the merged config a fixed name inside it.
+run_dir=$(mktemp -d "${TMPDIR:-/tmp}/dd-config-$slug.XXXXXX")
+merged="$run_dir/config.json"
+trap 'rm -rf "$run_dir"' EXIT
 inputs_json=$(printf '%s\n' "${inputs[@]}" | jq -R . | jq -s .)
 jq -s --argjson inputs "$inputs_json" '.[0] * .[1] * {input: $inputs}' \
   "$root/tools/doc-detective.base.json" "$local_cfg" > "$merged"
