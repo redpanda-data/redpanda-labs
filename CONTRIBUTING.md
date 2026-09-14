@@ -118,7 +118,7 @@ checking categories against the shared list).
 | `:page-topic-type:` | yes | `solution` | |
 | `:description:` | yes | one sentence, 200 chars or fewer | Card text, meta description, search snippet |
 | `:page-solution-version:` | yes | `vX.Y.Z` | The only version input. Drives the tag `<slug>/<version>` and asset `<slug>-<version>.zip`. Released only when status is `published` or `deprecated`. Bump on any change a reader would notice. Keep each attribute on one line. |
-| `:page-solution-difficulty:` | yes | `beginner`, `intermediate`, `advanced` | |
+| `:page-solution-difficulty:` | yes | `beginner`, `intermediate`, `advanced` | What the reader must bring, not how deep the material goes. See "Difficulty and assumed knowledge". The landing page filters on it. |
 | `:page-solution-duration:` | yes | integer minutes, 5 to 600 | Whole build-along path; within 10% of the sum of the step durations |
 | `:page-solution-status:` | yes | `draft`, `published`, `deprecated` | Drafts build only with `SOLUTIONS_INCLUDE_DRAFTS=true`. Deprecated publishes with a banner and leaves recommendations. |
 | `:page-solution-featured:` | no | `true` | Featured on the landing page. Omit otherwise. |
@@ -137,6 +137,55 @@ checking categories against the shared list).
 Derived at build time, never authored: `page-solution-id`, `page-solution-repo`,
 `page-solution-asset`, `page-solution-tag`, step navigation, and the
 `page-solution` record the layouts render.
+
+### Difficulty and assumed knowledge
+
+`:page-solution-difficulty:` describes what the reader must *bring*, not how
+deep the material goes. Depth is already carried by
+`:page-solution-duration:` and the length of the step list, so a long
+solution that asks nothing of the reader is still `beginner`.
+
+Rate each of the three axes below, then take the highest row any single axis
+reaches. One advanced axis makes the solution `advanced`.
+
+[cols="1,2,2,2"]
+|===
+| Axis | `beginner` | `intermediate` | `advanced`
+
+| Assumed knowledge
+| Docker, and nothing about Redpanda.
+| One or two Redpanda concepts the reader will have met in Product Docs, for example topics or consumer groups, plus comfort reading code in the solution's language.
+| Operational experience: security and ACLs, more than one cluster, Kubernetes, or schema compatibility rules.
+
+| What the reader must do
+| Every command is copy-paste.
+| The reader edits configuration or reads code.
+| The reader makes judgment calls that change the outcome.
+
+| External services
+| None to configure.
+| A free third-party account at most.
+| May need real infrastructure.
+|===
+
+Worked examples, as the kind of solution each label fits:
+
+* A solution that streams events through a local compose stack and has the
+  reader read Go but write none is `intermediate`: it assumes topics and
+  consumer groups, and the reader reads code.
+* A migration between two secured clusters, with ACLs and consumer-group
+  offset translation, is `advanced` on every axis.
+* A disaster-recovery walkthrough with failover and a Kubernetes variant is
+  `advanced`: it assumes operational experience and the reader decides when
+  to fail over.
+
+`:page-solution-assumes:` names the same assumptions in the reader's words,
+and the two together are what a reader uses to choose a solution: the label
+sorts it against its siblings, the phrases say what to go and learn first.
+Keep the phrases short and concrete (`topics`, `reading Go`), not sentences,
+and keep them honest against the rubric above: `beginner` with
+`schema compatibility rules` in the list is a contradiction, and
+`tools/check-metadata.sh` warns about the likely cases.
 
 ## Section structure
 
