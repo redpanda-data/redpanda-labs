@@ -4,7 +4,6 @@
 :description: Stream row changes out of Postgres and MySQL with Redpanda Connect, land them in an Iceberg table that Redpanda writes itself, and query them in Spark seconds later.
 :page-solution-version: v1.0.0
 :page-solution-difficulty: advanced
-:page-solution-assumes: Docker, SQL, table formats
 :page-solution-duration: 52
 :page-solution-status: draft
 :page-solution-download: authenticated
