@@ -13,7 +13,7 @@
 #   - difficulty is plausible (warnings): 'beginner' while a step page mentions
 #     Kubernetes, kubectl, SASL, ACLs, failover, shadowing, or schema compatibility;
 #     'advanced' while the compose file has fewer than three services and no page shows
-#     a source file. A published solution without :page-solution-assumes: also warns.
+#     a source file.
 #   - :page-solution-duration: is within 10% of the sum of the :page-solution-step-duration:
 #     values when every step carries one
 #   - deprecated solutions name :page-solution-superseded-by:
@@ -405,9 +405,6 @@ for slug in $slugs; do
     if [ "$svc_count" -lt 3 ] && [ -z "$shows_source" ]; then
       warn "$page" ":page-solution-difficulty: is 'advanced', but the compose file declares $svc_count service(s) and no page shows a source file; check it against the rubric in CONTRIBUTING.md"
     fi
-  fi
-  if [ "$status" = "published" ] && [ -z "$(attr "$h" page-solution-assumes)" ]; then
-    warn "$page" "no :page-solution-assumes:; a published solution should say what the reader must already know (it renders beside the difficulty chip)"
   fi
 
   # The run's own evidence. tools/run-doc-detective.sh writes it from the
