@@ -35,11 +35,15 @@ spec:
 
   # tag::filters[]
   # Topics whose names start with `dr-`, replicated from their first offset.
+  # The operator spells the prefix pattern `prefixed`, where `rpk` spells it
+  # `PREFIX`, and `startOffset: earliest` is `start_at_earliest` in the `rpk`
+  # configuration. Same link, two field vocabularies.
   topicMetadataSyncOptions:
     interval: 5s
+    startOffset: earliest
     autoCreateShadowTopicFilters:
       - name: dr-
-        patternType: prefix
+        patternType: prefixed
         filterType: include
     syncedShadowTopicProperties:
       - retention.ms
@@ -51,7 +55,7 @@ spec:
     interval: 5s
     groupFilters:
       - name: dr-
-        patternType: prefix
+        patternType: prefixed
         filterType: include
 
   # Topic mode: the source is another Redpanda cluster, so its internal

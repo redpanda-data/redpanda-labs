@@ -49,6 +49,13 @@ else
   printf '%s: ShadowLink %s reads redpanda.source.svc.cluster.local and writes redpanda.shadow.svc.cluster.local\n' "$link" "$name"
   printf '%s: topics with prefix %s, consumer groups with prefix %s, Schema Registry mode %s\n' \
     "$link" "$topic_prefix" "$group_prefix" "$mode"
+  # The operator's NameFilter accepts only `literal` or `prefixed`, and
+  # rejects the `prefix` that reads more naturally, so check it here rather
+  # than finding out from a rejected resource.
+  bad=$(grep -c 'patternType:[[:space:]]*prefix[[:space:]]*$' "$link")
+  [ "$bad" -eq 0 ] || fail "$link: patternType must be 'prefixed', not 'prefix' ($bad occurrence(s))"
+  [ "$(grep -c 'patternType:[[:space:]]*prefixed' "$link")" -eq 2 ] || fail "$link: both filters must use patternType: prefixed"
+  grep -q 'startOffset:[[:space:]]*earliest' "$link" || fail "$link: startOffset must be earliest, to match start_at_earliest in config/shadow-link.yaml"
   grep -q 'redpanda.source.svc.cluster.local:9093' "$link" || fail "$link: the source cluster brokers are not redpanda.source.svc.cluster.local:9093"
   grep -q 'redpanda.shadow.svc.cluster.local:9093' "$link" || fail "$link: the shadow cluster brokers are not redpanda.shadow.svc.cluster.local:9093"
 
