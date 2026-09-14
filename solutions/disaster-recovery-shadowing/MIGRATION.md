@@ -84,11 +84,28 @@ rewritten to the solution contract.
 - **Two Consoles instead of none.** The compose lab had no Console. One
   Console per cluster makes the replication visible and gives the outage
   something to take away.
-- **Ports moved** so the stack can run next to the other solutions: Envoy
-  `60092` and `60901`, source cluster `63092`, `63081`, `63644`, shadow
-  cluster `61092`, `61081`, `61644`, Consoles `8380` and `8381`, all
-  overridable in `.env`. The compose lab used `9092`, `19092`, and `29092`,
+- **Ports moved** so the stack can run next to the other solutions. The
+  compose lab used `9092`, `19092`, `29092`, `18081`, `28081`, and `9901`,
   which collide with the flagship and the schema-registry-migration stacks.
+
+  | Port | What | `.env` variable |
+  |---|---|---|
+  | `60092` | The Kafka endpoint Envoy serves | `ENVOY_KAFKA_PORT` |
+  | `60901` | Envoy's admin interface | `ENVOY_ADMIN_PORT` |
+  | `63092`, `63081`, `63644` | Source cluster: Kafka, Schema Registry, Admin API | `SOURCE_KAFKA_PORT`, `SOURCE_SR_PORT`, `SOURCE_ADMIN_PORT` |
+  | `61092`, `61081`, `61644` | Shadow cluster: Kafka, Schema Registry, Admin API | `SHADOW_KAFKA_PORT`, `SHADOW_SR_PORT`, `SHADOW_ADMIN_PORT` |
+  | `8380`, `8381` | Redpanda Console, source and shadow | `SOURCE_CONSOLE_PORT`, `SHADOW_CONSOLE_PORT` |
+
+  None of these collide with the ports the other solutions hold: Consoles
+  `8080`, `8180`, `8280`, `8480`; Kafka `19092`, `29092`, `39092`, `49092`,
+  `59092`, `64092`; Schema Registry `18081`, `28081`, `38081`, `48081`,
+  `58081`, `64081`; Postgres `5432` and `5433`; MySQL `3307`; MinIO `9100`
+  and `9101`; Iceberg REST `8581`; Spark `4041`; Redpanda Connect `4195` and
+  `4196`.
+
+  The ports this migration was briefed with, Kafka `69092` and Schema
+  Registry `68081`, are above the 65535 limit of a TCP port and cannot be
+  bound, so the source cluster took `63092` and `63081` instead.
 - **Container names are prefixed with the slug** and the compose project is
   named, so two solutions can be up at once.
 - **Versions are pinned** (`REDPANDA_VERSION=v26.2.2`,

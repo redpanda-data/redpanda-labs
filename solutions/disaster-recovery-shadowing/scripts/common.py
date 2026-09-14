@@ -41,10 +41,12 @@ API_VERSION = (2, 5, 0)
 CONNECT_ATTEMPTS = 10
 CONNECT_DELAY = 3
 METADATA_TIMEOUT = 30
-# Envoy marks an endpoint healthy only after two successful health checks, so
-# for the first few seconds after `make up` it has nowhere to send traffic and
-# a client that connects gets no metadata back. Every script waits that out.
-ENVOY_WAIT = 90
+# Envoy marks an endpoint healthy only after two consecutive successful health
+# checks, so for the first seconds after `make up` it has nowhere to send
+# traffic and a client that connects gets no metadata back. On a loaded
+# machine that can take a minute or two, so every script waits it out and
+# `make up` does not return until Envoy has an endpoint.
+ENVOY_WAIT = 240
 
 
 def die(message):

@@ -32,8 +32,9 @@ help: ## List targets
 .env:
 	cp .env.example .env
 
-up: .env ## Build the client image, start both clusters, Envoy, both Consoles, and the helpers; wait for every healthcheck
+up: .env ## Build the client image, start both clusters, Envoy, both Consoles, and the helpers; wait until Envoy can serve clients
 	$(COMPOSE) up -d --build --wait
+	@$(CLIENT) /scripts/endpoint.py --routing-only
 
 down: .env ## Stop the services, keep data volumes
 	$(COMPOSE) down
@@ -81,11 +82,11 @@ offsets: ## Wait until the group's committed offsets reach the shadow cluster
 disaster: ## Stop the source cluster and wait until Envoy takes it out of service
 	@$(COMPOSE) stop redpanda-source
 	@for i in $$(seq 1 30); do \
-	  if $(CLIENT) /scripts/endpoint.py --routing-only --expect-routing shadow >/dev/null 2>&1; then break; fi; \
+	  if $(CLIENT) /scripts/endpoint.py --routing-only --now --expect-routing shadow >/dev/null 2>&1; then break; fi; \
 	  sleep 2; \
 	done
 	@echo "the source cluster is stopped"
-	@$(CLIENT) /scripts/endpoint.py --routing-only --expect-routing shadow
+	@$(CLIENT) /scripts/endpoint.py --routing-only --now --expect-routing shadow
 
 consume-during-disaster: ## Read every replicated record through the same Envoy address, with the source gone
 	@$(CLIENT) /scripts/consume.py --group observer-during-disaster --no-commit --expect 12 --state continuity

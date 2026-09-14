@@ -20,7 +20,7 @@ You bring up both sides of the recovery with one command: a source cluster, a sh
 include::example$steps/start-environment/commands.sh[tag=up]
 ----
 +
-The first run pulls Redpanda, Redpanda Console, and the Envoy contrib image, and builds the client image. Later starts take under a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every host port.
+The first run pulls Redpanda, Redpanda Console, and the Envoy contrib image, and builds the client image. Later starts take under a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every host port. The last thing `make up` prints is which cluster Envoy is sending clients to, because it does not return until Envoy has an endpoint it will serve.
 
 . Open the two Consoles. The source cluster is at http://localhost:8380 and the shadow cluster is at http://localhost:8381. Both topic lists hold only `_schemas`, the topic Redpanda's Schema Registry keeps its state in. Keep the shadow Console open: from the next step on, it is where replication shows up.
 
@@ -38,7 +38,7 @@ Shadowing is part of the broker. `enable_shadow_linking=true` is the whole confi
 
 Each Redpanda container starts in `dev-container` mode with one shard and 1 GB of memory, and reports healthy once its Raft groups have a leader. Both set `enable_shadow_linking=true`, because the source has to serve the fetches the link makes and the shadow has to run the link. Both also set `cluster_id`, which is what `rpk cluster info` and the two Consoles show, so that you can always tell which cluster a window is looking at.
 
-Envoy waits for both clusters to pass their healthchecks, then starts its own active health checks against each of them. It marks an endpoint healthy only after two consecutive successful checks, so for a few seconds after `make up` it has nowhere to send Kafka traffic. The client scripts wait that out rather than failing.
+Envoy waits for both clusters to pass their healthchecks, then starts its own active health checks against each of them. It marks an endpoint healthy only after two consecutive successful checks, and until one endpoint is healthy it has nowhere to send Kafka traffic: a client that connects in that window gets no metadata back. So `make up` ends by asking Envoy which cluster it is routing to and waits until there is an answer, and every client script waits the same way rather than failing.
 
 The source cluster's service in the compose file:
 
