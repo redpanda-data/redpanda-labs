@@ -36,7 +36,10 @@ pipeline:
         root.customer_id = this.customer_id.or(null)
         root.total = this.total.or(null).number().catch(null)
         root.status = this.status.or(null)
-        root.created_at = this.created_at.or(null).string().catch(null)
+        # A timestamp arrives as a string, but a missing or null column has to
+        # stay null: .string() on null would write the text "null".
+        let created = this.created_at.or(null)
+        root.created_at = if $created == null { null } else { $created.string().catch(null) }
         root.position = meta("lsn").or("")
         root.captured_at = now().ts_format("2006-01-02T15:04:05Z07:00")
 # end::pipeline[]
