@@ -17,6 +17,18 @@ testresults-*.json
 testResults-*.json
 doc-detective-output/
 .doc-detective/
+# doc-detective's lazily installed runtime packages, browser binaries and
+# ffmpeg (about 1.3 GB). The CI workflows point DOC_DETECTIVE_CACHE_DIR here so
+# actions/cache can carry it between runs; it is never committed.
+.doc-detective-cache/
+# Scratch files a documented command creates in a solution directory: the
+# scale-and-replay page has the reader write before.txt and after.txt and diff
+# them. The teardown spec removes them, but a failed run leaves them behind,
+# and the nightly's allowlist guard reads the whole working tree, so an
+# untracked scratch file would read as the investigation touching something it
+# must not.
+solutions/*/before.txt
+solutions/*/after.txt
 
 # Release bundles built locally
 *-v[0-9]*.zip
