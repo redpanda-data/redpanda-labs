@@ -193,8 +193,24 @@ What is tested instead is the thing that actually rots: the manifests.
 `make kubernetes-plan` runs on every pass and fails when a manifest loses a
 field the walkthrough relies on, when a `patternType` is not one the operator
 accepts, or when the Kubernetes link and the compose link stop describing the
-same replication. The manifests were also validated field by field against
-the `ShadowLink` CRD of Redpanda Operator v26.2.3.
+same replication.
+
+That check exists because of a bug it would have caught. The manifests were
+also validated field by field against the `ShadowLink` CRD of Redpanda
+Operator v26.2.3, and the CRD's `NameFilter` accepts `literal` or `prefixed`
+only: the `prefix` this migration first wrote, which reads more naturally and
+matches nothing, would have been rejected at `kubectl apply` time and never
+in CI.
+
+The step was then run once by hand, end to end, on a kind cluster: cert-manager
+v1.21.2, Redpanda Operator v26.2.3, both `Redpanda` resources reaching
+`condition=Ready`, the `ShadowLink` reaching `condition=Synced` with
+`state: active`, 12 records and the `dr-consumers` group replicated to the
+shadow cluster with lag 0, `rpk shadow failover` reaching `FAILED_OVER`, and
+the same group reading exactly the 6 records produced after the failover. Two
+commands were corrected from what that run showed: the link step now waits on
+the `Synced` condition, and the port forwards write their process ids to a
+file instead of relying on `kill %1 %2` finding the reader's shell jobs.
 
 ## Redirects and aliases at decommission
 

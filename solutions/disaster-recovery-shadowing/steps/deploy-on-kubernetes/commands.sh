@@ -38,12 +38,15 @@ kubectl wait -n shadow redpanda/redpanda --for=condition=Ready --timeout=600s
 
 # tag::link[]
 kubectl apply -f kubernetes/shadow-link.yaml
+kubectl wait -n shadow shadowlink/disaster-recovery-shadowing --for=condition=Synced --timeout=300s
 kubectl get -n shadow shadowlink disaster-recovery-shadowing -o wide
 # end::link[]
 
 # tag::profiles[]
 kubectl port-forward -n source pod/redpanda-0 19094:9094 19644:9644 >/dev/null 2>&1 &
+echo $! > local-port-forward.pid
 kubectl port-forward -n shadow pod/redpanda-0 29094:9094 29644:9644 >/dev/null 2>&1 &
+echo $! >> local-port-forward.pid
 sleep 3
 rpk profile create dr-source -s brokers=localhost:19094 -s admin.hosts=localhost:19644
 rpk profile create dr-shadow -s brokers=localhost:29094 -s admin.hosts=localhost:29644
@@ -73,7 +76,7 @@ rpk --profile dr-shadow topic consume dr-orders --num 6 --group dr-consumers
 # end::resume[]
 
 # tag::clean[]
-kill %1 %2
+kill $(cat local-port-forward.pid) && rm local-port-forward.pid
 rpk profile delete dr-source
 rpk profile delete dr-shadow
 kind delete cluster --name disaster-recovery-shadowing

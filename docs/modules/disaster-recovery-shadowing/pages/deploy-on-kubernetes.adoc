@@ -56,7 +56,7 @@ include::example$steps/deploy-on-kubernetes/commands.sh[tag=operator]
 include::example$steps/deploy-on-kubernetes/commands.sh[tag=clusters]
 ----
 +
-Each cluster takes a few minutes on a laptop. They are independent Redpanda clusters that happen to share a Kubernetes cluster, which is fine for a walkthrough and wrong for production.
+Each cluster takes a few minutes on a laptop. They are independent Redpanda clusters that happen to share a Kubernetes cluster, which is fine for a walkthrough and wrong for production. The Helm chart the operator renders also deploys a Redpanda Console per cluster, so `kubectl get pods -A` shows a `redpanda-console` pod in each namespace.
 
 . Create the shadow link:
 +
@@ -66,7 +66,7 @@ Each cluster takes a few minutes on a laptop. They are independent Redpanda clus
 include::example$steps/deploy-on-kubernetes/commands.sh[tag=link]
 ----
 +
-The operator reconciles the resource into a link on the shadow cluster. From here on, deleting the resource deletes the link, and editing the resource changes it: there is no state that exists only because someone ran a command.
+The operator reconciles the resource into a link on the shadow cluster and sets its `Synced` condition, which is what the `kubectl wait` blocks on. From here on, deleting the resource deletes the link, and editing the resource changes it: there is no state that exists only because someone ran a command.
 
 . Reach both clusters from your machine and give each one an `rpk` profile:
 +
@@ -76,7 +76,7 @@ The operator reconciles the resource into a link on the shadow cluster. From her
 include::example$steps/deploy-on-kubernetes/commands.sh[tag=profiles]
 ----
 +
-Both report `Healthy: true`. The port forwards run in the background; the last instruction stops them.
+Both report `Healthy: true`. The two port forwards run in the background and write their process ids to `local-port-forward.pid`, which the last instruction uses to stop them.
 
 . Create the topic on the source cluster, produce to it, and read it as a consumer group, exactly as the compose walkthrough did:
 +
@@ -118,7 +118,9 @@ The operator takes the same link that `rpk shadow create` takes, with the same o
 
 == What happens inside
 
-The operator watches `Redpanda` and `ShadowLink` resources. For each `Redpanda` it renders and applies the Redpanda Helm chart, so a StatefulSet, its Services, and its configuration come from the `clusterSpec` in the manifest, and it sets the resource's `Ready` condition when the cluster reports healthy. For the `ShadowLink` it calls the shadow cluster's Admin API, creating or updating the link so that it matches the spec, and reports the link's state and its tasks in the resource's status.
+The operator watches `Redpanda` and `ShadowLink` resources. For each `Redpanda` it renders and applies the Redpanda Helm chart, so a StatefulSet, its Services, its Console, and its configuration come from the `clusterSpec` in the manifest, and it sets the resource's `Ready` condition when the cluster reports healthy. For the `ShadowLink` it calls the shadow cluster's Admin API, creating or updating the link so that it matches the spec, sets the `Synced` condition, and reports the link's state in the resource's status, where `kubectl get shadowlink` reads it.
+
+The field names differ from the `rpk` configuration even though the link is the same: the operator spells the prefix pattern `prefixed` where `rpk` spells it `PREFIX`, and `startOffset: earliest` is `start_at_earliest`. `make kubernetes-plan` checks both spellings, because a `patternType` the operator does not accept is rejected only when you apply the resource.
 
 The shadow cluster's manifest, with the two cluster properties Shadowing needs:
 

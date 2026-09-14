@@ -5,3 +5,7 @@ state/*.json
 # records it. No page includes it, and the image digest in it changes whenever
 # the client image is rebuilt.
 steps/start-environment/expected/up.txt
+
+# The pid file the Kubernetes step has the reader write for its two
+# `kubectl port-forward` jobs. The last instruction of that step deletes it.
+local-port-forward.pid
