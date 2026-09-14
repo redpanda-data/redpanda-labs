@@ -1,0 +1,80 @@
+= Verify end to end
+:page-layout: solution-step
+:description: Run the eighteen assertions that prove the migration reached its end state: matching registries, preserved IDs, a writable destination, failed-over topics, records readable from Redpanda alone.
+:page-solution-step-duration: 3
+
+One script asserts everything the previous steps claimed, against both running clusters, with exact values. It is the same script CI runs on every change to this solution.
+
+== What you do
+
+. Run the checks:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify-all]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify-all.txt[]
+----
+
+. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_contains`, `assert_cmd`) and runs eighteen checks in six groups; the complete script is at the end of _What happens inside_:
++
+[source,bash]
+----
+include::example$scripts/verify.sh[tags=checks]
+----
+
+== Why
+
+Every step's Verify section checked one thing. This step checks that the pieces agree with each other, which is the claim the migration makes: the registry on Redpanda is the registry on Confluent (same subjects, versions, IDs, types, compatibility, references), the records on Redpanda are the records on Confluent plus what was written after cut-over, and Redpanda is now the writer for both schemas and records. The `412` versus `200` check and the `FAILED_OVER` count are the cut-over itself, stated as assertions.
+
+== Why Redpanda
+
+Everything the script needs is observable from outside through standard APIs: the Schema Registry REST API on both sides, `rpk shadow describe` and `rpk shadow status` for the link, `rpk topic describe` for the high watermarks. That is the property that lets a migration be rehearsed in CI and gated on before the real one. See xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-status.adoc[].
+
+== What happens inside
+
+The script reads `.env` for the host ports and the link name, then queries `http://localhost:38081` and `http://localhost:28081` with `curl`, runs `compare_registries.py --once` inside the client container, runs `rpk shadow` and `rpk topic describe` inside the `rpk` helper, sends the `cutover-test` registration again (the same schema under the same subject returns `200` with the existing ID, so the check is idempotent), and finally runs the consumer against Redpanda and counts what it decoded. Each check prints `ok` or `FAIL`, and `verify_summary` prints `PASS (18/18)` and exits 0, or lists the failed checks and exits 1. CI gates on that exit code.
+
+The complete script, for building along (it sources `scripts/verify-lib.sh`, an attachment):
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+A failed check names what it compared. The likely ones are the two cut-over checks if you skipped xref:cut-over.adoc[] (`PAUSED false`, `412`, topics `ACTIVE`) and the record counts if you ran `make produce-redpanda` more than once (`orders` then holds more than four records).
+
+When you are done, `make clean` stops both clusters and deletes their volumes.
+
+== In production
+
+[.production-note]
+Turn these assertions into your cut-over checklist: a clean registry comparison, zero replication lag, zero sync errors, and a decode test from the destination alone, before any producer is repointed. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (save both under `scripts/`)

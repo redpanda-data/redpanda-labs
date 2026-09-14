@@ -1,0 +1,2 @@
+{"id":8,"version":1,"schemaType":"AVRO","schema":"\"string\""}
+200

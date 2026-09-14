@@ -1,0 +1,25 @@
+SCHEMA REGISTRY
+===============
+SELECTED SOURCE SUBJECTS          2
+SELECTED SOURCE SUBJECT VERSIONS  3
+DESTINATION SUBJECTS              2
+DESTINATION SUBJECT VERSIONS      3
+                                  
+LAST FULL SYNC:                   
+---------------                   
+START TIME                        2026-09-13T18:26:03Z
+FINISH TIME                       2026-09-13T18:26:03Z
+SUBJECT VERSIONS CHANGED          3
+COMPATIBILITY CONFIGS CHANGED     1
+MODES CHANGED                     0
+UNSUPPORTED FEATURES REMOVED      0
+ERRORS                            0
+                                  
+TOTALS SINCE TASK START:          
+------------------------          
+START TIME                        2026-09-13T18:26:03Z
+SUBJECT VERSIONS CHANGED          3
+COMPATIBILITY CONFIGS CHANGED     1
+MODES CHANGED                     0
+UNSUPPORTED FEATURES REMOVED      0
+ERRORS                            0

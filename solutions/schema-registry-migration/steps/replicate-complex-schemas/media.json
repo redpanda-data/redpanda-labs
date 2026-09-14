@@ -1,0 +1,50 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${CONSOLE_PORT:-8180}/schema-registry",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "a[href*='shipping-value']",
+      "timeout": 30000
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/schema-registry-migration/images/console-subjects.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05
+    }
+  },
+  {
+    "goTo": {
+      "url": "http://localhost:${CONSOLE_PORT:-8180}/schema-registry/subjects/shipping-value?version=latest",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "a[href*='subjects/address-value']",
+      "timeout": 30000
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/schema-registry-migration/images/console-shipping-reference.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05
+    }
+  }
+]

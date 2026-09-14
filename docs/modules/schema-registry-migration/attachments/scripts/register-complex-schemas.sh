@@ -1,0 +1,1 @@
+../../../../../solutions/schema-registry-migration/scripts/register-complex-schemas.sh

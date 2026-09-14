@@ -1,0 +1,1 @@
+../../../../../solutions/schema-registry-migration/scripts/consume_topic_data.py

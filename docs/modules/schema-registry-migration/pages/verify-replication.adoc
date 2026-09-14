@@ -1,0 +1,97 @@
+= Verify schema replication
+:page-layout: solution-step
+:description: Read the link's Schema Registry status, prove the replicated context is read-only, and compare both registries subject by subject: versions, IDs, and compatibility.
+:page-solution-step-duration: 5
+
+The first full sync has run. You read what the link reports, confirm that Redpanda refuses writes to the replicated context while the link is active, and compare the two registries field by field.
+
+== What you do
+
+. Read the Schema Registry section of the link status:
++
+[source,bash]
+----
+include::example$steps/verify-replication/commands.sh[tag=status]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-replication/expected/status.txt[]
+----
++
+The destination counts match the source counts: two subjects, three subject versions. The last full sync reports what it changed and that it hit no errors.
+
+. Try to register a schema on the Redpanda registry:
++
+[source,bash]
+----
+include::example$steps/verify-replication/commands.sh[tag=blocked]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-replication/expected/blocked.txt[]
+----
++
+HTTP `412`: the default context on Redpanda belongs to the link now, and the registry rejects writes to it until you pause replication in xref:cut-over.adoc[].
+
+== Why
+
+Counts are a first check, not proof. A migration is correct when, for every subject, the destination has the same versions, the same global IDs behind them, the same schema type, the same subject-level compatibility (or none, so it inherits the global default like the source does), and the same references. `compare_registries.py` reads exactly those five things from both registries and prints them side by side. It polls until they agree because replication is asynchronous: a subject registered on the source appears on Redpanda with the next full sync, up to `full_sync_interval` later.
+
+The `412` matters as much as the match. If the destination accepted writes during replication, a client pointed at Redpanda too early could register a schema, take an ID, and make the copy diverge from the source.
+
+== Why Redpanda
+
+The link enforces the read-only rule per context, not per cluster: contexts outside the link's `source_filter` stay writable, so a team can migrate one context at a time while others already use the destination registry. See xref:streaming:manage:schema-reg/schema-reg-contexts.adoc[] and xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-status.adoc[].
+
+== What happens inside
+
+The Schema Registry Shadowing task keeps two counters per sync: the subjects and versions it selected on the source, and the subjects and versions present on the destination. The status you printed is those counters plus the outcome of the last full sync. For each subject, `compare_registries.py` calls `/subjects/<name>/versions`, then `/subjects/<name>/versions/<v>` for each version (that is where the ID and the references are), and `/config/<name>`, on both registries, and compares the records:
+
+[source,python]
+----
+include::example$scripts/compare_registries.py[tags=describe]
+----
+
+The `POST` you sent reached Redpanda's registry, which looked up the subject's context (`.`), found it owned by an active schema replication task, and answered `412` with `Writes to Schema Registry are disabled` without touching `_schemas`.
+
+Complete source for building along:
+
+.Complete source: scripts/compare_registries.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/compare_registries.py[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/verify-replication/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-replication/expected/verify.txt[]
+----
+
+Both subjects match, including IDs `1,3` for the two versions of `orders-value` and its `BACKWARD` setting. If the script prints `MISMATCH` after waiting, look at the `ERRORS` count in `rpk shadow status`; a schema Redpanda could not import is reported there. If the destination is `(missing)` for every subject, the link is not replicating: `rpk shadow status` should show the `Schema Registry Shadowing` task `ACTIVE`.
+
+== In production
+
+[.production-note]
+Make this comparison a gate: run it before cut-over and treat any mismatch or non-zero `ERRORS` as a stop. Keep the source registry read-mostly during the final window so the two do not drift between the last check and the pause. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/compare_registries.py[scripts/compare_registries.py]

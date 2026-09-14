@@ -1,0 +1,1 @@
+../../../../../solutions/schema-registry-migration/scripts/set-paused.sh

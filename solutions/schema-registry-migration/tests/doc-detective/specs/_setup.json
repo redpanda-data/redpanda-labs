@@ -1,0 +1,17 @@
+{
+  "specId": "_setup",
+  "description": "Start the Schema Registry Migration stack once before the step specs run (beforeAny in .doc-detective.json). Schemas, the shadow link, records, and the cut-over are created by the step specs themselves, in step order, so nothing is pre-seeded here. Never selected as a step spec.",
+  "tests": [
+    {
+      "testId": "_setup",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make up",
+            "timeout": 900000
+          }
+        }
+      ]
+    }
+  ]
+}

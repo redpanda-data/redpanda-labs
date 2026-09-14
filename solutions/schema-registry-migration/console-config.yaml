@@ -1,0 +1,12 @@
+# Redpanda Console configuration for the shadow cluster. Console reads the
+# Kafka API, the Schema Registry, and the Admin API of the Redpanda
+# destination; the Confluent source is not connected to it.
+kafka:
+  brokers: ["redpanda:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda:9644"]

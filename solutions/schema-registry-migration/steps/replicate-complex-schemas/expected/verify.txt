@@ -1,0 +1,1 @@
+{"subject":"shipping-value","version":1,"id":5,"schemaType":"AVRO","references":[{"name":"com.redpanda.demo.Address","subject":"address-value","version":1}],"schema":"{\"type\":\"record\",\"name\":\"Shipping\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"order_id\",\"type\":\"string\"},{\"name\":\"destination\",\"type\":\"Address\"}]}","deleted":false}

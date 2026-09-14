@@ -1,0 +1,102 @@
+= Create the shadow link
+:page-layout: solution-step
+:description: Create one shadow link on the Redpanda cluster that replicates the Confluent Schema Registry in API mode and the three topics through topic metadata sync.
+:page-solution-step-duration: 5
+
+You create the link that does the migration. One configuration file names the source broker, selects the topics to shadow, and points the Schema Registry Shadowing task at the Confluent registry's REST API. The link starts replicating the moment it exists.
+
+== What you do
+
+. Create the link from `config/shadow-link.yaml`, which the `rpk` helper container has mounted at `/config`:
++
+[source,bash]
+----
+include::example$steps/create-shadow-link/commands.sh[tag=create]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/create-shadow-link/expected/create.txt[]
+----
+
+. Read the three parts of the file. The connection to the source broker:
++
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=client]
+----
++
+The topics to shadow, and where to start:
++
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=topics]
+----
++
+The Schema Registry replication in API mode:
++
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=registry]
+----
+
+== Why
+
+The registry and the topics are replicated by the same link on purpose. A record is only readable where both its bytes and its schema ID resolve, so the two halves have to land on the same cluster and be cut over together. The canonical guidance is to fail a link over as one unit; keeping the halves in one link is what makes that possible.
+
+API mode is the only registry mode that works against Confluent. Topic mode (`shadow_schema_registry_topic`) copies Redpanda's `_schemas` topic byte for byte and needs a Redpanda source; API mode reads any Confluent-compatible REST API and imports subjects, versions, and compatibility settings while validating each schema against Redpanda's registry. Two settings are tuned for the walkthrough: `full_sync_interval` is `20s` instead of the `5m` default so new subjects show up within seconds, and `unsupported_schema_feature_policy` is `REMOVE` so a schema with Confluent-only features is imported without them rather than skipped.
+
+== Why Redpanda
+
+The link is a cluster object: `rpk shadow create` posts the file to the Admin API, and Redpanda schedules the tasks on a broker. There is no external replicator to size, deploy, or keep alive, and the same command shape works for a disaster-recovery link. See xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc[] for every field of the `shadow_schema_registry_api` block and xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-create.adoc[] for the command.
+
+== What happens inside
+
+Redpanda validates the configuration, stores the link, and starts its tasks: a source topic sync that fetches the source's topic metadata every `interval` and creates a read-only shadow topic for each topic that matches an `INCLUDE` filter, a Schema Registry Shadowing task that runs a full sync immediately and then every `full_sync_interval`, with a tail sync every `tail_interval` in between, plus consumer offset, ACL, and role tasks that have nothing to do here. The first full sync imports the two subjects you registered, their three versions, and the `BACKWARD` setting into the default context `.` of Redpanda's Schema Registry, keeping IDs `1`, `2`, and `3`, and from then on that context is read-only. No topics match yet: the client has not produced anything, so the source has no `orders`, `customers`, or `shipping` topic.
+
+`make link` is one `rpk` call:
+
+[source,makefile]
+----
+include::example$Makefile[tags=link]
+----
+
+Complete source for building along:
+
+.Complete source: config/shadow-link.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/create-shadow-link/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/create-shadow-link/expected/verify.txt[]
+----
+
+`rpk shadow describe` prints only the overview and client sections by default; `--print-registry` adds the Schema Registry section, which shows the mode `shadow schema registry api`, `PAUSED false`, and the source URL. If `rpk shadow create` fails with a connection error, the source registry or broker is not reachable from the Redpanda container under the names in the file (`confluent-schema-registry:8081`, `confluent-kafka:29092`); `docker compose ps` shows whether both are healthy. If it reports that a link with this name exists, it was created already; `rpk shadow describe` works the same.
+
+== In production
+
+[.production-note]
+Set `tls_settings.enabled: true` and `auth_options.basic` for the source registry (a Confluent Cloud Schema Registry API key and secret), add SASL and TLS to `client_options` for the source broker, use `PREFIXED` or `REGEX` topic filters, add `consumer_offset_sync_options` and `security_sync_options`, and leave `full_sync_interval` at its default. Rehearse once with `unsupported_schema_feature_policy: FAIL` to see which schemas need attention. See the Security, Consumer scaling, and Dead-letter handling rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

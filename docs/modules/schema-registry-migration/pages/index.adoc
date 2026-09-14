@@ -1,0 +1,138 @@
+= Migrate from Confluent to Redpanda with schemas intact
+:page-layout: solution
+:page-topic-type: solution
+:description: Move a Confluent deployment onto Redpanda with one shadow link that replicates its Schema Registry over REST and its topics over the Kafka API, then cut over.
+:page-solution-version: v1.0.0
+:page-solution-difficulty: intermediate
+:page-solution-duration: 45
+:page-solution-status: draft
+:page-solution-download: authenticated
+:page-solution-platforms: self-managed
+:page-solution-technologies: Redpanda, Shadowing, Schema Registry, Redpanda Console, Confluent Platform, Avro, JSON Schema, Protobuf, Python, Docker Compose
+:page-categories: Schema Registry, Kafka Migration, Data Replication, Disaster Recovery, Topics and Partitions
+:page-solution-use-cases: Kafka migration, Disaster recovery
+:personas: platform_operator, streaming_developer
+:page-solution-steps: start-environment, register-source-schemas, create-shadow-link, verify-replication, replicate-complex-schemas, migrate-topic-data, cut-over, verify-end-to-end
+:page-solution-related-docs: streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc, streaming:manage:disaster-recovery/shadowing/overview.adoc, streaming:manage:disaster-recovery/shadowing/setup.adoc, streaming:manage:disaster-recovery/shadowing/failover.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, streaming:manage:schema-reg/schema-reg-contexts.adoc
+
+Every record on a Confluent cluster starts with a schema ID that only the Confluent Schema Registry can resolve. Moving the topics is not enough: the subjects, versions, compatibility rules, references, and the IDs themselves have to arrive on Redpanda, or the first consumer you point at the new cluster fails to decode anything.
+
+You run a real Confluent broker and Schema Registry as the source and let one Redpanda shadow link carry both halves of the migration: schemas over the registry's REST API, records over the Kafka API. You finish with a client that produces and consumes on Redpanda alone, proven by one script.
+
+After completing this solution, you will be able to:
+
+* [ ] Configure one shadow link that replicates schemas from a Confluent Schema Registry in API mode and topic data through topic metadata sync
+* [ ] Prove that subjects, versions, schema IDs, compatibility settings, references, and JSON Schema and Protobuf types match on both registries
+* [ ] Decode records produced against Confluent using only the Redpanda Schema Registry, because the schema IDs in the wire format are preserved
+* [ ] Cut applications over by pausing schema replication and failing the shadow topics over, then produce and consume on Redpanda only
+
+== What you build
+
+A Confluent Platform broker and Confluent Schema Registry hold six subjects across three schema types and three topics of Avro records. A Redpanda cluster with Shadowing enabled creates one shadow link to it. The link imports every subject and every record; Redpanda Console shows what arrived. At cut-over you pause schema replication, fail the topics over, and the same Python client writes its next order to Redpanda.
+
+* *Confluent Platform* (`cp-kafka` in KRaft mode and `cp-schema-registry`): the source, driven over REST and the Kafka API; it has no UI here.
+* *Six subjects on the source*: `orders-value` (two versions, `BACKWARD`), `customers-value`, `address-value` referenced by `shipping-value` (`FULL_TRANSITIVE`), `warehouse-events-value` (JSON Schema), and `inventory-events-value` (Protobuf).
+* *Three topics on the source*: `orders`, `customers`, and `shipping`, holding Avro records in the Confluent wire format.
+* *Redpanda*: the destination, started with `enable_shadow_linking=true`. Its built-in Schema Registry receives the subjects; its Kafka API receives the topics as read-only shadow topics.
+* *The shadow link `schema-registry-migration`*: `shadow_schema_registry_api` for the registry, `topic_metadata_sync_options` for the topics, one configuration file.
+* *Python client*: registers schemas over REST, produces and consumes records with a hand-written wire-format encoder, and is pointed at either cluster by two environment variables.
+* *Redpanda Console*: connected to the Redpanda side only, the place to look at the replicated subjects.
+
+.Captured by this solution's test run
+image::console-subjects.png[Redpanda Console listing the six subjects replicated from the Confluent Schema Registry]
+
+== Architecture
+
+image::architecture.svg[Architecture: a Confluent broker and Confluent Schema Registry on the left, a Redpanda shadow cluster with its built-in Schema Registry on the right, one shadow link between them replicating the registry over REST and the topics over the Kafka API, a Python client that moves from Confluent to Redpanda at cut-over, and Redpanda Console on the Redpanda side]
+
+Left to right: the client registers schemas on the Confluent Schema Registry and produces Avro records to the Confluent broker, each record framed with a magic byte and the schema ID it was encoded with. The shadow link runs on the Redpanda cluster. Its Schema Registry Shadowing task polls the Confluent registry's REST API (a tail sync every 10 seconds, a full sync every 20 seconds here) and imports subjects, versions, and compatibility settings into Redpanda's own Schema Registry, keeping the IDs. Its topic sync task creates a shadow topic for each source topic that matches the link's filters and replicates the records from the earliest offset. While the link is active, the replicated registry context and the shadow topics are read-only on Redpanda. At cut-over you pause the registry task, which makes the context writable, and fail the topics over, which makes them ordinary writable topics. The client then produces and consumes on Redpanda, and Console shows the result.
+
+=== Why Redpanda
+
+* *One link for schemas and data.* Shadowing replicates the registry and the topics from one configuration file, so the schema migration is not a separate project with its own tooling. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
+* *API-mode registry replication that talks to Confluent.* `shadow_schema_registry_api` polls any Confluent-compatible registry over REST and preserves subject names, versions, and schema IDs, so records already written keep decoding after the move. xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc[]
+* *A Schema Registry built into the broker.* The destination registry is part of Redpanda, speaks the same REST API your clients already use, and supports Avro, JSON Schema, Protobuf, references, and compatibility levels, so nothing in the client changes at cut-over except two URLs. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* *Read-only until you say otherwise.* Replicated contexts reject writes with HTTP 412 and shadow topics reject produces until you pause and fail over, so the copy cannot drift from the source while you are still migrating. xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[]
+* *Console sees the shadow side.* Redpanda Console reads the replicated subjects, references, and compatibility levels through the same registry API. xref:streaming:console:ui/schema-reg.adoc[]
+
+== Prerequisites
+
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker (the two Confluent JVMs are limited to 512 MB and 256 MB of heap)
+* `curl` and `make` on the host; every `rpk`, `jq`, and Python command runs inside a container
+* Free host ports `8180`, `28081`, `29092`, `29644`, `38081`, and `39092`, or different ones set with the `*_PORT` variables in `.env`
+* Redpanda v26.2 or later (`.env.example` pins v26.2.2): API-mode Schema Registry replication is not available before that
+* Approximately {page-solution-duration} minutes, of which the first Docker image pull (about 1.5 GB for the Confluent images) is the largest part
+
+You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
+
+// Steps are rendered from :page-solution-steps: by the solution layout.
+
+== Production considerations
+
+This solution runs one broker on each side, with no authentication, so that it starts in a minute. Before you run a migration like this against production clusters, work through this table.
+
+[cols="1,2,2"]
+|===
+| Area | In this solution | In production
+
+| Brokers and replication
+| One Confluent broker and one Redpanda broker in `dev-container` mode, replication factor 1 on both sides. The link copies the source's `replication.factor` onto each shadow topic.
+| Three or more Redpanda brokers with replication factor 3; size the destination for the source's throughput plus the replication catch-up. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
+
+| Security
+| Plaintext everywhere: the link connects to the source broker and registry without TLS or credentials, and the destination has no authentication.
+| TLS on the link's connection to the source broker and registry, HTTP basic authentication or mTLS for the registry (a Confluent Cloud Schema Registry API key), SASL for the source broker, and TLS and SASL on the destination. Add `security_sync_options` so ACLs arrive too. xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc[], xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[], xref:streaming:manage:security/encryption.adoc[]
+
+| Partitions
+| Three topics with one partition each; the link copies the source partition count onto each shadow topic.
+| Partition counts follow the source. If the source is undersized, add partitions on the source before the link creates the shadow topics, or after failover. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
+
+| Schema validation
+| Schemas are replicated and consumers resolve IDs, but neither broker validates a record's schema ID on produce.
+| After cut-over, enable schema ID validation on the migrated topics so a producer that still points at a stale registry cannot write records with unknown IDs. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
+
+| Consumer scaling
+| The client reads every partition from the first offset without a consumer group; consumer offsets are not replicated.
+| Add `consumer_offset_sync_options` to the link so consumer groups resume on Redpanda from where they stopped on Confluent instead of re-reading every topic. xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[], xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+
+| Data retention
+| `start_at_earliest`: the whole history of each topic is replicated; retention settings are copied from the source.
+| Keep `start_at_earliest` for a migration. Long histories replicate faster and cost less with Tiered Storage on the destination. xref:streaming:manage:tiered-storage.adoc[]
+
+| Idempotency and delivery
+| The client produces with default settings; six records, so duplicates would be visible.
+| Idempotent producers on the applications, and a cut-over sequence in which producers stop, replication lag reaches zero, topics fail over, and producers restart against Redpanda, so no record is written to both clusters. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[]
+
+| Dead-letter handling
+| `unsupported_schema_feature_policy: REMOVE`: a schema that uses Confluent-only features is imported without them, and the link status counts the modifications.
+| Run a rehearsal with `FAIL` first: every schema the registry cannot import is reported in `rpk shadow status` with an error, so you can fix or drop those subjects before the real migration. xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc#choose-a-validation-policy[]
+
+| Observability
+| `rpk shadow status` and `make compare`, run by hand.
+| Alert on the link's task states, per-topic lag, and the Schema Registry sync error counts, and reconcile both registries before cut-over the way `compare_registries.py` does. xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[], xref:streaming:manage:monitoring.adoc[]
+
+| Disaster recovery
+| The link exists for a one-way migration and is failed over at the end.
+| The same link, left running, is a warm standby: keep it active until the day you need it and follow the failover runbook. xref:streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc[]
+
+| Analytics and lakehouse
+| None.
+| Once the topics are on Redpanda, Iceberg topics write them to a lakehouse table without a pipeline. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
+|===
+
+== Clean up
+
+Stop both clusters and delete their volumes:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=clean]
+----
+
+== Related docs
+
+* xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc[] is the canonical page for API-mode registry replication: authentication to the source, context and subject filters, context mapping, and the validation policy this solution sets to `REMOVE`.
+* xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] covers the rest of the link configuration, including the consumer offset and ACL synchronization this solution leaves out.
+* xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[] describes the topic states you watch in xref:cut-over.adoc[] and why failover is irreversible.
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] explains subjects, versions, compatibility levels, and the wire format the client in xref:migrate-topic-data.adoc[] encodes by hand.
+* xref:streaming:manage:schema-reg/schema-reg-contexts.adoc[] explains the default context `.` that the link's `source_filter` selects and that becomes writable again in xref:cut-over.adoc[].

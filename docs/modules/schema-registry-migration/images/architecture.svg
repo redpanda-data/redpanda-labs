@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 520" width="980" height="520" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the Schema Registry migration solution</title>
+  <desc id="d">A Confluent Platform broker and a Confluent Schema Registry are the source. One Redpanda shadow link replicates the registry's subjects, versions, and compatibility settings over the Schema Registry REST API, and the topics orders, customers, and shipping over the Kafka API, into a Redpanda shadow cluster with its own built-in Schema Registry. A client produces and consumes Avro records in the Confluent wire format, first against Confluent, then against Redpanda after cut-over. Redpanda Console shows what arrived.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --src: #eef2ff; --srcline: #4f5bd5; --srctopic: #e3e8ff; --svc: #eefbf3; --svcline: #2e8b57; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --src: #1a2140; --srcline: #8b93ff; --srctopic: #232c5a; --svc: #14281c; --svcline: #5fd38d; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .src { fill: var(--src); stroke: var(--srcline); stroke-width: 1.5; rx: 10; }
+    .srctopic { fill: var(--srctopic); stroke: var(--srcline); stroke-width: 1.2; rx: 6; }
+    .svc { fill: var(--svc); stroke: var(--svcline); stroke-width: 1.2; rx: 8; }
+    .flow { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .flow.link { stroke: var(--rp); stroke-width: 2.2; }
+    .flow.dash { stroke-dasharray: 5 4; }
+    #arrow path { fill: var(--line); }
+    #arrow-rp path { fill: var(--rp); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="arrow-rp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect width="980" height="520" fill="var(--bg)"/>
+
+  <!-- client -->
+  <rect class="svc" x="20" y="200" width="160" height="120"/>
+  <text class="h" x="100" y="228" text-anchor="middle">Client</text>
+  <text class="muted" x="100" y="248" text-anchor="middle">Python, confluent-kafka</text>
+  <text class="muted" x="100" y="264" text-anchor="middle">Avro, Confluent wire format</text>
+  <text class="muted" x="100" y="280" text-anchor="middle">magic byte + schema ID + body</text>
+  <text class="muted" x="100" y="302" text-anchor="middle">before cut-over: Confluent</text>
+  <text class="muted" x="100" y="316" text-anchor="middle">after cut-over: Redpanda</text>
+
+  <!-- confluent source -->
+  <rect class="src" x="230" y="40" width="250" height="440"/>
+  <text class="h" x="355" y="68" text-anchor="middle" style="fill: var(--srcline)">Confluent Platform (source)</text>
+  <rect class="box" x="250" y="88" width="210" height="150"/>
+  <text class="h" x="355" y="110" text-anchor="middle">Confluent Schema Registry</text>
+  <text class="muted" x="355" y="128" text-anchor="middle">REST API, :38081</text>
+  <text class="mono" x="262" y="152">orders-value v1, v2  BACKWARD</text>
+  <text class="mono" x="262" y="170">customers-value v1</text>
+  <text class="mono" x="262" y="188">shipping-value → address-value</text>
+  <text class="mono" x="262" y="206">warehouse-events-value  JSON</text>
+  <text class="mono" x="262" y="224">inventory-events-value  PROTOBUF</text>
+  <rect class="box" x="250" y="262" width="210" height="200"/>
+  <text class="h" x="355" y="284" text-anchor="middle">Kafka broker</text>
+  <text class="muted" x="355" y="302" text-anchor="middle">KRaft, :39092</text>
+  <rect class="srctopic" x="268" y="320" width="174" height="30"/><text class="mono" x="355" y="340" text-anchor="middle">orders (3)</text>
+  <rect class="srctopic" x="268" y="362" width="174" height="30"/><text class="mono" x="355" y="382" text-anchor="middle">customers (2)</text>
+  <rect class="srctopic" x="268" y="404" width="174" height="30"/><text class="mono" x="355" y="424" text-anchor="middle">shipping (1)</text>
+
+  <!-- redpanda destination -->
+  <rect class="rp" x="620" y="40" width="250" height="440"/>
+  <text class="h" x="745" y="68" text-anchor="middle" style="fill: var(--rp)">Redpanda shadow cluster</text>
+  <rect class="box" x="640" y="88" width="210" height="150"/>
+  <text class="h" x="745" y="110" text-anchor="middle">Schema Registry</text>
+  <text class="muted" x="745" y="128" text-anchor="middle">built in, :28081</text>
+  <text class="mono" x="652" y="152">same subjects, versions,</text>
+  <text class="mono" x="652" y="170">schema IDs, compatibility,</text>
+  <text class="mono" x="652" y="188">references, types</text>
+  <text class="muted" x="652" y="212">read-only while replicating,</text>
+  <text class="muted" x="652" y="226">writable once paused</text>
+  <rect class="box" x="640" y="262" width="210" height="200"/>
+  <text class="h" x="745" y="284" text-anchor="middle">Kafka API</text>
+  <text class="muted" x="745" y="302" text-anchor="middle">:29092</text>
+  <rect class="topic" x="658" y="320" width="174" height="30"/><text class="mono" x="745" y="340" text-anchor="middle">orders (3 → 4)</text>
+  <rect class="topic" x="658" y="362" width="174" height="30"/><text class="mono" x="745" y="382" text-anchor="middle">customers (2)</text>
+  <rect class="topic" x="658" y="404" width="174" height="30"/><text class="mono" x="745" y="424" text-anchor="middle">shipping (1)</text>
+  <text class="muted" x="745" y="452" text-anchor="middle">shadow topics, FAILED_OVER at cut-over</text>
+
+  <!-- shadow link -->
+  <rect class="topic" x="500" y="222" width="100" height="76"/>
+  <text class="h" x="550" y="248" text-anchor="middle">shadow link</text>
+  <text class="mono" x="550" y="266" text-anchor="middle">schema-registry-</text>
+  <text class="mono" x="550" y="280" text-anchor="middle">migration</text>
+  <path class="flow link" style="marker-end: url(#arrow-rp)" d="M460,160 C520,160 520,160 640,160"/>
+  <text class="muted" x="550" y="150" text-anchor="middle">REST API mode</text>
+  <text class="muted" x="550" y="176" text-anchor="middle">shadow_schema_registry_api</text>
+  <path class="flow link" style="marker-end: url(#arrow-rp)" d="M460,380 C520,380 520,380 640,380"/>
+  <text class="muted" x="550" y="370" text-anchor="middle">Kafka API</text>
+  <text class="muted" x="550" y="398" text-anchor="middle">topic metadata sync</text>
+  <path class="flow" d="M550,222 L550,190"/>
+  <path class="flow" d="M550,298 L550,352"/>
+
+  <!-- client flows -->
+  <path class="flow" d="M180,240 L250,170"/>
+  <path class="flow" d="M180,270 L250,330"/>
+  <path class="flow dash" d="M100,320 C100,500 660,500 700,462"/>
+  <text class="muted" x="400" y="506" text-anchor="middle">after cut-over the same client produces and consumes on Redpanda only</text>
+
+  <!-- console -->
+  <rect class="svc" x="890" y="222" width="80" height="76"/>
+  <text class="h" x="930" y="250" text-anchor="middle">Console</text>
+  <text class="muted" x="930" y="268" text-anchor="middle">:8180</text>
+  <text class="muted" x="930" y="284" text-anchor="middle">shadow side</text>
+  <path class="flow" d="M890,260 L870,260"/>
+</svg>

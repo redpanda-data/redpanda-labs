@@ -1,0 +1,26 @@
+Successfully initiated the Fail Over for Shadow Link "schema-registry-migration". To check the status, run:
+  rpk shadow status schema-registry-migration
+TOPICS
+======
+Name: customers, State: FAILED_OVER
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+
+Name: orders, State: FAILED_OVER
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+
+Name: shipping, State: FAILED_OVER
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+
+Synced Shadow Topic Properties:
+  - cleanup.policy
+  - compression.type
+  - delete.retention.ms
+  - max.compaction.lag.ms
+  - max.message.bytes
+  - message.timestamp.type
+  - min.compaction.lag.ms
+  - redpanda.storage.mode
+  - redpanda.storage.mode.impl
+  - replication.factor
+  - retention.bytes
+  - retention.ms

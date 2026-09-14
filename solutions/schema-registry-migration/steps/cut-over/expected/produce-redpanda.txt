@@ -1,0 +1,5 @@
+Schema Registry: http://redpanda:8081
+Kafka bootstrap: redpanda:9092
+orders: 1 record(s) encoded with schema ID 3 (orders-value)
+  delivered orders key=ord-2001
+1 record(s) delivered

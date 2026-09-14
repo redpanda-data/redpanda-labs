@@ -1,0 +1,28 @@
+shadow topics orders, customers, shipping hold 6 records
+TOPICS
+======
+Name: customers, State: ACTIVE
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+      0          2        2        2        0
+
+Name: orders, State: ACTIVE
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+      0          3        3        3        0
+
+Name: shipping, State: ACTIVE
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+      0          1        1        1        0
+
+Synced Shadow Topic Properties:
+  - cleanup.policy
+  - compression.type
+  - delete.retention.ms
+  - max.compaction.lag.ms
+  - max.message.bytes
+  - message.timestamp.type
+  - min.compaction.lag.ms
+  - redpanda.storage.mode
+  - redpanda.storage.mode.impl
+  - replication.factor
+  - retention.bytes
+  - retention.ms

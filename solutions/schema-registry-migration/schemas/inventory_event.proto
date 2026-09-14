@@ -1,0 +1,7 @@
+syntax = "proto3";
+package com.redpanda.demo;
+
+message InventoryEvent {
+  string sku = 1;
+  int32 quantity = 2;
+}

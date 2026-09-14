@@ -1,0 +1,6 @@
+client: healthy
+confluent-kafka: healthy
+confluent-schema-registry: healthy
+console: healthy
+redpanda: healthy
+rpk: healthy

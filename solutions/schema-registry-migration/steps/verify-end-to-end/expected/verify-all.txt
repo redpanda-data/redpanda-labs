@@ -1,0 +1,20 @@
+./scripts/verify.sh
+ok    source Confluent Schema Registry answers
+ok    Redpanda shadow cluster is healthy
+ok    Redpanda Console answers
+ok    shadow link schema-registry-migration replicates schemas in API mode
+ok    every source subject matches on the destination (versions, ids, type, compatibility, references)
+ok    six subjects were migrated
+ok    orders-value has two versions on the destination
+ok    orders-value keeps BACKWARD compatibility on the destination
+ok    shipping-value keeps FULL_TRANSITIVE compatibility on the destination
+ok    shipping-value v1 on the destination references address-value
+ok    the JSON Schema and Protobuf subjects keep their types
+ok    the schema ID in every record resolves to the same schema on both registries
+ok    Schema Registry replication is paused
+ok    destination Schema Registry accepts a write after cut-over (HTTP 200)
+ok    all three topics are FAILED_OVER
+ok    orders, customers, shipping hold 4, 2, 1 records on Redpanda
+ok    7 records decode from the Redpanda broker with the Redpanda registry
+ok    the post-cut-over order ord-2001 is among them
+PASS (18/18)

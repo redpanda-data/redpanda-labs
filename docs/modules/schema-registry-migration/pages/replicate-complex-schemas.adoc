@@ -1,0 +1,145 @@
+= Replicate references, types, and overrides
+:page-layout: solution-step
+:description: Register a schema reference, a FULL_TRANSITIVE override, a JSON Schema subject, and a Protobuf subject on the source, then watch all of them arrive on Redpanda and see them in Console.
+:page-solution-step-duration: 7
+
+Simple Avro subjects are the easy case. You now register the things that make a registry migration hard: a schema that references another subject, a compatibility override on that subject, and subjects of the two other schema types. Then you watch the next full sync bring every one of them across and look at the result in Redpanda Console.
+
+== What you do
+
+. Register the four subjects on the source:
++
+[source,bash]
+----
+include::example$steps/replicate-complex-schemas/commands.sh[tag=register]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/replicate-complex-schemas/expected/register.txt[]
+----
++
+`shipping-value` declares a reference to `address-value` version 1, and its response echoes it. The JSON Schema and Protobuf subjects carry `schemaType`.
+
+. Wait for the next full sync and compare again. New subjects arrive with a full sync (every `20s` here), so the command can take a few seconds to print:
++
+[source,bash]
+----
+include::example$steps/replicate-complex-schemas/commands.sh[tag=compare]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/replicate-complex-schemas/expected/compare.txt[]
+----
++
+Six subjects match: the reference `address-value@1` on `shipping-value`, `FULL_TRANSITIVE` on it, `JSON` and `PROTOBUF` types, and IDs `4` to `7` in the order the source assigned them.
+
+. Open Redpanda Console at http://localhost:8180/schema-registry. All six subjects are listed with their type. Select `shipping-value` to see its reference to `address-value`, which the list view does not show. Both views are captured by this solution's test run:
++
+.Captured by this solution's test run
+image::console-subjects.png[Redpanda Console's Schema Registry page listing address-value, customers-value, inventory-events-value, orders-value, shipping-value, and warehouse-events-value on the Redpanda shadow cluster]
++
+.Captured by this solution's test run
+image::console-shipping-reference.png[Redpanda Console showing the shipping-value subject on the shadow cluster with its reference to address-value]
+
+== Why
+
+References are the part of a registry that a naive copy gets wrong. `shipping-value` is only parseable once `address-value` exists, and it must exist under the same subject name and version, or the reference points at nothing. A compatibility override has to travel with its subject, or the destination silently applies the global default to a subject the source guarded with `FULL_TRANSITIVE`. And a registry that only understood Avro would drop a third of a typical Confluent deployment. This step puts one of each on the source so `make compare` can prove they all arrived. The reference script is the interesting part:
+
+[source,bash]
+----
+include::example$scripts/register-complex-schemas.sh[tags=reference]
+----
+
+== Why Redpanda
+
+Redpanda's Schema Registry supports Avro, JSON Schema, and Protobuf, schema references, and per-subject compatibility levels, and the API-mode link imports referenced schemas in dependency order, so `address-value` is always present before `shipping-value` is registered on the destination. Console reads the replicated registry through its normal API and shows references and compatibility in the subject view. See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] and xref:streaming:console:ui/schema-reg.adoc[].
+
+== What happens inside
+
+The tail sync notices changed subjects every 10 seconds, but a subject that did not exist on the source at the last full sync is picked up by the next full sync, which lists every subject in the selected contexts and imports what is missing. For `shipping-value` the task fetches version 1, sees its `references` list, makes sure `address-value` version 1 exists on the destination first, then registers `shipping-value` with the same reference and the same global ID `5`. The `FULL_TRANSITIVE` setting is a separate `/config/shipping-value` object and is counted under `COMPATIBILITY CONFIGS CHANGED` in the link status. The JSON Schema and Protobuf subjects are validated by Redpanda's parsers for those types before import; with `unsupported_schema_feature_policy: REMOVE`, a Confluent rule set or metadata block on any of them would be stripped and counted under `UNSUPPORTED FEATURES REMOVED` instead of failing the sync.
+
+The two other schema types:
+
+[source,bash]
+----
+include::example$scripts/register-complex-schemas.sh[tags=other-types]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/register-complex-schemas.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/register-complex-schemas.sh[]
+----
+====
+
+.Complete source: schemas/address.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/address.avsc[]
+----
+====
+
+.Complete source: schemas/shipping.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/shipping.avsc[]
+----
+====
+
+.Complete source: schemas/warehouse-event.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/warehouse-event.json[]
+----
+====
+
+.Complete source: schemas/inventory_event.proto
+[%collapsible]
+====
+[source,protobuf]
+----
+include::example$schemas/inventory_event.proto[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/replicate-complex-schemas/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/replicate-complex-schemas/expected/verify.txt[]
+----
+
+The Redpanda registry returns `shipping-value` version 1 with ID `5` and the reference to `address-value` version 1, the same as the source. A `404` means the full sync has not run since you registered the subject; wait 20 seconds and try again. If `make compare` reports a `MISMATCH` on `shipping-value` only, check `rpk shadow status` for an import error on `address-value`, the subject it depends on.
+
+== In production
+
+[.production-note]
+Count on references and overrides being the subjects that surface problems: run the rehearsal with `unsupported_schema_feature_policy: FAIL`, read the `ERRORS` and `UNSUPPORTED FEATURES REMOVED` counters, and decide per subject before you switch to `REMOVE`. See the Dead-letter handling row in xref:index.adoc#_production_considerations[Production considerations] and xref:streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc#choose-a-validation-policy[].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/register-complex-schemas.sh[scripts/register-complex-schemas.sh]
+* link:{attachmentsdir}/schemas/address.avsc[schemas/address.avsc], link:{attachmentsdir}/schemas/shipping.avsc[schemas/shipping.avsc], link:{attachmentsdir}/schemas/warehouse-event.json[schemas/warehouse-event.json], and link:{attachmentsdir}/schemas/inventory_event.proto[schemas/inventory_event.proto]

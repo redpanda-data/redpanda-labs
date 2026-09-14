@@ -1,0 +1,13 @@
+address-value v1 (Avro, the referenced schema):
+{"id":4,"version":1,"guid":"c0b9ca5a-0d6e-eed7-3e31-e2f6bf876df9","schemaType":"AVRO","schema":"{\"type\":\"record\",\"name\":\"Address\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"street\",\"type\":\"string\"},{\"name\":\"city\",\"type\":\"string\"},{\"name\":\"postal_code\",\"type\":\"string\"}]}"}
+shipping-value v1 (Avro, references address-value):
+{"id":5,"version":1,"guid":"c247ca83-1389-0b24-a2d8-1a17f537ec77","schemaType":"AVRO","references":[{"name":"com.redpanda.demo.Address","subject":"address-value","version":1}],"schema":"{\"type\":\"record\",\"name\":\"Shipping\",\"namespace\":\"com.redpanda.demo\",\"fields\":[{\"name\":\"order_id\",\"type\":\"string\"},{\"name\":\"destination\",\"type\":\"Address\"}]}"}
+shipping-value compatibility FULL_TRANSITIVE:
+{"compatibility":"FULL_TRANSITIVE"}
+warehouse-events-value v1 (JSON Schema):
+{"id":6,"version":1,"guid":"ab58ddeb-ca8d-31c6-f2f3-139fef757ec0","schemaType":"JSON","schema":"{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"title\":\"WarehouseEvent\",\"type\":\"object\",\"properties\":{\"sku\":{\"type\":\"string\"},\"quantity\":{\"type\":\"integer\"}},\"required\":[\"sku\",\"quantity\"]}"}
+inventory-events-value v1 (Protobuf):
+{"id":7,"version":1,"guid":"8d919091-ba19-6b69-e9a5-2fa587434b28","schemaType":"PROTOBUF","schema":"syntax = \"proto3\";\npackage com.redpanda.demo;\n\nmessage InventoryEvent {\n  string sku = 1;\n  int32 quantity = 2;\n}\n"}
+
+subjects on the source registry:
+["address-value","customers-value","inventory-events-value","orders-value","shipping-value","warehouse-events-value"]

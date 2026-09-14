@@ -1,0 +1,4 @@
+Successfully updated shadow link "schema-registry-migration".
+SHADOWING MODE                     shadow schema registry api
+PAUSED                             true
+Schema Registry replication paused: true
