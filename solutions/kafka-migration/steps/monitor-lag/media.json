@@ -22,8 +22,8 @@
       "overwrite": "aboveVariation",
       "maxVariation": 0.05,
       "crop": {
-        "selector": "main",
-        "padding": 0
+        "selector": "table",
+        "padding": 40
       }
     }
   }
