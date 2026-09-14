@@ -10,6 +10,10 @@
 #   - overview has :page-layout: solution and :page-topic-type: solution
 #   - :page-solution-version: matches ^v[0-9]+\.[0-9]+\.[0-9]+$
 #   - difficulty, status, download, platforms, duration, featured are valid
+#   - difficulty is plausible (warnings): 'beginner' while a step page mentions
+#     Kubernetes, kubectl, SASL, ACLs, failover, shadowing, or schema compatibility;
+#     'advanced' while the compose file has fewer than three services and no page shows
+#     a source file. A published solution without :page-solution-assumes: also warns.
 #   - :page-solution-duration: is within 10% of the sum of the :page-solution-step-duration:
 #     values when every step carries one
 #   - deprecated solutions name :page-solution-superseded-by:
@@ -373,6 +377,36 @@ for slug in $slugs; do
   # Media: every other image or video a page shows is produced by the test run
   # (a screenshot or record step in steps/<step-id>/media.json), never edited
   # by hand.
+  # Difficulty plausibility. Warnings, not errors: the judgment stays with the
+  # author (CONTRIBUTING.md, "Difficulty and assumed knowledge") and both tests
+  # are heuristics.
+  if [ "$difficulty" = "beginner" ]; then
+    advanced_hits=$(find "$module/pages" -name '*.adoc' \( -type f -o -type l \) 2>/dev/null \
+      | grep -v '/index\.adoc$' \
+      | xargs grep -liwE 'kubernetes|kubectl|sasl|acls?|failover|shadowing?|schema compatibility' 2>/dev/null \
+      | sed "s|^$module/pages/||" | paste -sd, - | sed 's/,/, /g')
+    [ -n "$advanced_hits" ] && warn "$page" ":page-solution-difficulty: is 'beginner', but a step page assumes operational experience ($advanced_hits): Kubernetes, SASL, ACLs, failover, shadowing, or schema compatibility put a solution at 'advanced'"
+  fi
+  if [ "$difficulty" = "advanced" ] && [ -f "$code/docker-compose.yml" ]; then
+    # Top-level keys under services:, so the x- anchors, networks, and volumes
+    # blocks are not counted.
+    svc_count=$(awk '
+      /^[A-Za-z_-]+:/ { in_services = ($0 ~ /^services:/); next }
+      in_services && /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ { n++ }
+      END { print n+0 }
+    ' "$code/docker-compose.yml")
+    # A source file, not the steps/ commands and captured outputs every page
+    # includes: those are on every solution and say nothing about difficulty.
+    shows_source=$(grep -rhE '^include::example\$' "$module/pages" 2>/dev/null \
+      | grep -vE '^include::example\$steps/' | head -1)
+    if [ "$svc_count" -lt 3 ] && [ -z "$shows_source" ]; then
+      warn "$page" ":page-solution-difficulty: is 'advanced', but the compose file declares $svc_count service(s) and no page shows a source file; check it against the rubric in CONTRIBUTING.md"
+    fi
+  fi
+  if [ "$status" = "published" ] && [ -z "$(attr "$h" page-solution-assumes)" ]; then
+    warn "$page" "no :page-solution-assumes:; a published solution should say what the reader must already know (it renders beside the difficulty chip)"
+  fi
+
   media_outputs=""
   if command -v node >/dev/null; then
     media_outputs=$(node "$root/tools/gen-dd-specs.mjs" "$slug" --media 2>/dev/null | awk -F'\t' '{n=split($2,a,"/"); print a[n]}')
