@@ -1,0 +1,24 @@
+redactors:
+  - name: "redactWithHyphens"
+    type: "value"
+    quote: true
+    value:
+      function: "replace"
+      replacement: "---"
+redactions:
+  - "path": "customer"
+    "type": "drop"
+  - "path": "deliveryAddress.firstName"
+    "type": "drop"
+  - "path": "deliveryAddress.lastName"
+    "type": "drop"
+  - "path": "deliveryAddress.houseNumber"
+    "type": "redactWithHyphens"
+  - "path": "deliveryAddress.street"
+    "type": "md5"
+  - "path": "deliveryAddress.phone"
+    "type": "x-digits"
+  - "path": "deliveryAddress.latitude"
+    "type": "truncate"
+  - "path": "deliveryAddress.longitude"
+    "type": "truncate"

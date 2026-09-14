@@ -1,0 +1,99 @@
+{
+  "specId": "data-transforms-regex",
+  "description": "Filter messages with a regular expression",
+  "tests": [
+    {
+      "testId": "data-transforms-regex-run",
+      "description": "Run the Filter messages with a regular expression example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-regex --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create src sink",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex",
+            "timeout": 300000
+          }
+        },
+        {
+          "runShell": {
+            "command": "./deploy-transform.sh",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "echo 'Hello, please contact us at help@example.com.' | rpk topic produce src",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "runShell": {
+            "command": "echo 'Hello, please contact us at support.example.com.' | rpk topic produce src",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "runShell": {
+            "command": "echo 'Hello, please contact us at help@example.edu.' | rpk topic produce src",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume sink --num 2",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex",
+            "stdio": "/help@example\\.(com|edu)/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-regex-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-regex",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/go/regex",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "specId": "data-transforms-jq",
+  "description": "Transform JSON messages with jq",
+  "tests": [
+    {
+      "testId": "data-transforms-jq-run",
+      "description": "Run the Transform JSON messages with jq example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-jq --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rustup target add wasm32-wasip1",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create src sink",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq",
+            "timeout": 600000
+          }
+        },
+        {
+          "runShell": {
+            "command": "bash ./deploy-transform.sh",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "echo '{\"foo\":42,\"email\":\"help@example.com\"}' | rpk topic produce src",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume sink --num 1",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq",
+            "stdio": "/\\{\\\\\"foo\\\\\":42\\}/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-jq-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-jq",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/rust/jq",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}

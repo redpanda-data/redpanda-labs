@@ -1,0 +1,10 @@
+{
+    "type": "record",
+    "name": "iss_location",
+    "namespace": "com.redpanda",
+    "fields" : [
+        {"name": "latitude", "type": "double"},
+        {"name": "longitude", "type": "double"},
+        {"name": "timestamp", "type": "int", "logicalType": "date"}
+    ]
+}

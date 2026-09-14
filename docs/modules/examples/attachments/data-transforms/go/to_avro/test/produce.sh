@@ -1,0 +1,1 @@
+../../../../../examples/data-transforms/go/to_avro/test/produce.sh

@@ -1,0 +1,25 @@
+# This file configures `rpk` to connect to a remote Redpanda cluster running in the same local network as `rpk`.
+
+# Configuration for connecting to the Kafka API of the Redpanda cluster.
+kafka_api:
+  # SASL (Simple Authentication and Security Layer) settings for authentication.
+  # rpk does not support OIDC authentication, so we use SCRAM instead.
+  sasl:
+    user: superuser # The username used for authentication
+    password: secretpassword # The password associated with the username
+    mechanism: scram-sha-256 # Authentication mechanism; SCRAM-SHA-256 provides secure password-based authentication
+  # List of Kafka brokers in the Redpanda cluster.
+  # These brokers ensure high availability and fault tolerance for Kafka-based communication.
+  brokers:
+    - 127.0.0.1:19092 # Broker 1: Accessible on localhost, port 19092
+    - 127.0.0.1:29092 # Broker 2: Accessible on localhost, port 29092
+    - 127.0.0.1:39092 # Broker 3: Accessible on localhost, port 39092
+
+# Configuration for connecting to the Redpanda Admin API.
+# The Admin API allows you to perform administrative tasks such as managing configurations, monitoring, and scaling.
+admin_api:
+   # List of Admin API endpoints for managing the cluster.
+  addresses:
+    - 127.0.0.1:19644 # Admin API for Broker 1: Accessible on localhost, port 19644
+    - 127.0.0.1:29644 # Admin API for Broker 2: Accessible on localhost, port 29644
+    - 127.0.0.1:39644 # Admin API for Broker 3: Accessible on localhost, port 39644

@@ -1,0 +1,1 @@
+../../../../examples/data-transforms/go/redaction/deploy-redaction.sh

@@ -1,0 +1,50 @@
+{
+  "specId": "data-transforms-redaction",
+  "description": "Redact PII in JSON messages",
+  "tests": [
+    {
+      "testId": "data-transforms-redaction-run",
+      "description": "Build the transform container and check the redacted topic",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose build",
+            "workingDirectory": "../../../../examples/data-transforms/go/redaction/demo",
+            "timeout": 600000
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose up --detach --wait",
+            "workingDirectory": "../../../../examples/data-transforms/go/redaction/demo",
+            "timeout": 300000
+          }
+        },
+        {
+          "wait": 15000
+        },
+        {
+          "runShell": {
+            "command": "docker exec redpanda rpk topic consume owlshop-orders-redacted --num 1",
+            "workingDirectory": "../../../../examples/data-transforms/go/redaction/demo",
+            "stdio": "/hashedStreet/",
+            "timeout": 60000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-redaction-cleanup",
+      "description": "Remove the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/go/redaction/demo",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}

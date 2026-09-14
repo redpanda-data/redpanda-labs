@@ -1,0 +1,1 @@
+../../../../../../examples/data-transforms/go/redaction/demo/conf/install-go.sh

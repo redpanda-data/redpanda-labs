@@ -1,0 +1,94 @@
+{
+  "specId": "data-transforms-to-avro",
+  "description": "Transcode CSV records to Avro",
+  "tests": [
+    {
+      "testId": "data-transforms-to-avro-run",
+      "description": "Run the Transcode CSV records to Avro example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-to-avro --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create nasdaq_history_csv nasdaq_history_avro",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro"
+          }
+        },
+        {
+          "runShell": {
+            "command": "jq '. | {schema: tojson}' schema.avsc | curl -sf -X POST http://localhost:8081/subjects/nasdaq_history_avro-value/versions -H 'Content-Type: application/vnd.schemaregistry.v1+json' -d @-",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "stdio": "/\"id\"/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "timeout": 300000
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=nasdaq_history_csv --output-topic=nasdaq_history_avro",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "head -n 3 test/HistoricalData_1692981579371.csv > /tmp/examples-to-avro-sample.csv && ./produce.sh /tmp/examples-to-avro-sample.csv nasdaq_history_csv",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro/test"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume nasdaq_history_avro --num 1",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "stdio": "/\"topic\": \"nasdaq_history_avro\"/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-to-avro-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-to-avro",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/go/to_avro",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}

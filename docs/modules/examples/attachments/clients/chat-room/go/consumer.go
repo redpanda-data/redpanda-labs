@@ -1,0 +1,1 @@
+../../../../examples/clients/chat-room/go/consumer.go

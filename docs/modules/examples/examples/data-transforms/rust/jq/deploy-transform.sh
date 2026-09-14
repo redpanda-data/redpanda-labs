@@ -1,0 +1,1 @@
+rpk transform deploy --var=FILTER="del(.email)" --input-topic=src --output-topic=sink

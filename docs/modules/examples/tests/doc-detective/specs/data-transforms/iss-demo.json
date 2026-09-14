@@ -1,0 +1,94 @@
+{
+  "specId": "data-transforms-iss-demo",
+  "description": "Convert JSON messages into Avro",
+  "tests": [
+    {
+      "testId": "data-transforms-iss-demo-run",
+      "description": "Run the Convert JSON messages into Avro example end to end",
+      "steps": [
+        {
+          "runShell": {
+            "command": "docker compose up -d --wait",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "timeout": 180000
+          }
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "runShell": {
+            "command": "rpk profile create examples-iss-demo --from-profile profile.yml",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo"
+          }
+        },
+        {
+          "runShell": {
+            "command": "./post-schema.sh",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "stdio": "/\"id\"/"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic create iss_json iss_avro",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform build",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "timeout": 300000
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk transform deploy --var=SCHEMA_ID=1 --input-topic=iss_json --output-topic=iss_avro",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo"
+          }
+        },
+        {
+          "wait": 10000
+        },
+        {
+          "runShell": {
+            "command": "echo '{\"message\": \"success\", \"timestamp\": 1707743943, \"iss_position\": {\"latitude\": \"-28.5723\", \"longitude\": \"-149.4612\"}}' | rpk topic produce iss_json",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo"
+          }
+        },
+        {
+          "runShell": {
+            "command": "rpk topic consume iss_avro --num 1",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "stdio": "/\"topic\": \"iss_avro\"/",
+            "timeout": 30000
+          }
+        }
+      ]
+    },
+    {
+      "testId": "data-transforms-iss-demo-cleanup",
+      "description": "Remove the rpk profile and the containers",
+      "steps": [
+        {
+          "runShell": {
+            "command": "rpk profile delete examples-iss-demo",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "exitCodes": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "runShell": {
+            "command": "docker compose down -v",
+            "workingDirectory": "../../../../examples/data-transforms/go/iss_demo",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}
