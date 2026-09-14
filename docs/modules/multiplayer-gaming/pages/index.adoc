@@ -144,11 +144,13 @@ Two directions the steps leave open. Neither is required, and `make verify` does
 include::example$steps/overview/commands.sh[tag=tiered-up]
 ----
 
+.What `make tiered` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=tiered]
 ----
 
+.`docker-compose.yml`
 [source,yaml]
 ----
 include::example$docker-compose.yml[tags=tiered]

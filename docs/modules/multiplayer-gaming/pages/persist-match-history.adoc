@@ -96,6 +96,7 @@ The `mapping` flattens the Protobuf `oneof` into two row shapes, one per table, 
 include::example$postgres/init.sql[tags=match_history]
 ----
 
+.`init.sql`
 [source,sql]
 ----
 include::example$postgres/init.sql[tags=player_events]

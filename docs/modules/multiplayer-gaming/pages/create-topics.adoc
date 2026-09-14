@@ -14,6 +14,7 @@ You create five topics with `rpk`. Each has a deliberate partition count and a s
 include::example$steps/create-topics/commands.sh[tag=topics]
 ----
 +
+.What `make topics` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=topics]
