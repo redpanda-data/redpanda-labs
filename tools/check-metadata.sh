@@ -27,6 +27,9 @@
 #     command block and one expected-output check, and every command tag it references exists
 #   - every image:: or video:: target in a solution page exists under images/ and is an output
 #     of a steps/<step-id>/media.json screenshot or record step, or is architecture.svg
+#   - attachments/verification.json, when present, is valid JSON carrying suite, specs and
+#     run_at; a published solution without one warns. Freshness is not checked here: the
+#     nightly regenerates it on every passing run and opens a PR when it changes.
 #   - no template placeholders are left: in attribute values ([...], __x__, vX.Y.Z,
 #     the step id "step") and in page bodies (bracket-only placeholder lines, __title__),
 #     and no ifdef::env-* conditionals or github.com/redpanda-data/(redpanda-labs|solutions) links
@@ -405,6 +408,43 @@ for slug in $slugs; do
   fi
   if [ "$status" = "published" ] && [ -z "$(attr "$h" page-solution-assumes)" ]; then
     warn "$page" "no :page-solution-assumes:; a published solution should say what the reader must already know (it renders beside the difficulty chip)"
+  fi
+
+  # The run's own evidence. tools/run-doc-detective.sh writes it from the
+  # results of a passing run (tools/write-verification.mjs); nothing here or
+  # anywhere else may author it, which is why a malformed one is an error
+  # rather than a warning: it means someone edited it.
+  vfile="$module/attachments/verification.json"
+  if [ -f "$vfile" ]; then
+    vproblem=""
+    if command -v jq >/dev/null; then
+      # Two calls, because a single filter cannot tell "not an object" from
+      # "no JSON at all": jq reads an empty file as no values, prints nothing
+      # and exits 0, which would have read as a valid manifest.
+      if jq -e 'type == "object"' "$vfile" >/dev/null 2>&1; then
+        vproblem=$(jq -r '["suite", "specs", "run_at"] - keys | join(", ")' "$vfile" 2>/dev/null || echo INVALID)
+      else
+        vproblem=INVALID
+      fi
+    elif command -v python3 >/dev/null; then
+      vproblem=$(python3 -c 'import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    print("INVALID"); sys.exit(0)
+if not isinstance(d, dict):
+    print("INVALID"); sys.exit(0)
+print(", ".join(k for k in ("suite", "specs", "run_at") if k not in d))' "$vfile" 2>/dev/null || echo INVALID)
+    else
+      notice "$vfile: no jq or python3, so its contents were not checked"
+    fi
+    case "$vproblem" in
+      "") ;;
+      INVALID) err "$vfile" "is not valid JSON. It is written by tools/run-doc-detective.sh from a passing run; delete it and run the suite rather than editing it" ;;
+      *) err "$vfile" "is missing $vproblem. It is written by tools/run-doc-detective.sh from a passing run; delete it and run the suite rather than editing it" ;;
+    esac
+  elif [ "$status" = "published" ]; then
+    warn "$page" "no attachments/verification.json; a published solution should carry the manifest of a passing Doc Detective run (run tools/run-doc-detective.sh $slug)"
   fi
 
   media_outputs=""
