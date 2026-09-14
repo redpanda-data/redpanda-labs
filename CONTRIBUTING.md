@@ -330,15 +330,26 @@ it is "Ignored by the `browser` engine, which always captures its tab", and
 the browser engine is the one both a laptop and a runner under `xvfb-run`
 resolve to. It would only matter for a genuinely headless run.
 
-**Use `overwrite: aboveVariation`, never `true`.** `true` re-encodes and
-replaces the file on every run, so the committed recording differs after every
-run, and the nightly would open a drift pull request every night for a file
-nobody needs to look at. `aboveVariation` compares checkpoint screenshots
-taken during the recording against a stored baseline and replaces the file
-only when they differ meaningfully. It enables those checkpoints by itself;
-point them somewhere git-ignored, outside `docs/modules/<slug>/images/`
-(`.doc-detective/recording-checkpoints` in the flagship), because baseline
-PNGs are neither published media nor allowed under the nightly's guard.
+**Screenshots use `overwrite: aboveVariation`; recordings use `true`, and the
+nightly compensates.** `aboveVariation` compares the new capture against the
+committed one and replaces it only when it meaningfully changed, which is what
+keeps a screenshot from churning. A recording cannot use it: `aboveVariation`
+on a `record` step works through checkpoint screenshots taken after every step
+inside the recording window, and in that shape doc-detective captures a frame
+per millisecond, which took the flagship's 15-second recording from 1.6 MB at
+50 fps to 6.2 MB at 1000 fps (measured; checkpoints alone, with no steps in
+the window, are harmless). Shipping that in every reader's bundle to work
+around a tool bug is the wrong trade, so recordings stay on `true` and are
+rewritten by every run.
+
+The consequence is worth knowing. The nightly's drift step never opens a pull
+request for a changed recording on its own, so the screenshot is the detector:
+it is pixel-compared against the committed file, it is stable across runs, and
+when it moves the pull request carries the refreshed recording with it. A
+recording that has gone stale on its own is caught by the next screenshot
+drift or by a human rerun, not by the nightly. Locally, expect a run to leave
+the recording modified in your working tree; discard it unless you meant to
+refresh it.
 
 Screenshots already behave this way through `overwrite: aboveVariation` with a
 `maxVariation`. Verify both when you change a media step: run the suite twice
