@@ -1,0 +1,127 @@
+= Enable Iceberg topics
+:page-layout: solution-step
+:description: Create the cdc_orders topic with Iceberg writes turned on, register the JSON schema that gives its Iceberg table columns, and find the empty table in the catalog.
+:page-solution-step-duration: 6
+
+The lakehouse side comes first, before a single change event exists. Redpanda translates a topic's records to Iceberg from the point the topic property is set, so a topic that fills up before you enable it leaves those records out of the table.
+
+== What you do
+
+. Create the topic with Iceberg writes on:
++
+[source,bash]
+----
+include::example$steps/enable-iceberg-topics/commands.sh[tag=topic]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/enable-iceberg-topics/expected/topic.txt[]
+----
++
+That target sets two topic properties: `redpanda.iceberg.mode` to `value_schema_latest`, and `redpanda.iceberg.invalid.record.action` to `dlq_table`, which is the default and is set here so the dead-letter path is visible in the code rather than implied.
++
+[source,makefile]
+----
+include::example$Makefile[tags=iceberg]
+----
+
+. Register the schema that gives the table its columns:
++
+[source,bash]
+----
+include::example$steps/enable-iceberg-topics/commands.sh[tag=schema]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/enable-iceberg-topics/expected/schema.txt[]
+----
++
+The subject name is `cdc_orders-value`, which is what `value_schema_latest` looks for: the topic name plus `-value`. The schema is JSON Schema draft-07, and every property declares a type, because Redpanda can only lay out a table from a schema that constrains its documents to strict types:
++
+[source,json]
+----
+include::example$schemas/order-change.json[]
+----
++
+`customer_id`, `total`, `status`, and `created_at` allow `null` so that a change event for a row whose column was null still deserializes. `captured_at` carries `"format": "date-time"`, which Redpanda translates to an Iceberg `timestamptz` column rather than a string.
+
+. Check what the topic will do with its records:
++
+[source,bash]
+----
+include::example$steps/enable-iceberg-topics/commands.sh[tag=describe]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/enable-iceberg-topics/expected/describe.txt[]
+----
+
+. Open Redpanda Console at http://localhost:8480/topics/cdc_orders and select *Configuration*. The *Iceberg* category holds the two properties you just set, and the *Modified* filter shows that they are the only two this topic overrides. The topic itself is empty, because nothing has produced to it yet, and the *Schema Registry* page now lists `cdc_orders-value`.
++
+.Captured by this solution's test run
+image::console-iceberg-topic.png[The cdc_orders topic's Configuration tab in Redpanda Console, with the Iceberg category showing two properties]
+
+== Why
+
+Two decisions in this step are the ones worth arguing about.
+
+The first is the Iceberg mode. `value_schema_id_prefix` is the mode most examples use, and it requires every producer to frame its records in the Schema Registry wire format: a magic byte, then the schema's id, then the payload. That is correct when many producers write many schema versions to one topic. Here one pipeline writes one shape, and `value_schema_latest` lets it write plain JSON while Redpanda resolves the schema from the subject. The cost is that the mode trusts you to keep the pipeline and the schema in step, which is why schema ID validation is a Production considerations row.
+
+The second is doing this before the capture pipeline exists. It is tempting to start the pipeline first and see the events flowing, then turn on Iceberg. That produces a table that silently misses the snapshot, because translation starts where the property was set, not at the beginning of the log.
+
+== Why Redpanda
+
+The table is a topic property. There is no connector to install, no table to create by hand, no `CREATE TABLE` to keep in step with the schema, and no compaction job: Redpanda lays the table out from the registered schema and maintains it. See xref:streaming:manage:iceberg/about-iceberg-topics.adoc[] and xref:streaming:manage:iceberg/specify-iceberg-schema.adoc[].
+
+== What happens inside
+
+Setting `redpanda.iceberg.mode` does not create anything yet. The table appears in the catalog when the first record is translated, which is why `make query-tables` finds nothing at the end of this step until the next one runs. What the property does is tell the partition leader to run a translation task: read the partition log from the point the property was set, deserialize each record value against the latest schema for `cdc_orders-value`, buffer rows, write Parquet data files into `s3://redpanda/redpanda/cdc_orders/data/`, and commit a new table snapshot to the REST catalog.
+
+Two cluster properties from xref:start-environment.adoc[] control the timing, and both are turned down here so that a change is queryable in seconds rather than minutes: `iceberg_target_lag_ms` is how far behind the topic the table is allowed to fall, and `iceberg_catalog_commit_interval_ms` is how often the leader commits a new snapshot. Production leaves both at their defaults, because every commit is a metadata write and every flush is a new Parquet file, and small files are the thing lakehouses are worst at.
+
+The schema is cached, not read per record. `iceberg_latest_schema_cache_ttl_ms` defaults to five minutes, so in `value_schema_latest` mode a schema you register now can take that long to take effect on a topic that is already translating. Registering it before the first record, as you do here, avoids the question.
+
+Complete sources for building along:
+
+.Complete source: schemas/order-change.json
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/order-change.json[]
+----
+====
+
+== Verify
+
+Ask the Iceberg REST catalog what it holds:
+
+[source,bash]
+----
+include::example$steps/enable-iceberg-topics/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/enable-iceberg-topics/expected/verify.txt[]
+----
+
+No namespaces, and that is the correct answer at this point. Setting the topic property creates nothing: Redpanda creates the `redpanda` namespace and the `cdc_orders` table in it when it translates the first record, which is what xref:capture-postgres-changes.adoc[] produces. If `make topic` fails with a topic already exists error, you have run `make seed` already; move on. If `make schema` fails, check that the file you registered is valid JSON Schema draft-07 with a `$schema` keyword, which is a hard requirement.
+
+== In production
+
+[.production-note]
+Leave `iceberg_target_lag_ms` and `iceberg_catalog_commit_interval_ms` at their defaults, and enable schema ID validation on the topic so a drifting producer is rejected rather than filling the dead-letter table. See the Schema validation row in xref:index.adoc#_production_considerations[Production considerations] and xref:streaming:manage:iceberg/iceberg-performance-tuning.adoc[].
+
+.Files for this step
+* link:{attachmentsdir}/schemas/order-change.json[schemas/order-change.json]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 540" width="1020" height="540" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the CDC to lakehouse solution</title>
+  <desc id="d">Postgres and MySQL are the operational databases. A Redpanda Connect pipeline reads each one's change log, shapes every row change into one flat event, and writes it to the cdc_orders topic on a Redpanda broker. Because the topic has redpanda.iceberg.mode set, the broker writes Parquet data files and Iceberg metadata into a MinIO bucket and commits each table snapshot to an Iceberg REST catalog. Spark reads the table through that catalog. Redpanda Console reads the topic and the Schema Registry.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --db: #eef2ff; --dbline: #4f5bd5; --store: #eefbf3; --storeline: #2e8b57; --q: #fff8e6; --qline: #b8860b; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --db: #1a2140; --dbline: #8b93ff; --store: #14281c; --storeline: #5fd38d; --q: #2a2311; --qline: #e0b552; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .db { fill: var(--db); stroke: var(--dbline); stroke-width: 1.5; rx: 10; }
+    .store { fill: var(--store); stroke: var(--storeline); stroke-width: 1.5; rx: 10; }
+    .q { fill: var(--q); stroke: var(--qline); stroke-width: 1.5; rx: 10; }
+    .flow { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .flow.rpflow { stroke: var(--rp); stroke-width: 2.2; marker-end: url(#arrow-rp); }
+    .flow.dash { stroke-dasharray: 5 4; }
+    #arrow path { fill: var(--line); }
+    #arrow-rp path { fill: var(--rp); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="arrow-rp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect width="1020" height="540" fill="var(--bg)"/>
+
+  <!-- databases -->
+  <rect class="db" x="18" y="70" width="170" height="110"/>
+  <text class="h" x="103" y="96" text-anchor="middle">Postgres</text>
+  <text class="muted" x="103" y="116" text-anchor="middle">pandashop.orders</text>
+  <text class="muted" x="103" y="134" text-anchor="middle">wal_level = logical</text>
+  <text class="muted" x="103" y="152" text-anchor="middle">REPLICA IDENTITY FULL</text>
+  <text class="muted" x="103" y="170" text-anchor="middle">write-ahead log</text>
+
+  <rect class="db" x="18" y="300" width="170" height="110"/>
+  <text class="h" x="103" y="326" text-anchor="middle">MySQL</text>
+  <text class="muted" x="103" y="346" text-anchor="middle">pandashop.orders</text>
+  <text class="muted" x="103" y="364" text-anchor="middle">binlog_format = ROW</text>
+  <text class="muted" x="103" y="382" text-anchor="middle">binlog_row_image = FULL</text>
+  <text class="muted" x="103" y="400" text-anchor="middle">binary log</text>
+
+  <!-- connect pipelines -->
+  <rect class="box" x="230" y="60" width="190" height="130"/>
+  <text class="h" x="325" y="86" text-anchor="middle">Redpanda Connect</text>
+  <text class="mono" x="325" y="108" text-anchor="middle">postgres_cdc</text>
+  <text class="muted" x="325" y="128" text-anchor="middle">replication slot</text>
+  <text class="muted" x="325" y="146" text-anchor="middle">mapping: one flat row</text>
+  <text class="mono" x="325" y="168" text-anchor="middle">redpanda output</text>
+  <text class="muted" x="325" y="184" text-anchor="middle">key = order_id</text>
+
+  <rect class="box" x="230" y="290" width="190" height="130"/>
+  <text class="h" x="325" y="316" text-anchor="middle">Redpanda Connect</text>
+  <text class="mono" x="325" y="338" text-anchor="middle">mysql_cdc</text>
+  <text class="muted" x="325" y="358" text-anchor="middle">binlog position cache</text>
+  <text class="muted" x="325" y="376" text-anchor="middle">same mapping, source = mysql</text>
+  <text class="mono" x="325" y="398" text-anchor="middle">redpanda output</text>
+  <text class="muted" x="325" y="414" text-anchor="middle">key = order_id</text>
+
+  <!-- redpanda broker -->
+  <rect class="rp" x="462" y="120" width="220" height="240"/>
+  <text class="h" x="572" y="148" text-anchor="middle">Redpanda</text>
+  <rect class="topic" x="482" y="166" width="180" height="58"/>
+  <text class="mono" x="572" y="190" text-anchor="middle">cdc_orders</text>
+  <text class="muted" x="572" y="210" text-anchor="middle">redpanda.iceberg.mode =</text>
+  <text class="mono" x="572" y="226" text-anchor="middle" style="font-size:10px">value_schema_latest</text>
+  <text class="muted" x="572" y="252" text-anchor="middle">Schema Registry</text>
+  <text class="mono" x="572" y="268" text-anchor="middle" style="font-size:11px">cdc_orders-value (JSON)</text>
+  <text class="muted" x="572" y="294" text-anchor="middle">Iceberg translation task</text>
+  <text class="muted" x="572" y="310" text-anchor="middle">on the partition leader</text>
+  <text class="muted" x="572" y="330" text-anchor="middle">Tiered Storage</text>
+  <text class="muted" x="572" y="348" text-anchor="middle">enterprise trial licence</text>
+
+  <!-- console -->
+  <rect class="box" x="462" y="400" width="220" height="70"/>
+  <text class="h" x="572" y="426" text-anchor="middle">Redpanda Console</text>
+  <text class="muted" x="572" y="446" text-anchor="middle">the topic, its Iceberg mode,</text>
+  <text class="muted" x="572" y="462" text-anchor="middle">and the registered schema</text>
+
+  <!-- object store -->
+  <rect class="store" x="726" y="60" width="270" height="150"/>
+  <text class="h" x="861" y="86" text-anchor="middle">MinIO</text>
+  <text class="muted" x="861" y="106" text-anchor="middle">one bucket, two jobs</text>
+  <text class="mono" x="861" y="130" text-anchor="middle" style="font-size:11px">redpanda/cdc_orders/data/*.parquet</text>
+  <text class="mono" x="861" y="148" text-anchor="middle" style="font-size:11px">redpanda/cdc_orders/metadata/</text>
+  <text class="muted" x="861" y="172" text-anchor="middle">Iceberg table files</text>
+  <text class="muted" x="861" y="192" text-anchor="middle">plus Tiered Storage segments</text>
+
+  <!-- catalog -->
+  <rect class="store" x="726" y="238" width="270" height="90"/>
+  <text class="h" x="861" y="264" text-anchor="middle">Iceberg REST catalog</text>
+  <text class="muted" x="861" y="284" text-anchor="middle">Redpanda commits a snapshot</text>
+  <text class="muted" x="861" y="300" text-anchor="middle">every few seconds</text>
+  <text class="mono" x="861" y="320" text-anchor="middle" style="font-size:11px">lakehouse.redpanda.cdc_orders</text>
+
+  <!-- spark -->
+  <rect class="q" x="726" y="356" width="270" height="120"/>
+  <text class="h" x="861" y="382" text-anchor="middle">Apache Spark</text>
+  <text class="mono" x="861" y="402" text-anchor="middle">spark-sql</text>
+  <text class="muted" x="861" y="422" text-anchor="middle">finds the table in the catalog,</text>
+  <text class="muted" x="861" y="438" text-anchor="middle">reads Parquet from the bucket</text>
+  <text class="muted" x="861" y="458" text-anchor="middle">change log in, current state out</text>
+
+  <!-- flows -->
+  <path class="flow" d="M188 125 L228 125"/>
+  <path class="flow" d="M188 355 L228 355"/>
+  <path class="flow rpflow" d="M420 125 L450 125 L450 190 L480 190"/>
+  <path class="flow rpflow" d="M420 355 L450 355 L450 210 L480 210"/>
+  <path class="flow rpflow" d="M682 190 L704 190 L704 150 L724 150"/>
+  <path class="flow rpflow" d="M682 280 L724 280"/>
+  <path class="flow" d="M861 210 L861 236" />
+  <path class="flow" d="M861 328 L861 354"/>
+  <path class="flow dash" d="M726 420 L704 420 L704 200 L724 200"/>
+  <path class="flow dash" d="M572 398 L572 366"/>
+
+  <text class="muted" x="208" y="116" text-anchor="middle">reads</text>
+  <text class="muted" x="437" y="112" text-anchor="middle">writes</text>
+  <text class="muted" x="700" y="135" text-anchor="middle">writes files</text>
+  <text class="muted" x="703" y="272" text-anchor="middle">commits</text>
+  <text class="muted" x="885" y="228" text-anchor="middle">points at</text>
+  <text class="muted" x="893" y="346" text-anchor="middle">discovers table</text>
+  <text class="muted" x="694" y="470" text-anchor="middle">reads Parquet</text>
+</svg>

@@ -1,0 +1,132 @@
+= Query the lakehouse with Spark
+:page-layout: solution-step
+:description: Find the Iceberg table Redpanda created, read its columns, query the change log in Spark SQL, and reconstruct the current state of the orders table from it.
+:page-solution-step-duration: 8
+
+Eight change events are in the topic, and Redpanda has been writing them into an Iceberg table the whole time. This step reads that table with `spark-sql`, through the same REST catalog Redpanda commits to.
+
+== What you do
+
+. Wait for the table to catch up with the topic:
++
+[source,bash]
+----
+include::example$steps/query-with-spark/commands.sh[tag=wait]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/query-with-spark/expected/wait.txt[]
+----
++
+Translation is asynchronous, so there is a lag between the event reaching the topic and the row reaching the table. On this stack it is a few seconds.
+
+. Read the table's columns:
++
+[source,bash]
+----
+include::example$steps/query-with-spark/commands.sh[tag=columns]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/query-with-spark/expected/columns.txt[]
+----
++
+Nine columns from the schema, one per property, plus a `redpanda` struct Redpanda adds to every Iceberg table it writes, holding the record's `partition`, `offset`, `timestamp`, `timestamp_type`, `key`, and `headers`. The trailer shows the table's default partitioning, `hours(redpanda.timestamp)`: Redpanda partitions every Iceberg table it writes by the hour the record arrived, which is what makes a query over a time range read only the files it needs.
+
+. Read the change log:
++
+[source,bash]
+----
+include::example$steps/query-with-spark/commands.sh[tag=changes]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/query-with-spark/expected/changes.txt[]
+----
++
+Five snapshot rows, then the insert, the update, and the delete, in the order the database applied them. The query behind it:
++
+[source,sql]
+----
+include::example$sql/queries.sql[tag=changes]
+----
+
+== Why
+
+The table is a change log, not a copy of the source table, and that is deliberate. A lakehouse table that mirrored current state would have to support row-level updates and deletes, which means a merge job, a schedule, and a window during which the table disagrees with the database. An append-only change log has none of that: Redpanda writes new Parquet files and never rewrites old ones, and the reader decides what "now" means.
+
+The cost is that current state is a query. The one in this step is the standard shape: number the changes per row newest first, keep the first, and drop the rows whose newest change is a delete.
+
+[source,sql]
+----
+include::example$sql/queries.sql[tag=current]
+----
+
+That query is also the deduplication the at-least-once delivery in xref:capture-postgres-changes.adoc[] makes necessary: a duplicated change event produces two identical rows, and taking the newest per row collapses them.
+
+== Why Redpanda
+
+Nothing in this step talks to Redpanda. Spark asks the REST catalog for `lakehouse.redpanda.cdc_orders`, gets a metadata pointer, and reads Parquet files straight out of MinIO, exactly as it would for a table some batch job had written. That is the whole argument for Iceberg topics: the streaming system's output is a table in the format every query engine already reads, so the analysts need no access to the broker and no knowledge that Redpanda exists. See xref:streaming:manage:iceberg/query-iceberg-topics.adoc[].
+
+== What happens inside
+
+Redpanda created the table when the first record was translated. The name is `<catalog>.<namespace>.<topic>`: the catalog is whatever the query engine calls its connection (`lakehouse` here, from `spark/spark-defaults.conf`), the namespace is `redpanda`, which is Redpanda's default and is set per cluster with `iceberg_default_catalog_namespace`, and the table takes the topic's name. That is why the topic is `cdc_orders` and not `cdc.orders`: the table name inherits the dot, and a dotted table name has to be quoted in every query.
+
+Each translation cycle writes one or more Parquet data files under `s3://redpanda/redpanda/cdc_orders/data/` and commits a snapshot to the catalog that lists them. Spark's Iceberg catalog is configured with `cache-enabled false`, so every query re-reads the current snapshot rather than serving a cached table state; with caching on, a query run seconds after a change can miss it.
+
+The `redpanda` struct column is worth knowing about. Redpanda adds it to every Iceberg table it writes, whatever the mode, and it carries the record's Kafka coordinates: `partition`, `offset`, `timestamp`, `timestamp_type`, `key`, and `headers`. It is the join back to the topic when a row in the table needs explaining, and `redpanda.key` here holds the `order_id` the pipeline keyed on, as raw bytes. See xref:streaming:manage:iceberg/specify-iceberg-schema.adoc[].
+
+Complete sources for building along:
+
+.Complete source: sql/queries.sql
+[%collapsible]
+====
+[source,sql]
+----
+include::example$sql/queries.sql[]
+----
+====
+
+.Complete source: scripts/lakehouse.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/lakehouse.sh[]
+----
+====
+
+== Verify
+
+Reconstruct the current state of the source table:
+
+[source,bash]
+----
+include::example$steps/query-with-spark/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/query-with-spark/expected/verify.txt[]
+----
+
+Five rows, matching the five the database holds: the four seeded orders that were not deleted, plus the one the insert created, with the status the update gave it. If the query fails with a table not found error, the table has not been created yet: `make wait-lakehouse ROWS=8` and try again, and if it still fails, `make dlq` to see whether the records failed to translate instead. If Spark reports a connection error to `minio` or `catalog`, one of those containers is unhealthy.
+
+== In production
+
+[.production-note]
+Point the engines you already have at the same catalog rather than adding Spark for this, and let a downstream job fold the change log into a current-state table on the schedule the analysts need. See the Analytics and lakehouse row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/sql/queries.sql[sql/queries.sql]
+* link:{attachmentsdir}/scripts/lakehouse.sh[scripts/lakehouse.sh] (`chmod +x` it)
+* link:{attachmentsdir}/spark/spark-defaults.conf[spark/spark-defaults.conf]

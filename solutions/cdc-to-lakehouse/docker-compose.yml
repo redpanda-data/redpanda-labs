@@ -1,0 +1,399 @@
+# CDC to lakehouse: local stack.
+#
+# Postgres and MySQL are the operational databases. Redpanda Connect reads
+# their change logs (`postgres_cdc` reads the Postgres write-ahead log,
+# `mysql_cdc` reads the MySQL binary log) and writes one shaped event per row
+# change to the `cdc_orders` topic. That topic is Iceberg-enabled, so Redpanda
+# itself writes the Parquet and metadata files into MinIO and registers the
+# table with the Iceberg REST catalog. Spark reads the table through the same
+# catalog.
+#
+# Start with `make up` (waits for every healthcheck), then follow the steps, or
+# run `make seed cdc-postgres changes verify`. Tear down with `make clean`.
+# Versions, host ports, and credentials come from .env (copied from
+# .env.example on first `make up`).
+name: cdc-to-lakehouse
+
+networks:
+  lakehouse:
+    driver: bridge
+
+volumes:
+  redpanda-data: {}
+  minio-data: {}
+  postgres-data: {}
+  mysql-data: {}
+
+services:
+  # tag::minio[]
+  # The object store. It holds two things: the Tiered Storage segments
+  # Redpanda uploads, and the Iceberg table files (Parquet data plus JSON
+  # metadata) Redpanda writes for every Iceberg-enabled topic.
+  minio:
+    image: quay.io/minio/minio:${MINIO_VERSION:-latest}
+    container_name: cdc-to-lakehouse-minio
+    hostname: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio123}
+      MINIO_SERVER_URL: http://minio:9000
+      MINIO_REGION_NAME: local
+      MINIO_DOMAIN: minio
+    ports:
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      lakehouse:
+        aliases:
+          # Redpanda addresses the bucket with a virtual-host style URL, so
+          # <bucket>.minio has to resolve inside the network.
+          - ${MINIO_BUCKET:-redpanda}.minio
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+  # end::minio[]
+
+  # tag::mc[]
+  # Creates the bucket once, then idles so that `docker compose up --wait` has
+  # a healthcheck to wait on: the healthcheck is the proof that the bucket
+  # exists, which is what Redpanda needs before it can upload anything.
+  mc:
+    image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
+    container_name: cdc-to-lakehouse-mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_minio: http://${MINIO_ACCESS_KEY:-minio}:${MINIO_SECRET_KEY:-minio123}@minio:9000
+      BUCKET: ${MINIO_BUCKET:-redpanda}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "mc mb --ignore-existing minio/$${BUCKET} && sleep infinity"
+    networks:
+      - lakehouse
+    healthcheck:
+      test: ["CMD-SHELL", "mc ls minio/$${BUCKET} >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+  # end::mc[]
+
+  # tag::catalog[]
+  # The Iceberg REST catalog. Redpanda commits a new table snapshot to it
+  # after every translation interval; Spark discovers the tables through it.
+  # The catalog stores its own metadata pointer in the same bucket.
+  catalog:
+    image: apache/iceberg-rest-fixture:${ICEBERG_REST_VERSION:-latest}
+    container_name: cdc-to-lakehouse-catalog
+    hostname: catalog
+    depends_on:
+      mc:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minio123}
+      AWS_REGION: local
+      CATALOG_WAREHOUSE: s3://${MINIO_BUCKET:-redpanda}/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+    ports:
+      - "${ICEBERG_REST_PORT:-8581}:8181"
+    networks:
+      - lakehouse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8181/v1/config >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+  # end::catalog[]
+
+  # tag::redpanda[]
+  # One broker, with the three cluster properties this solution turns on:
+  # Tiered Storage (so there is an object store to write Iceberg files to),
+  # Iceberg topics, and the REST catalog they commit to. Iceberg topics are an
+  # enterprise feature; a new cluster starts with a 30-day trial license, so
+  # nothing has to be applied here.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: cdc-to-lakehouse-redpanda
+    hostname: redpanda
+    depends_on:
+      catalog:
+        condition: service_healthy
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-64092}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 1G
+      - --default-log-level=info
+      # Tiered Storage, backed by MinIO.
+      - --set redpanda.cloud_storage_enabled=true
+      - --set redpanda.cloud_storage_region=local
+      - --set redpanda.cloud_storage_bucket=${MINIO_BUCKET:-redpanda}
+      - --set redpanda.cloud_storage_access_key=${MINIO_ACCESS_KEY:-minio}
+      - --set redpanda.cloud_storage_secret_key=${MINIO_SECRET_KEY:-minio123}
+      - --set redpanda.cloud_storage_api_endpoint=minio
+      - --set redpanda.cloud_storage_api_endpoint_port=9000
+      - --set redpanda.cloud_storage_disable_tls=true
+      - --set redpanda.cloud_storage_enable_remote_write=true
+      - --set redpanda.cloud_storage_enable_remote_read=true
+      - --set redpanda.cloud_storage_segment_max_upload_interval_sec=30
+      # Iceberg topics, committing to the REST catalog.
+      - --set redpanda.iceberg_enabled=true
+      - --set redpanda.iceberg_catalog_type=rest
+      - --set redpanda.iceberg_rest_catalog_endpoint=http://catalog:8181
+      # Low enough that a change is queryable in seconds. Production leaves
+      # both at their defaults; see the overview's Production considerations.
+      - --set redpanda.iceberg_catalog_commit_interval_ms=5000
+      - --set redpanda.iceberg_target_lag_ms=10000
+    ports:
+      - "${REDPANDA_KAFKA_PORT:-64092}:19092"
+      - "${REDPANDA_SR_PORT:-64081}:18081"
+      - "${REDPANDA_ADMIN_PORT:-64644}:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - lakehouse
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+  # end::redpanda[]
+
+  # tag::postgres[]
+  # The operational database. `wal_level=logical` is the one setting
+  # `postgres_cdc` needs: without it Postgres writes no logical decoding
+  # output and the replication slot cannot be created.
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16}
+    container_name: cdc-to-lakehouse-postgres
+    hostname: postgres
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pandashop}
+      POSTGRES_USER: ${POSTGRES_USER:-pandashop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pandashop}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - lakehouse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pandashop} -d ${POSTGRES_DB:-pandashop}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+  # end::postgres[]
+
+  # tag::mysql[]
+  # The second operational database, for the alternative source step. Row
+  # based binary logging is what `mysql_cdc` reads.
+  mysql:
+    image: mysql:${MYSQL_VERSION:-8.0}
+    container_name: cdc-to-lakehouse-mysql
+    hostname: mysql
+    command:
+      - --server-id=223344
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --binlog-expire-logs-seconds=86400
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pandashop}
+      MYSQL_USER: ${MYSQL_USER:-pandashop}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pandashop}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-pandashop-root}
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - lakehouse
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+  # end::mysql[]
+
+  # tag::console[]
+  # Redpanda Console shows the topic, its Iceberg mode, and the registered
+  # schema. It is the only browser view this solution needs.
+  console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: cdc-to-lakehouse-console
+    environment:
+      CONFIG_FILEPATH: /etc/console/config.yaml
+    volumes:
+      - ./console-config.yaml:/etc/console/config.yaml:ro
+    ports:
+      - "${CONSOLE_PORT:-8480}:8080"
+    networks:
+      - lakehouse
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::console[]
+
+  # tag::rpk[]
+  # Helper container so the Makefile, scripts/verify.sh, and the generated
+  # Doc Detective specs run rpk against the cluster without a host install:
+  # docker compose exec -T rpk rpk ...
+  rpk:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: cdc-to-lakehouse-rpk
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    environment:
+      RPK_BROKERS: redpanda:9092
+      RPK_ADMIN_HOSTS: redpanda:9644
+      RPK_REGISTRY_HOSTS: redpanda:8081
+    volumes:
+      - ./schemas:/schemas:ro
+      - ./scripts:/scripts:ro
+    networks:
+      - lakehouse
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+  # end::rpk[]
+
+  # tag::spark[]
+  # Spark, as the query engine a data team already has. It is a plain Apache
+  # Spark image plus the two Iceberg jars, and it idles: every query in this
+  # solution runs through `docker compose exec spark spark-sql`. The driver is
+  # capped at 1 GB, which is plenty for reading a handful of Parquet files.
+  spark:
+    build:
+      context: ./spark
+      args:
+        SPARK_VERSION: ${SPARK_VERSION:-3.5.7}
+        ICEBERG_SPARK_VERSION: ${ICEBERG_SPARK_VERSION:-1.9.2}
+    image: cdc-to-lakehouse-spark
+    container_name: cdc-to-lakehouse-spark
+    entrypoint: ["/bin/bash", "-c", "sleep infinity"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minio123}
+      AWS_REGION: local
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-1g}
+    volumes:
+      - ./sql:/sql:ro
+    ports:
+      - "${SPARK_UI_PORT:-4041}:4040"
+    networks:
+      - lakehouse
+    depends_on:
+      catalog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -x /opt/spark/bin/spark-sql || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 2s
+  # end::spark[]
+
+  # tag::connect-postgres[]
+  # The Postgres change data capture pipeline. It carries a compose profile,
+  # so `make up` does not start it: you start it in the
+  # `capture-postgres-changes` step, once the Iceberg topic exists.
+  connect-postgres:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: cdc-to-lakehouse-connect-postgres
+    profiles: ["postgres-cdc"]
+    command: ["run", "/pipelines/postgres-cdc.yaml"]
+    environment:
+      # postgres_cdc is an enterprise component: Redpanda Connect reads its
+      # license from this variable, which make passes through from .env.
+      REDPANDA_LICENSE: ${REDPANDA_LICENSE:-}
+      POSTGRES_DSN: postgres://${POSTGRES_USER:-pandashop}:${POSTGRES_PASSWORD:-pandashop}@postgres:5432/${POSTGRES_DB:-pandashop}?sslmode=disable
+      REDPANDA_BROKERS: redpanda:9092
+      CDC_TOPIC: cdc_orders
+    volumes:
+      - ./connect:/pipelines:ro
+    networks:
+      - lakehouse
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4195/ready >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 5s
+  # end::connect-postgres[]
+
+  # tag::connect-mysql[]
+  # The MySQL change data capture pipeline, the alternative source. Same
+  # output topic and the same shaping, so one Iceberg table holds the changes
+  # from both databases. Also profile-gated.
+  connect-mysql:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: cdc-to-lakehouse-connect-mysql
+    profiles: ["mysql-cdc"]
+    command: ["run", "/pipelines/mysql-cdc.yaml"]
+    environment:
+      REDPANDA_LICENSE: ${REDPANDA_LICENSE:-}
+      MYSQL_DSN: ${MYSQL_USER:-pandashop}:${MYSQL_PASSWORD:-pandashop}@tcp(mysql:3306)/${MYSQL_DATABASE:-pandashop}
+      REDPANDA_BROKERS: redpanda:9092
+      CDC_TOPIC: cdc_orders
+    volumes:
+      - ./connect:/pipelines:ro
+    networks:
+      - lakehouse
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4195/ready >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 5s
+  # end::connect-mysql[]

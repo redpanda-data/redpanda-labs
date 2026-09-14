@@ -1,0 +1,2 @@
+SUBJECT           VERSION  ID    TYPE
+cdc_orders-value  1        1     JSON

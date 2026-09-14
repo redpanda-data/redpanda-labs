@@ -1,0 +1,17 @@
+{
+  "specId": "_setup",
+  "description": "Start the CDC to lakehouse stack once before the step specs run (beforeAny in .doc-detective.json). The Iceberg topic, the schema, the change data capture pipelines, and the row changes are all created by the step specs themselves, in step order, so nothing is pre-seeded here. Never selected as a step spec. The timeout covers the first run, which pulls Postgres, MySQL, MinIO, Spark, Redpanda, and Console and builds the Spark image.",
+  "tests": [
+    {
+      "testId": "_setup",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make up",
+            "timeout": 1500000
+          }
+        }
+      ]
+    }
+  ]
+}

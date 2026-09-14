@@ -1,0 +1,212 @@
+= Start the environment
+:page-layout: solution-step
+:description: Bring up the two source databases, Redpanda with Tiered Storage and Iceberg topics, MinIO, an Iceberg REST catalog, Spark, and Redpanda Console with one command.
+:page-solution-step-duration: 12
+
+You start every piece of the pipeline except the pipeline itself: Postgres and MySQL with their change logs turned on, Redpanda configured for Tiered Storage and Iceberg topics, MinIO as the object store, an Iceberg REST catalog, Spark, and Redpanda Console. Nothing is captured yet and no table exists.
+
+== What you do
+
+. Choose one of two paths. Both end with the same running stack.
++
+*Download the complete example* (sign in required). Unzip it and change into `cdc-to-lakehouse/`.
++
+*Or build along.* Create a directory `cdc-to-lakehouse/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example`, `Makefile.mk` as `Makefile`, and `spark/Dockerfile.txt` as `spark/Dockerfile`, and `chmod +x` the files under `scripts/`.
+
+. Put a Redpanda Connect license key in `.env`. Copy `.env.example` to `.env`, then set `REDPANDA_LICENSE` to a trial or Enterprise Edition key. You need this for xref:capture-postgres-changes.adoc[] and xref:capture-mysql-changes.adoc[], because `postgres_cdc` and `mysql_cdc` are enterprise components of Redpanda Connect. The Redpanda cluster itself needs no key: it starts a 30-day trial license of its own, which is what covers Iceberg topics and Tiered Storage. See xref:streaming:get-started:licensing/overview.adoc[].
+
+. Start everything and wait for the healthchecks:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+The first run pulls Redpanda, Console, Postgres, MySQL, MinIO, the Iceberg REST catalog, and Apache Spark, and builds the Spark image on top of the last of those. Allow ten minutes for that on a cold cache; every later start takes about a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist.
+
+. Confirm that the cluster will write Iceberg tables:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=iceberg-enabled]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/iceberg-enabled.txt[]
+----
+
+. Confirm the cluster's own trial license:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=license]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/license.txt[]
+----
+
+. Look at the source table. These five rows are what the first change data capture snapshot will read:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=orders]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/orders.txt[]
+----
+
+. Check the object store's bucket. It is not empty: Redpanda has already written its cluster metadata and the Tiered Storage metastore manifest there, which is the proof that the object store credentials and the endpoint work before any topic exists:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=bucket]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/bucket.txt[]
+----
+
+. Open Redpanda Console at http://localhost:8480. The topic list holds only the cluster's internal topics, and the *Schema Registry* page is empty.
+
+== Why
+
+The two databases are real Postgres and real MySQL, not a producer pretending to be a database, because the parts of change data capture that break in production are the parts that belong to the database: the write-ahead log setting, the replication slot, the binary log format, and what a delete actually records. A fake source would hide all four.
+
+MinIO is here for one reason that is easy to miss: Iceberg topics write through the cluster's Tiered Storage configuration, so the object store is not an extra component bolted on for the lakehouse. It is the same bucket, the same credentials, and the same code path Redpanda already uses to offload topic segments.
+
+== Why Redpanda
+
+Three cluster properties are the whole lakehouse side of this solution: `cloud_storage_enabled` for the object store, `iceberg_enabled` for the table writes, and `iceberg_catalog_type` with `iceberg_rest_catalog_endpoint` for the catalog. There is no sink connector, no separate writer process, and no compaction job to schedule. See xref:streaming:manage:iceberg/about-iceberg-topics.adoc[].
+
+== What happens inside
+
+Compose starts the stack in dependency order, and every service has a healthcheck, so `make up` returns only when all nine are passing. MinIO comes up first, then a one-shot `mc` container creates the `redpanda` bucket and idles, so that the bucket's existence is itself a healthcheck the catalog and the broker can wait on. The catalog starts pointed at that bucket as its warehouse.
+
+Redpanda then starts with `--memory 1G` and one core, advertising `redpanda:9092` inside the compose network and `localhost:64092` outside it, and reports `Healthy: true` once its single Raft group has a leader. Postgres starts with `wal_level=logical` and runs `postgres/init.sql`, which creates the table, sets its replica identity, and inserts the five rows. MySQL starts with row based binary logging and runs its own `init.sql`. Console connects to Redpanda's Kafka API, Schema Registry, and Admin API. Spark and the `rpk` helper idle, waiting to be given commands.
+
+One detail in the MinIO service is worth reading, because without it Redpanda cannot upload anything:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=minio]
+----
+
+Redpanda addresses the bucket with a virtual-host style URL, `redpanda.minio`, so that name has to resolve inside the compose network. The network alias does it.
+
+The broker's own service carries the three properties:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=redpanda]
+----
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: Makefile
+[%collapsible]
+====
+[source,makefile]
+----
+include::example$Makefile[]
+----
+====
+
+.Complete source: postgres/init.sql
+[%collapsible]
+====
+[source,sql]
+----
+include::example$postgres/init.sql[]
+----
+====
+
+.Complete source: mysql/init.sql
+[%collapsible]
+====
+[source,sql]
+----
+include::example$mysql/init.sql[]
+----
+====
+
+.Complete source: spark/Dockerfile
+[%collapsible]
+====
+[source,dockerfile]
+----
+include::example$spark/Dockerfile[]
+----
+====
+
+.Complete source: spark/spark-defaults.conf
+[%collapsible]
+====
+[source,properties]
+----
+include::example$spark/spark-defaults.conf[]
+----
+====
+
+.Complete source: console-config.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console-config.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The two usual causes are Docker having less than 8 GB of memory available, which shows up as Redpanda failing to allocate `--memory 1G` or MySQL being killed during its first start, and a host port already in use, which you move with the matching `*_PORT` variable in `.env`. If the `catalog` container is unhealthy, check that `mc` reported healthy first: the catalog fails to start when its warehouse bucket does not exist.
+
+== In production
+
+[.production-note]
+One broker, one MinIO container, and plaintext everywhere is a laptop stack. See the Brokers and replication, Security, and Kubernetes rows in xref:index.adoc#_production_considerations[Production considerations], and note that on Kubernetes both MinIO and the REST catalog need more than a straight port forward.
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/console-config.yaml[console-config.yaml]
+* link:{attachmentsdir}/postgres/init.sql[postgres/init.sql] and link:{attachmentsdir}/mysql/init.sql[mysql/init.sql]
+* link:{attachmentsdir}/spark/Dockerfile.txt[spark/Dockerfile.txt] (save it as `spark/Dockerfile`) and link:{attachmentsdir}/spark/spark-defaults.conf[spark/spark-defaults.conf]
+* link:{attachmentsdir}/schemas/order-change.json[schemas/order-change.json]
+* link:{attachmentsdir}/connect/postgres-cdc.yaml[connect/postgres-cdc.yaml] and link:{attachmentsdir}/connect/mysql-cdc.yaml[connect/mysql-cdc.yaml]
+* link:{attachmentsdir}/sql/queries.sql[sql/queries.sql]
+* link:{attachmentsdir}/scripts/change-orders.sh[scripts/change-orders.sh], link:{attachmentsdir}/scripts/lakehouse.sh[scripts/lakehouse.sh], link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh], and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (`chmod +x` them)

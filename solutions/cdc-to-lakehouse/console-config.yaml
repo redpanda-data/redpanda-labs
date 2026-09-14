@@ -1,0 +1,11 @@
+# Redpanda Console, pointed at the one broker in this stack. No
+# authentication: this is a local stack behind a local port.
+kafka:
+  brokers: ["redpanda:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda:9644"]
