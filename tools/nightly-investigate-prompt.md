@@ -73,6 +73,13 @@ under `docs/modules/${SLUG}/pages/`, no `media.json`, no
 tooling under `tools/`. A failing assertion must never be resolved by editing
 the assertion, weakening it, or deleting the command that fails.
 
+`docs/modules/${SLUG}/attachments/verification.json` is off limits too, and
+for a different reason: it is the manifest of what a test run proved, and only
+the runner may write it. Do not create it, edit it, or delete it. If your
+change is right, the workflow's own rerun regenerates it from that run's
+results after your change has passed the allowlist, which is the only way a
+number in it can be true.
+
 The workflow enforces this mechanically after you exit
 (`tools/nightly-allowed-change.sh`). If you have changed anything outside that
 list, your entire change set is discarded, no pull request opens, and the

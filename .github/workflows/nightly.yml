@@ -240,7 +240,8 @@ jobs:
           # mapfile, and expanding an empty array under `set -u` fails there
           # too. The paths here are plain, so line-by-line is safe.
           CHANGED=$(git status --porcelain --untracked-files=all -- \
-            "docs/modules/$SLUG/images" "solutions/$SLUG/steps" | sed 's/^...//')
+            "docs/modules/$SLUG/images" "solutions/$SLUG/steps" \
+            "docs/modules/$SLUG/attachments/verification.json" | sed 's/^...//')
           if [ -z "$CHANGED" ]; then
             echo "No capture drift."
             exit 0
@@ -249,7 +250,10 @@ jobs:
           # Same allowlist the investigation is held to. A passing suite should
           # only ever rewrite captures, so anything else here is a bug in the
           # suite or in a media.json, not drift to be committed.
-          if ! printf '%s\n' "$CHANGED" | tools/nightly-allowed-change.sh "$SLUG" > /tmp/drift-violations.txt; then
+          # --with-verification: on a passing run the runner writes the
+          # manifest itself, so it belongs in this change set. The guard call
+          # after the investigation deliberately withholds the flag.
+          if ! printf '%s\n' "$CHANGED" | tools/nightly-allowed-change.sh --with-verification "$SLUG" > /tmp/drift-violations.txt; then
             echo "::error::the suite changed files it should not have:"
             sed 's/^/  /' /tmp/drift-violations.txt
             exit 1
@@ -260,6 +264,13 @@ jobs:
           WHAT=""
           [ -n "$OUTPUTS" ] && WHAT="captured command output"
           [ -n "$IMAGES" ] && WHAT="${WHAT:+$WHAT and }captured media"
+          # The manifest changes on every run (its run_at is the run), so it is
+          # never the reason for a PR on its own: when it is all that changed,
+          # there is nothing for a reviewer to look at.
+          if [ -z "$WHAT" ]; then
+            echo "Only the verification manifest changed; nothing to review."
+            exit 0
+          fi
           echo "Drift in $WHAT:"
           printf '%s\n' "$CHANGED" | sed 's/^/  /'
 
@@ -309,7 +320,7 @@ jobs:
           # Only paths that exist: a solution with no media has no images/
           # directory, and `git add` on a pathspec matching nothing is an error
           # under `set -e`.
-          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps"; do
+          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps" "docs/modules/$SLUG/attachments/verification.json"; do
             [ -e "$p" ] && git add -- "$p"
           done
           if git diff --cached --quiet; then
@@ -540,6 +551,15 @@ jobs:
           ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
           FAILING: ${{ steps.dd.outputs.failing }}
           RESULTS_FILE: ${{ steps.dd.outputs.results }}
+          # The prompt lets the model rerun the suite once to check a fix, and
+          # a passing rerun would otherwise have the runner write a
+          # verification manifest inside the model's change set. The manifest
+          # must come from this workflow's own rerun, after the guard has
+          # approved the change, so suppress it here. The guard rejects the
+          # file anyway (it is called without --with-verification), and the
+          # prompt forbids touching it: three layers, because this file is the
+          # evidence a published page rests on.
+          SOLUTIONS_SKIP_VERIFICATION: '1'
         run: |
           set -euo pipefail
           VERDICT_FILE="$RUNNER_TEMP/nightly-verdict.md"
@@ -675,12 +695,14 @@ jobs:
           # The rerun rewrites captures itself, so stage from the allowlist's
           # paths rather than from the list the guard saw.
           git checkout -b "$BRANCH"
-          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps" "solutions/$SLUG/.env.example"; do
+          # The rerun above wrote the manifest from its own passing run, so it
+          # ships with the fix. Every path here is the runner's output.
+          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps" "solutions/$SLUG/.env.example" "docs/modules/$SLUG/attachments/verification.json"; do
             [ -e "$p" ] && git add -- "$p"
           done
           # Re-check the staged set: the rerun ran a whole suite since the
           # guard looked, and only these three path shapes may ship.
-          git diff --cached --name-only | tools/nightly-allowed-change.sh "$SLUG" > /tmp/fix-violations.txt || {
+          git diff --cached --name-only | tools/nightly-allowed-change.sh --with-verification "$SLUG" > /tmp/fix-violations.txt || {
             echo "::error::the rerun staged files outside the allowlist:"; sed 's/^/  /' /tmp/fix-violations.txt; exit 1; }
           if git diff --cached --quiet; then
             echo "::warning::nothing staged after a passing rerun; opening no PR."
