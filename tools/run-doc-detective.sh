@@ -86,6 +86,17 @@ else
   wait "$pid" || rc=$?
 fi
 
+# Doc Detective keeps a full report directory per run under
+# .doc-detective/runs/, screenshots and recordings included, and never prunes
+# them. A day of runs is gigabytes, so keep the newest two (this run and the
+# one to compare it with) and delete the rest. Runs regardless of the verdict,
+# because a failed run writes a report too.
+if [ -d .doc-detective/runs ]; then
+  ls -1dt .doc-detective/runs/*/ 2>/dev/null | tail -n +3 | while IFS= read -r old; do
+    rm -rf "$old"
+  done
+fi
+
 results=$(ls testResults-*.json 2>/dev/null | head -1)
 if [ -z "$results" ]; then
   echo "run-doc-detective: no results file was written (exit $rc)" >&2

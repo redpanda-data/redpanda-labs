@@ -393,6 +393,19 @@ npm run serve
 `npm run build` uses `tools/local-antora-playbook.yml`, which builds both the
 `solutions` component and the frozen `labs` component from this repository.
 
+Prove the build from a scratch clone of your branch, and delete the clone in
+the same command. A clone with its `node_modules` is about 2.3 GB, and a few
+of them left behind fill the disk:
+
+```bash
+git clone -b <branch> . /tmp/solutions-proof && cd /tmp/solutions-proof \
+  && npm ci && SOLUTIONS_INCLUDE_DRAFTS=true npm run build; \
+  cd - && rm -rf /tmp/solutions-proof
+```
+
+`tools/run-doc-detective.sh` prunes its own reports to the newest two run
+directories under `solutions/<slug>/.doc-detective/runs/` for the same reason.
+
 ## Labs content
 
 `labs-docs/` and the legacy code directories (`docker-compose/`, `clients/`,
