@@ -169,6 +169,9 @@ From `kubernetes/iceberg`:
 - The MinIO service definition, the `mc` bucket bootstrap, and the
   `<bucket>.minio` network alias came from the Redpanda Labs Iceberg lab,
   which is Redpanda's own work. MinIO's own images are used unmodified.
+- MinIO's images are pulled from `quay.io/minio/...`, not `minio/...`. The
+  lab's Docker Hub references no longer resolve: that repository is gone, and
+  `minio/minio:latest` is not pullable any more.
 - `apache/iceberg-rest-fixture` replaces `tabulario/iceberg-rest`, which the
   lab used unpinned. The fixture image is the Apache Iceberg project's own
   build of the same REST catalog and takes the same `CATALOG_*` environment

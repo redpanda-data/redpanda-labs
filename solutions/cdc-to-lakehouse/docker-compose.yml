@@ -9,7 +9,7 @@
 # catalog.
 #
 # Start with `make up` (waits for every healthcheck), then follow the steps, or
-# run `make seed cdc-postgres iceberg verify`. Tear down with `make clean`.
+# run `make seed cdc-postgres changes verify`. Tear down with `make clean`.
 # Versions, host ports, and credentials come from .env (copied from
 # .env.example on first `make up`).
 name: cdc-to-lakehouse
@@ -30,7 +30,7 @@ services:
   # Redpanda uploads, and the Iceberg table files (Parquet data plus JSON
   # metadata) Redpanda writes for every Iceberg-enabled topic.
   minio:
-    image: minio/minio:${MINIO_VERSION:-latest}
+    image: quay.io/minio/minio:${MINIO_VERSION:-latest}
     container_name: cdc-to-lakehouse-minio
     hostname: minio
     command: server /data --console-address ":9001"
@@ -64,7 +64,7 @@ services:
   # a healthcheck to wait on: the healthcheck is the proof that the bucket
   # exists, which is what Redpanda needs before it can upload anything.
   mc:
-    image: minio/mc:${MINIO_MC_VERSION:-latest}
+    image: quay.io/minio/mc:${MINIO_MC_VERSION:-latest}
     container_name: cdc-to-lakehouse-mc
     depends_on:
       minio:
@@ -308,7 +308,7 @@ services:
       context: ./spark
       args:
         SPARK_VERSION: ${SPARK_VERSION:-3.5.7}
-        ICEBERG_SPARK_VERSION: ${ICEBERG_SPARK_VERSION:-1.6.0}
+        ICEBERG_SPARK_VERSION: ${ICEBERG_SPARK_VERSION:-1.9.2}
     image: cdc-to-lakehouse-spark
     container_name: cdc-to-lakehouse-spark
     entrypoint: ["/bin/bash", "-c", "sleep infinity"]

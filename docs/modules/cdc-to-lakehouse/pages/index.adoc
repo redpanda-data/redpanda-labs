@@ -64,7 +64,7 @@ Spark asks the catalog for the table, reads the Parquet files straight out of Mi
 
 === If you already run Kafka Connect
 
-The Redpanda Labs labs this solution replaces used Debezium on Kafka Connect for the capture half, and that is still a reasonable choice if you already operate a Kafka Connect cluster and depend on Debezium's envelope format or its single message transforms. Redpanda speaks the Kafka protocol, so a Debezium connector writes to it unchanged: deploy Kafka Connect against the cluster, point the connector at the database, and the Iceberg half of this solution works exactly the same way on the topics Debezium creates. Only the mapping in xref:shape-events.adoc[] changes, because Debezium's envelope nests the row values under `after`. See xref:streaming:deploy:kafka-connect/index.adoc[].
+Debezium on Kafka Connect is the other way to do the capture half, and it is still a reasonable choice if you already operate a Kafka Connect cluster and depend on Debezium's envelope format or its single message transforms. Redpanda speaks the Kafka protocol, so a Debezium connector writes to it unchanged: deploy Kafka Connect against the cluster, point the connector at the database, and the Iceberg half of this solution works exactly the same way on the topics Debezium creates. Only the mapping in xref:shape-events.adoc[] changes, because Debezium's envelope nests the row values under `after`. See xref:streaming:deploy:kafka-connect/index.adoc[].
 
 == Prerequisites
 
