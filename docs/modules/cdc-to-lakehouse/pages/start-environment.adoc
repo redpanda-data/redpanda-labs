@@ -63,7 +63,20 @@ include::example$steps/start-environment/commands.sh[tag=orders]
 include::example$steps/start-environment/expected/orders.txt[]
 ----
 
-. Open Redpanda Console at http://localhost:8480. The topic list holds only the cluster's internal topics, and the *Schema Registry* page is empty. Open MinIO at http://localhost:9101 and sign in with the `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` values from your `.env`: the `redpanda` bucket exists and is empty.
+. Check that the object store's bucket exists and is empty:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=bucket]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/start-environment/expected/bucket.txt[]
+----
+
+. Open Redpanda Console at http://localhost:8480. The topic list holds only the cluster's internal topics, and the *Schema Registry* page is empty.
 
 == Why
 

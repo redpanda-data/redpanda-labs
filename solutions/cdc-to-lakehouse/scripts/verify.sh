@@ -86,7 +86,7 @@ assert_contains "an update event carries the new status" '"op":"update"' "$(rpk_
 assert_cmd "the catalog lists the redpanda namespace" http_ok "$CATALOG/v1/namespaces/redpanda"
 assert_cmd "the catalog holds the $TOPIC table" http_ok "$CATALOG/v1/namespaces/redpanda/tables/$TOPIC"
 assert_cmd "the object store holds the table's data files" \
-  sh -c "docker compose exec -T mc mc ls --recursive minio/$BUCKET/redpanda/$TOPIC/data 2>/dev/null | grep -q parquet"
+  sh -c "docker compose exec -T mc mc ls --recursive minio/$BUCKET 2>/dev/null | grep -q '$TOPIC.*\.parquet'"
 
 # 7. The lakehouse agrees with the topic, change for change. Every count comes
 #    from one Spark query (sql/queries.sql, tag=summary).

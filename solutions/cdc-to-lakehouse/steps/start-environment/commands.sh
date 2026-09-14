@@ -20,6 +20,10 @@ docker compose exec -T postgres psql -U pandashop -d pandashop \
   -c "SELECT order_id, customer_id, total, status FROM orders ORDER BY order_id;"
 # end::orders[]
 
+# tag::bucket[]
+docker compose exec -T mc mc du minio/redpanda
+# end::bucket[]
+
 # tag::verify[]
 docker compose ps --format '{{.Service}}: {{.Health}}' | sort
 # end::verify[]
