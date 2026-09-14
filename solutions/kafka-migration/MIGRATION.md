@@ -51,3 +51,18 @@ with this solution as their target.
   (`RP_BOOTSTRAP_USER`), so there is no restart after enabling security.
 - `scripts/verify.sh` prints `PASS (n/n)` with exact assertions instead of
   the lab's warnings-only report.
+
+## Product Docs follow-ups found while building (not fixed here)
+
+- `connect:components:inputs/redpanda_migrator.adoc` and the cookbook name the
+  lag metric `input_redpanda_migrator_lag`; Redpanda Connect 4.109.0 emits
+  `redpanda_lag` (the name the retired lab also used). The solution's
+  `scripts/lag.sh` and the pipeline's `metrics.mapping` use `redpanda_lag`.
+- The cookbook's "Destination cluster" ACL table lists group `READ` for
+  consumer group migration but not topic `READ`. `OffsetCommit` is also
+  authorized against every topic it names, so without topic `READ` on the
+  destination the migrator logs `TOPIC_AUTHORIZATION_FAILED` on every offset
+  update. `scripts/migrator-acls.sh` grants it.
+- The cookbook recommends a matching `label` on the `redpanda_migrator` input
+  and output. `rpk connect lint` (4.109.0) rejects that as a label collision
+  for a single pair, so the solution's pipeline carries no labels.
