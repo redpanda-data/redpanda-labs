@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "namespace": "com.redpanda.labs.fanout",
+  "name": "Order",
+  "fields": [
+    {"name": "order_id", "type": "string"},
+    {"name": "amount", "type": "double"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
