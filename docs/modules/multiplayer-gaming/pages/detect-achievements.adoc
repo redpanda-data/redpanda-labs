@@ -40,6 +40,7 @@ The rules are pure functions over a small per-player state:
 include::example$services/achievements/rules/rules.go[tags=state]
 ----
 
+.`rules.go`
 [source,go]
 ----
 include::example$services/achievements/rules/rules.go[tags=apply]

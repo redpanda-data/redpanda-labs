@@ -120,3 +120,56 @@ func TestTenthMatchWinUnlocksBoth(t *testing.T) {
 		t.Fatalf("want [first_win veteran], got %v", u)
 	}
 }
+
+// A produce that fails after Apply has already advanced the state loses the
+// unlock: on replay the streak is spent and nothing is re-emitted. The service
+// snapshots with Clone and restores on failure, so these two tests pin the
+// behaviour that makes the rollback work.
+func TestCloneIsADeepCopy(t *testing.T) {
+	s := NewPlayerState()
+	Default.Apply(s, score(0, 5))
+	Default.Apply(s, score(time.Second, 5))
+	s.Wins, s.Matches = 3, 7
+
+	c := s.Clone()
+
+	// Advancing the original must not touch the clone.
+	Default.Apply(s, score(2*time.Second, 5))
+	s.Wins, s.Matches = 99, 99
+	s.Unlocked["first_win"] = true
+
+	if len(c.streak) != 2 {
+		t.Fatalf("clone streak moved with the original: got %d, want 2", len(c.streak))
+	}
+	if c.Wins != 3 || c.Matches != 7 {
+		t.Fatalf("clone counters moved with the original: got wins=%d matches=%d, want 3 and 7", c.Wins, c.Matches)
+	}
+	if c.Unlocked["first_win"] {
+		t.Fatal("clone Unlocked map is shared with the original, so it is not a deep copy")
+	}
+}
+
+func TestRestoringACloneLetsTheUnlockFireAgain(t *testing.T) {
+	s := NewPlayerState()
+	Default.Apply(s, score(0, 5))
+	Default.Apply(s, score(time.Second, 5))
+
+	// The event that unlocks hot_streak. Snapshot first, as the service does.
+	before := s.Clone()
+	third := score(2*time.Second, 5)
+	if got := names(Default.Apply(s, third)); len(got) != 1 || got[0] != "hot_streak" {
+		t.Fatalf("setup: third positive delta should unlock hot_streak, got %v", got)
+	}
+
+	// Negative control: without a rollback, replaying loses the unlock. This is
+	// the bug, asserted so a future change cannot quietly reintroduce it.
+	if got := names(Default.Apply(s, third)); len(got) != 0 {
+		t.Fatalf("replay without rollback should emit nothing, got %v", got)
+	}
+
+	// With the rollback, the replay re-derives it.
+	*s = *before
+	if got := names(Default.Apply(s, third)); len(got) != 1 || got[0] != "hot_streak" {
+		t.Fatalf("replay after restoring the snapshot should unlock hot_streak again, got %v", got)
+	}
+}

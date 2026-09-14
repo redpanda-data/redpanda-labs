@@ -14,6 +14,7 @@ You register the `GameEvent` Protobuf schema under one subject per event topic, 
 include::example$steps/register-schemas/commands.sh[tag=schemas]
 ----
 +
+.What `make schemas` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=schemas]
