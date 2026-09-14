@@ -45,7 +45,11 @@ topic: ## Create the replicated topic on the source cluster
 link: ## Create the shadow link on the shadow cluster from config/shadow-link.yaml
 	@$(SHADOW) shadow create --config-file /config/shadow-link.yaml --no-confirm
 
-status: ## Show the link's state, its tasks, and every shadow topic
+status: ## Wait until the link lists its topics, then show their state and lag
+	@for i in $$(seq 1 60); do \
+	  if [ "$$($(SHADOW) shadow status $(LINK) --print-topic 2>/dev/null </dev/null | grep -c '^Name: ')" -ge 2 ]; then break; fi; \
+	  sleep 2; \
+	done
 	@$(SHADOW) shadow status $(LINK) --print-topic
 
 describe: ## Show the link's configuration as the cluster stored it

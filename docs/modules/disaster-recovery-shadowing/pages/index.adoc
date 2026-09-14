@@ -1,158 +1,147 @@
-= Disaster Recovery Shadowing
-// Overview page of the disaster-recovery-shadowing solution. Every attribute below is part of the
-// metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
-// flags placeholder attribute values and bracketed placeholder lines like the ones
-// in this template; replace them all before opening a PR.
+= Fail over to a shadow cluster without reconfiguring clients
 :page-layout: solution
 :page-topic-type: solution
-// One sentence, 200 characters or fewer. What the reader builds and why it matters.
-:description: [One sentence describing what the reader builds and the problem it solves.]
-// vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
-// and publishes <slug>-<version>.zip when a merged version has no tag yet.
-:page-solution-version: vX.Y.Z
-// beginner | intermediate | advanced
-:page-solution-difficulty: intermediate
-// Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
-:page-solution-duration: 45
-// draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
+:description: Replicate topics and consumer group offsets to a second Redpanda cluster, route clients through Envoy, and fail over so that reads never stop and consumers resume where they stopped.
+:page-solution-version: v1.0.0
+:page-solution-difficulty: advanced
+:page-solution-duration: 55
 :page-solution-status: draft
-// Uncomment to feature this solution on the landing page.
-// :page-solution-featured: true
-// authenticated | public | none
 :page-solution-download: authenticated
-// Subset of: self-managed, cloud (default both)
-:page-solution-platforms: self-managed, cloud
-// Comma list of the technologies the reader touches (Redpanda, Redpanda Connect, Go, Postgres...)
-:page-solution-technologies: [Redpanda, Redpanda Connect, ...]
-// Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
-:page-categories: [Stream Processing, Integration]
-// Optional comma list of business use cases (Real-time analytics, Migration...)
-// :page-solution-use-cases:
-// Optional persona ids from docs/modules/ROOT/partials/personas.yaml
-// :personas: streaming_developer, platform_operator
-// Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec
-// tests/doc-detective/specs/<id>.json. Rename step.adoc to your first step id.
-:page-solution-steps: step
-// Fully qualified resource IDs of the canonical Product Docs pages this solution applies.
-:page-solution-related-docs: [streaming:develop:consume-data/consumer-offsets.adoc, connect:components:outputs/sql_insert.adoc]
-// Optional: ids of solutions that pair well with this one
-// :page-solution-related-solutions:
-// Required when status is deprecated: id of the solution that replaces this one
-// :page-solution-superseded-by:
+:page-solution-platforms: self-managed
+:page-solution-technologies: Redpanda, Shadowing, Envoy, Redpanda Console, Redpanda Operator, Kubernetes, Python, Docker Compose
+:page-categories: Disaster Recovery, Data Replication, Failover and Recovery, Consumer Groups, Networking
+:page-solution-use-cases: Disaster recovery, Business continuity
+:page-solution-assumes: failover, Kubernetes, client configuration
+:personas: platform_operator, streaming_developer
+:page-solution-steps: start-environment, create-shadow-link, route-clients-through-envoy, simulate-disaster, fail-over, verify-end-to-end, deploy-on-kubernetes
+:page-solution-related-docs: streaming:manage:disaster-recovery/shadowing/index.adoc, streaming:manage:disaster-recovery/shadowing/overview.adoc, streaming:manage:disaster-recovery/shadowing/setup.adoc, streaming:manage:disaster-recovery/shadowing/failover.adoc, streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc, streaming:manage:disaster-recovery/shadowing/monitor.adoc, streaming:develop:consume-data/consumer-offsets.adoc, streaming:deploy:redpanda/kubernetes/index.adoc
+:page-solution-related-solutions: schema-registry-migration
 
-// Intro: two short paragraphs, 50-80 words in total. First the business problem,
-// then what the reader builds and has running at the end. No "this page describes".
-[What business problem does this solve, and why is it hard to do well?]
+A disaster recovery plan that ends at "the data is replicated" is half a plan. When the primary cluster goes, someone still has to point every producer and consumer at the second cluster, and every consumer that reconnects has to know where it stopped. That is the part that turns a ten-minute outage into an afternoon.
 
-[What does the reader build, and what do they have running at the end?]
+You build the other half. Two Redpanda clusters, one shadow link that carries topics and consumer group offsets, and an Envoy proxy that is the only Kafka address your applications ever hold. You stop the primary cluster, watch a reader keep working, fail the link over, and see the same consumer group resume from its replicated offsets.
 
-// Three to five observable outcomes as literal checkboxes. Solutions do not use
-// :learning-objective-N: attributes.
 After completing this solution, you will be able to:
 
-* [ ] [Outcome 1: an observable, verifiable capability]
-* [ ] [Outcome 2]
-* [ ] [Outcome 3]
+* [ ] Configure one shadow link that replicates a topic's records and a consumer group's committed offsets to a second cluster
+* [ ] Prove that replication is at parity, partition by partition, before you trust it with a failover
+* [ ] Route Kafka clients through Envoy so that a failover needs no change to any client
+* [ ] Fail shadow topics over and show that a consumer resumes from the replicated offsets instead of reprocessing the topic
+* [ ] Deploy the same two clusters and the same link on Kubernetes with the Redpanda Operator
 
 == What you build
 
-[Two or three sentences on the running system: the services, the topics that connect them, and what a user of the system sees.]
+Two single-broker Redpanda clusters with Shadowing enabled, one shadow link between them, and an Envoy proxy in front of both. A Python client produces and consumes orders through Envoy and is never told that there are two clusters. You take the source cluster away, and the client keeps reading.
 
-* [Component 1 and its role]
-* [Component 2 and its role]
-* [Component 3 and its role]
+* *Source cluster* (`redpanda-source`): the cluster that serves clients until it fails.
+* *Shadow cluster* (`redpanda-shadow`): the failover target. It runs the link, fetches from the source, and holds the replicated topics read-only until you promote them.
+* *The shadow link `disaster-recovery-shadowing`*: `topic_metadata_sync_options` for the topic `dr-orders` and its records, `consumer_offset_sync_options` for the `dr-consumers` group's committed offsets, and `schema_registry_sync_options` for the schemas, in one configuration file.
+* *Envoy*: the only Kafka endpoint clients are given. Its Kafka broker filter rewrites broker addresses in metadata responses to Envoy's own, so a client cannot route around the proxy, and its priority list sends traffic to the source cluster while the source is healthy and to the shadow cluster when it is not.
+* *Python client*: produces 12 orders, reads them as the `dr-consumers` group, reads again during the outage, and reads the records written after the failover. One bootstrap address throughout.
+* *Two Redpanda Consoles*, one per cluster: the source view is what you lose in the outage, and the shadow view is where you watch replication arrive.
+* *Kubernetes manifests*: the same two clusters and the same link as `Redpanda` and `ShadowLink` resources for the Redpanda Operator.
+
+.Captured by this solution's test run
+image::console-shadow-topic.png[Redpanda Console on the shadow cluster showing the replicated dr-orders topic with the records the source cluster received]
 
 == Architecture
 
-image::architecture.svg[Architecture of Disaster Recovery Shadowing]
+image::architecture.svg[Architecture: a Python client with one bootstrap address pointing at Envoy, Envoy in front of a source Redpanda cluster at priority 0 and a shadow Redpanda cluster at priority 1, a shadow link from the shadow cluster back to the source replicating topics, consumer offsets, and schemas, and one Redpanda Console per cluster]
 
-[Walk the diagram left to right: where events originate, which topics carry them, which consumers read them, and where results land.]
+Left to right: the client holds one address, `envoy:9092`. Envoy terminates the Kafka connection, parses the protocol, and forwards it to the source cluster, which is its priority 0 endpoint. Every metadata response that comes back has its broker addresses rewritten to Envoy's own address, so the client's next connection comes back to Envoy instead of going straight to a broker. Behind the clusters, the shadow link runs on the shadow cluster and fetches in the other direction: its topic sync task creates a shadow topic for every source topic matching the `dr-` filter and replicates the records from the first offset, and its consumer offset sync task copies the committed offsets of every group matching the same prefix. While the link is active, the shadow topics reject writes.
+
+When the source cluster stops answering, Envoy's health check fails and it moves traffic to its priority 1 endpoint, the shadow cluster. Reads continue on the same address, because the records are already there. Writes are still refused, because a shadow topic is read-only by design: that is what stops both clusters accepting writes at once. `rpk shadow failover` promotes the shadow topics to ordinary topics, and from that point the same address serves reads and writes from the shadow cluster, with each consumer group resuming from the offset the link replicated.
 
 === Why Redpanda
 
-[Name the Redpanda capabilities this design depends on and what each buys the reader. Link the canonical Product Docs page for each; do not re-explain it.]
-
-* [Capability, for example independent consumer groups fan out one stream to many services] (xref:streaming:develop:consume-data/consumer-offsets.adoc[])
-* [Capability]
-* [Capability]
+* *One link for records and consumer offsets.* Shadowing replicates the topics and the consumer group offsets from one configuration file, so a consumer that reconnects after a failover resumes instead of reprocessing its topic. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
+* *Byte-for-byte replication with offsets preserved.* A shadow topic keeps the source's offsets, so an offset a consumer committed on the source means the same record on the shadow. Without that, a replicated offset would be a guess. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* *Read-only until you promote.* Shadow topics reject produce requests until you fail them over, so a proxy that moves clients early cannot cause a split brain, and the promotion is an explicit, auditable step. xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[]
+* *The link runs in the broker.* There is no connector, no separate replication cluster, and no state store to operate: the destination cluster fetches from the source and reports its own lag. xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[]
+* *The same link on Kubernetes.* The Redpanda Operator takes the link as a `ShadowLink` resource, so the disaster recovery topology is part of the cluster's desired state instead of a command someone ran once. xref:streaming:reference:k-crd.adoc[]
 
 == Prerequisites
 
-* Docker Engine 24 or later with Docker Compose v2
-* [CPU/RAM the compose stack needs, for example 4 CPU and 8 GB RAM]
-* [Any client tooling the reader runs on the host, with version]
-* Approximately {page-solution-duration} minutes
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
+* `make` and `curl` on the host; every `rpk` and Python command runs inside a container
+* Free host ports `8380`, `8381`, `60092`, `60901`, `61081`, `61092`, `61644`, `63081`, `63092`, and `63644`, or different ones set with the `*_PORT` variables in `.env`
+* Redpanda v25.3 or later for Shadowing (`.env.example` pins v26.2.2)
+* For the last step only: `kubectl`, Helm 3, `kind`, and `rpk` on the host, and about 8 GB of memory free for a local Kubernetes cluster
+* Approximately {page-solution-duration} minutes, of which the last step is 20
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
 
-// Steps are rendered from :page-solution-steps: by the solution layout. Do not list
-// them here.
+// Steps are rendered from :page-solution-steps: by the solution layout.
 
 == Production considerations
 
-This solution runs on a single broker with no authentication so that it starts in seconds. Before you reuse the design in production, work through this table.
+This solution runs one broker on each side with no authentication, and a proxy with one endpoint per cluster, so that it starts in a minute. Before you build a recovery plan on the design, work through this table.
 
 [cols="1,2,2"]
 |===
 | Area | In this solution | In production
 
 | Brokers and replication
-| [One broker, replication factor 1]
-| [Three or more brokers, replication factor 3, rack awareness. Link the deployment docs.]
+| One broker per cluster in `dev-container` mode, replication factor 1. The link copies the source topic's `replication.factor` onto the shadow topic.
+| Three or more brokers per cluster with replication factor 3, in separate failure domains, and a shadow cluster sized for the source's full throughput plus the replication catch-up. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
 
 | Security
-| [Plaintext, no authentication]
-| [TLS, SASL/SCRAM or mTLS, ACLs per service. Link the security docs.]
+| Plaintext everywhere: the link connects to the source without TLS or credentials, and neither cluster authenticates clients or the proxy.
+| TLS and SASL on both clusters, credentials for the link scoped to reading the topics and groups it replicates, TLS between clients and Envoy, and `security_sync_options` on the link so that ACLs arrive with the data. xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[], xref:streaming:manage:security/encryption.adoc[]
 
 | Partitions
-| [Fixed partition counts sized for the demo]
-| [Size partitions for peak throughput and consumer parallelism. Link the partition guidance.]
+| One topic with three partitions; the link copies the source partition count onto the shadow topic.
+| Partition counts follow the source, so size them on the source. Changing a source topic's partition count after the link exists changes the shadow topic too, and consumers have to cope with both. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
 
 | Schema validation
-| [Schemas registered, no broker-side validation]
-| [Enable schema ID validation on the topics. Link the schema registry docs.]
+| Schemas are replicated in topic mode, but no records here carry a schema ID and neither broker validates one.
+| Replicate the registry, then enable schema ID validation on the promoted topics so that a producer pointed at the failover cluster cannot write records the consumers cannot decode. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| [One instance per consumer group]
-| [Scale on consumer lag; keep instances at or below partition count.]
+| One consumer instance in the `dr-consumers` group, reading three partitions.
+| Scale each group on lag, and remember that a failover restarts every group at once on a cluster whose caches are cold: plan the shadow cluster for the reconnect spike, not the steady state. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
-| [Local disk, default retention]
-| [Tiered Storage for long retention and replay. Link the Tiered Storage docs.]
+| `start_at_earliest`, and the link syncs `retention.ms` and `segment.ms` from the source.
+| Keep the retention of the shadow topics at least as long as the source's, or a failover silently loses the oldest records. Tiered Storage on the shadow cluster makes long retention cheap. xref:streaming:manage:tiered-storage.adoc[]
 
 | Idempotency and delivery
-| [At-least-once with idempotent producers]
-| [Transactions or exactly-once where the sink needs it. Link the producer docs.]
+| The client produces with `acks=all` and no retries, so a failed write is visible rather than silently duplicated.
+| Idempotent producers, and a documented cut-over order: stop the producers, wait for lag to reach zero, fail over, restart the producers against the new cluster. A producer that writes to both clusters during a failover produces records that no replication can reconcile. xref:streaming:develop:produce-data/idempotent-producers.adoc[]
 
 | Dead-letter handling
-| [DLQ topic, no alerting]
-| [Alert on DLQ growth, replay tooling, retention policy for the DLQ.]
+| None. A write that the shadow topic refuses surfaces as an error in the client.
+| Buffer or dead-letter the writes that fail during the window between the outage and the failover, and replay them afterwards. The window is the part of the plan to rehearse.
 
 | Observability
-| [Console only]
-| [Prometheus metrics, dashboards, alerts on lag and under-replicated partitions. Link the monitoring docs.]
+| `rpk shadow status`, `make parity`, and Envoy's admin API, read by hand.
+| Alert on the link's per-topic lag and task states, on Envoy's endpoint health and priority changes, and on the difference between the two clusters' high watermarks. A link whose lag grew unnoticed is not a recovery plan. xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[], xref:streaming:manage:monitoring.adoc[]
 
 | Disaster recovery
-| [None]
-| [Shadowing to a second cluster. Link the Shadowing docs.]
+| One link, failed over once, in one direction. Failover is not reversible here, and the source cluster never comes back.
+| Follow the failover runbook, including the decision to fail over, the client cut-over, and the rebuild of the old primary as the new shadow cluster afterwards. Rehearse it on a schedule. xref:streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc[]
 
 | Analytics and lakehouse
-| [Optional Iceberg profile]
-| [Iceberg topics with a catalog. Link the Iceberg docs.]
+| None.
+| A shadow cluster is also a place to run analytics without loading the primary: Iceberg topics on the shadow cluster write the replicated data to a lakehouse table. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
 |===
 
 == Clean up
 
-Stop the stack and delete its volumes:
+Stop both clusters, the proxy, and the Consoles, and delete their volumes:
 
 [source,bash]
 ----
 include::example$steps/overview/commands.sh[tag=clean]
 ----
 
+The last step creates a local Kubernetes cluster as well. It ends with the command that deletes it.
+
 == Related docs
 
-// The solution layout also renders :page-solution-related-docs:. Use this list for
-// anything that needs a sentence of context.
-* xref:streaming:develop:consume-data/consumer-offsets.adoc[] - [why it matters here]
-* [Next canonical page]
+* xref:streaming:manage:disaster-recovery/shadowing/index.adoc[] is the entry point for Shadowing, and links the setup, monitoring, and failover guidance this solution applies.
+* xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] documents every option in the link configuration, including the consumer offset and security filters, and the ones this solution leaves at their defaults.
+* xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[] describes the topic states you watch in xref:fail-over.adoc[] and why a failover cannot be undone.
+* xref:streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc[] is the runbook this walkthrough is a rehearsal of, including the parts that are decisions rather than commands.
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[] explains committed offsets and consumer groups, the thing the link replicates that makes a failover invisible to a consumer.
+* xref:streaming:deploy:redpanda/kubernetes/index.adoc[] is the canonical guidance for running Redpanda on Kubernetes, which xref:deploy-on-kubernetes.adoc[] applies to both clusters.

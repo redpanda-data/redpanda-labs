@@ -1,2 +1,0 @@
-NAME              PARTITIONS  REPLICAS
-__slug__.events   3           1

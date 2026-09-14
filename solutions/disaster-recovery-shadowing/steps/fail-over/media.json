@@ -1,0 +1,26 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${SHADOW_CONSOLE_PORT:-8381}/groups",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "a[href*='/groups/dr-consumers']",
+      "timeout": 30000
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/disaster-recovery-shadowing/images/console-shadow-group.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05
+    }
+  }
+]

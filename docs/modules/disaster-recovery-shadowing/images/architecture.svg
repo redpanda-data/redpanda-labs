@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 540" width="980" height="540" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the disaster recovery with Shadowing and Envoy solution</title>
+  <desc id="d">A Python client holds one bootstrap address, the Envoy proxy. Envoy sends Kafka traffic to the source Redpanda cluster, its priority 0 endpoint, while the source answers its health check, and to the shadow Redpanda cluster, its priority 1 endpoint, when it does not. One shadow link, running on the shadow cluster, replicates the dr-orders topic's records, the dr-consumers group's committed offsets, and the schemas from the source cluster. The shadow topic is read-only until it is failed over. One Redpanda Console is connected to each cluster.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --proxy: #eef2ff; --proxyline: #4f5bd5; --client: #eefbf3; --clientline: #2e8b57; --dim: #efefef; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --proxy: #1a2140; --proxyline: #8b93ff; --client: #14281c; --clientline: #5fd38d; --dim: #22262e; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .dim { fill: var(--dim); stroke: var(--line); stroke-width: 1; rx: 6; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .proxy { fill: var(--proxy); stroke: var(--proxyline); stroke-width: 1.5; rx: 10; }
+    .client { fill: var(--client); stroke: var(--clientline); stroke-width: 1.5; rx: 10; }
+    .flow { stroke: var(--line); stroke-width: 2; fill: none; }
+    .flowrp { stroke: var(--rp); stroke-width: 2.5; fill: none; }
+    .failover { stroke: var(--proxyline); stroke-width: 2; fill: none; stroke-dasharray: 6 4; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--rp)"/>
+    </marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--proxyline)"/>
+    </marker>
+  </defs>
+  <rect width="980" height="540" fill="var(--bg)"/>
+
+  <!-- Client -->
+  <rect class="client" x="20" y="225" width="150" height="92"/>
+  <text class="h" x="95" y="252" text-anchor="middle">Client</text>
+  <text class="muted" x="95" y="272" text-anchor="middle">one bootstrap address</text>
+  <text class="mono" x="95" y="292" text-anchor="middle">envoy:9092</text>
+  <text class="muted" x="95" y="308" text-anchor="middle">never changes</text>
+
+  <!-- Envoy -->
+  <rect class="proxy" x="215" y="205" width="140" height="132"/>
+  <text class="h" x="285" y="232" text-anchor="middle">Envoy</text>
+  <text class="muted" x="285" y="252" text-anchor="middle">Kafka broker filter</text>
+  <text class="muted" x="285" y="268" text-anchor="middle">rewrites broker</text>
+  <text class="muted" x="285" y="282" text-anchor="middle">addresses to its own</text>
+  <text class="muted" x="285" y="304" text-anchor="middle">HTTP health check</text>
+  <text class="muted" x="285" y="318" text-anchor="middle">every 3s</text>
+
+  <line class="flow" x1="170" y1="271" x2="211" y2="271" marker-end="url(#a)"/>
+
+  <!-- Source cluster -->
+  <rect class="rp" x="415" y="25" width="545" height="180"/>
+  <text class="h" x="435" y="50">Source cluster</text>
+  <text class="mono" x="435" y="70">cluster_id: dr-source</text>
+  <text class="muted" x="945" y="50" text-anchor="end">Envoy priority 0</text>
+  <rect class="topic" x="435" y="90" width="200" height="58"/>
+  <text class="mono" x="535" y="114" text-anchor="middle">dr-orders</text>
+  <text class="muted" x="535" y="132" text-anchor="middle">3 partitions, writable</text>
+  <rect class="dim" x="655" y="90" width="180" height="58"/>
+  <text class="mono" x="745" y="114" text-anchor="middle">__consumer_offsets</text>
+  <text class="muted" x="745" y="132" text-anchor="middle">dr-consumers commits</text>
+  <rect class="box" x="855" y="90" width="90" height="58"/>
+  <text x="900" y="114" text-anchor="middle">Console</text>
+  <text class="muted" x="900" y="132" text-anchor="middle">:8380</text>
+  <text class="muted" x="435" y="176">enable_shadow_linking=true, so the shadow cluster can fetch from it</text>
+  <text class="muted" x="435" y="194">Lost in the disaster: the broker, the Console, and the write path</text>
+
+  <!-- Shadow cluster -->
+  <rect class="rp" x="415" y="335" width="545" height="180"/>
+  <text class="h" x="435" y="360">Shadow cluster</text>
+  <text class="mono" x="435" y="380">cluster_id: dr-shadow</text>
+  <text class="muted" x="945" y="360" text-anchor="end">Envoy priority 1</text>
+  <rect class="topic" x="435" y="400" width="200" height="58"/>
+  <text class="mono" x="535" y="424" text-anchor="middle">dr-orders</text>
+  <text class="muted" x="535" y="442" text-anchor="middle">shadow topic, read-only</text>
+  <rect class="dim" x="655" y="400" width="180" height="58"/>
+  <text class="mono" x="745" y="424" text-anchor="middle">__consumer_offsets</text>
+  <text class="muted" x="745" y="442" text-anchor="middle">replicated commits</text>
+  <rect class="box" x="855" y="400" width="90" height="58"/>
+  <text x="900" y="424" text-anchor="middle">Console</text>
+  <text class="muted" x="900" y="442" text-anchor="middle">:8381</text>
+  <text class="muted" x="435" y="486">Runs the shadow link, at the same offsets as the source</text>
+  <text class="muted" x="435" y="504">rpk shadow failover promotes the topics and makes them writable</text>
+
+  <!-- Envoy to clusters -->
+  <path class="flow" d="M 355 250 C 385 250 385 119 411 119" marker-end="url(#a)"/>
+  <text class="muted" x="368" y="188">while healthy</text>
+  <path class="failover" d="M 355 295 C 385 295 385 429 411 429" marker-end="url(#ap)"/>
+  <text class="muted" x="366" y="372">on failover</text>
+
+  <!-- Shadow link -->
+  <path class="flowrp" d="M 535 205 L 535 396" marker-end="url(#ar)"/>
+  <text class="h" x="550" y="278">Shadow link</text>
+  <text class="muted" x="550" y="296">records at the same offsets</text>
+  <text class="muted" x="550" y="312">consumer group offsets</text>
+  <text class="muted" x="550" y="328">Schema Registry</text>
+  <text class="muted" x="758" y="278">The link runs on the shadow cluster</text>
+  <text class="muted" x="758" y="296">and fetches from the source, so</text>
+  <text class="muted" x="758" y="312">nothing is configured on the source</text>
+  <text class="muted" x="758" y="328">beyond enabling shadow linking.</text>
+</svg>

@@ -1,0 +1,99 @@
+= Simulate the disaster
+:page-layout: solution-step
+:description: Stop the source cluster, watch Envoy move clients to the shadow cluster, read every replicated record through the same address, and see a write refused because the shadow topic is still read-only.
+:page-solution-step-duration: 6
+
+You take the source cluster away. Nothing about the client changes: same address, same code, same consumer group configuration. Reads keep working within seconds, and writes do not, which is the state the next step resolves.
+
+== What you do
+
+. Stop the source cluster and wait until Envoy takes it out of service:
++
+[source,bash]
+----
+include::example$steps/simulate-disaster/commands.sh[tag=disaster]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/simulate-disaster/expected/disaster.txt[]
+----
++
+The source Console at http://localhost:8380 now fails to load its cluster. The shadow Console at http://localhost:8381 is unaffected.
+
+. Read the orders through the same Envoy address, with the source cluster gone. This uses a fresh group so that it reads the topic from the beginning:
++
+[source,bash]
+----
+include::example$steps/simulate-disaster/commands.sh[tag=read]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/simulate-disaster/expected/read.txt[]
+----
++
+All 12 records, from a cluster this client was never told about, with no configuration change and no restart of anything but the script itself.
+
+== Why
+
+This is the moment the design is for. The records were already on the shadow cluster and the proxy already knew about both clusters, so the outage costs a reconnect rather than a change-management process. Nobody edits a bootstrap server list, redeploys an application, or updates a DNS record under pressure.
+
+The group used for this read is `observer-during-disaster`, which does not start with `dr-`, so the link never replicated offsets for it and it reads from the beginning of the topic. That is deliberate: it shows that the records are all present, independently of any bookmark. The `dr-consumers` group is left alone until after the failover, where its replicated offsets are the point.
+
+Writes are a different question, and the answer is no. A shadow topic refuses produce requests for as long as the link considers it a replica. If it did not, and the source cluster came back, you would have two clusters that both accepted writes to the same partitions and no way to reconcile them.
+
+== Why Redpanda
+
+The read-only shadow topic is what makes it safe to move clients before you promote anything. Envoy can fail over in ten seconds because the worst it can do is send a producer to a cluster that will refuse it, and refusing is the correct answer until a human decides the source cluster is not coming back. See xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[].
+
+== What happens inside
+
+Envoy health checks each cluster's Schema Registry endpoint, which runs in the same Redpanda process as the Kafka API, every three seconds. Three consecutive failures mark the endpoint unhealthy, and because the source cluster is Envoy's only priority 0 endpoint, the whole priority level becomes unhealthy and Envoy falls to priority 1: the shadow cluster. While the source container exists but does not answer, its endpoint reports `unhealthy`; once the container is gone its DNS name stops resolving and the endpoint leaves the list altogether. Either way, `make disaster` waits until Envoy says it is routing clients to the shadow cluster.
+
+The client's next connection is a new TCP connection, so Envoy picks a host for it at connect time and picks the shadow cluster. The metadata response is rewritten the same way as before, so the client still only ever sees `envoy:9092`. The produce request that follows in the Verify step reaches the shadow cluster's partition leader, which checks that the partition belongs to an active shadow topic and rejects the write.
+
+The health check and priority configuration:
+
+[source,yaml]
+----
+include::example$envoy/envoy.yaml[tags=health]
+----
+
+The Makefile targets for this step:
+
+[source,makefile]
+----
+include::example$Makefile[tags=disaster]
+----
+
+== Verify
+
+Confirm that the shadow cluster is not accepting writes yet:
+
+[source,bash]
+----
+include::example$steps/simulate-disaster/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/simulate-disaster/expected/verify.txt[]
+----
+
+`PolicyViolationError` is the Kafka error a shadow topic returns for a produce request. If the write succeeds instead, the link was already failed over, and you are further along than this step: continue with xref:fail-over.adoc[]. If the client cannot reach any broker at all, Envoy has no healthy endpoint, which means the shadow cluster is unhealthy too; check it with `docker compose ps`.
+
+== In production
+
+[.production-note]
+The writes that fail in this window are the part of the plan to design: buffer them at the producer, dead-letter them, or accept the loss explicitly. See the Dead-letter handling and Idempotency and delivery rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/envoy/envoy.yaml[envoy/envoy.yaml]
+* link:{attachmentsdir}/scripts/consume.py[scripts/consume.py] and link:{attachmentsdir}/scripts/produce.py[scripts/produce.py]
+* link:{attachmentsdir}/sample-data/orders-after-failover.json[sample-data/orders-after-failover.json]

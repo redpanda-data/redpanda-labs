@@ -1,0 +1,210 @@
+= Deploy the same topology on Kubernetes
+:page-layout: solution-step
+:description: Run the same two clusters and the same shadow link on Kubernetes with the Redpanda Operator, as Redpanda and ShadowLink resources, and repeat the consumer group failover there.
+:page-solution-step-duration: 20
+
+Everything so far ran in Docker Compose, where a shadow link is a command you run. On Kubernetes it is a resource the Redpanda Operator reconciles, which means the disaster recovery topology is part of the cluster's desired state and survives the person who set it up. This step deploys both clusters and the link from three manifests and repeats the consumer group failover against them.
+
+The commands here need a Kubernetes cluster, so they are not part of this solution's test run: a local Kubernetes cluster running the operator and two Redpanda clusters does not fit alongside the compose stack the earlier steps leave running. The manifest check in the first instruction does run on every test pass, and it is what keeps these manifests honest.
+
+== What you do
+
+. Check what the manifests would deploy, and that they still describe the same link as the compose stack:
++
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=plan]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/deploy-on-kubernetes/expected/plan.txt[]
+----
++
+The two clusters differ only in their namespace, their `cluster_id`, and the host port their external listener advertises. The link's topic and consumer group filters are the same `dr-` prefixes the compose stack uses, so the two paths create the same link.
+
+. Create a local Kubernetes cluster:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=create-cluster]
+----
+
+. Install cert-manager, which the Redpanda Operator uses to issue certificates:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=cert-manager]
+----
+
+. Install the Redpanda Operator with its custom resource definitions, which is what teaches the cluster about `Redpanda` and `ShadowLink` resources:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=operator]
+----
+
+. Deploy both clusters, each in its own namespace, and wait for them:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=clusters]
+----
++
+Each cluster takes a few minutes on a laptop. They are independent Redpanda clusters that happen to share a Kubernetes cluster, which is fine for a walkthrough and wrong for production.
+
+. Create the shadow link:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=link]
+----
++
+The operator reconciles the resource into a link on the shadow cluster. From here on, deleting the resource deletes the link, and editing the resource changes it: there is no state that exists only because someone ran a command.
+
+. Reach both clusters from your machine and give each one an `rpk` profile:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=profiles]
+----
++
+Both report `Healthy: true`. The port forwards run in the background; the last instruction stops them.
+
+. Create the topic on the source cluster, produce to it, and read it as a consumer group, exactly as the compose walkthrough did:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=workload]
+----
+
+. Confirm that the topic and the consumer group reached the shadow cluster:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=replicated]
+----
++
+`dr-orders` is listed on the shadow cluster, and `dr-consumers` is there with the offsets it committed on the source.
+
+. Fail the link over:
++
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=failover]
+----
++
+The failover is still an `rpk` command, not a change to the resource. Promotion is a decision about an incident, and the operator does not make decisions about incidents.
+
+== Why
+
+There is no Envoy here. On Kubernetes the client-routing half of this design is usually a Service, an Ingress, or a service mesh rather than a proxy you deploy yourself, so putting Envoy in the manifests would teach the wrong lesson about a platform that already has that layer. What Kubernetes changes is the other half: the clusters and the link become declared state.
+
+The link lives in the shadow cluster's namespace because that is where it runs, and it names the source cluster by its in-cluster DNS name across namespaces. In a real deployment the two clusters are in different Kubernetes clusters, usually in different regions, and the `sourceCluster` addresses are whatever exposes the source cluster to the shadow cluster: an external listener, a load balancer, or a private link.
+
+== Why Redpanda
+
+The operator takes the same link that `rpk shadow create` takes, with the same options under different names, so the design does not change when the platform does. A `ShadowLink` resource is reconciled continuously: if the link is missing, the operator creates it, and if someone changes the filters in Git, the change reaches the cluster the same way every other change does. See xref:streaming:reference:k-crd.adoc[] and xref:streaming:deploy:redpanda/kubernetes/index.adoc[].
+
+== What happens inside
+
+The operator watches `Redpanda` and `ShadowLink` resources. For each `Redpanda` it renders and applies the Redpanda Helm chart, so a StatefulSet, its Services, and its configuration come from the `clusterSpec` in the manifest, and it sets the resource's `Ready` condition when the cluster reports healthy. For the `ShadowLink` it calls the shadow cluster's Admin API, creating or updating the link so that it matches the spec, and reports the link's state and its tasks in the resource's status.
+
+The shadow cluster's manifest, with the two cluster properties Shadowing needs:
+
+[source,yaml]
+----
+include::example$kubernetes/shadow-cluster.yaml[tags=cluster]
+----
+
+The clusters the link joins, by in-cluster DNS name:
+
+[source,yaml]
+----
+include::example$kubernetes/shadow-link.yaml[tags=clusters]
+----
+
+The filters, which are the compose link's filters in the operator's field names:
+
+[source,yaml]
+----
+include::example$kubernetes/shadow-link.yaml[tags=filters]
+----
+
+Complete sources for building along:
+
+.Complete source: kubernetes/source-cluster.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$kubernetes/source-cluster.yaml[]
+----
+====
+
+.Complete source: kubernetes/shadow-cluster.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$kubernetes/shadow-cluster.yaml[]
+----
+====
+
+.Complete source: kubernetes/shadow-link.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$kubernetes/shadow-link.yaml[]
+----
+====
+
+.Complete source: scripts/check-kubernetes.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/check-kubernetes.sh[]
+----
+====
+
+== Verify
+
+Produce on the promoted topic and read it as the group that was reading before the failover:
+
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=resume]
+----
+
+The consumer reads six records, not eighteen, and `rpk` reports the partition and offset each one came from: the group resumed from the offsets the link replicated, the same result as xref:fail-over.adoc[] on the compose stack. If it reads eighteen, the offsets did not arrive before the failover; check that the group id starts with `dr-`, which is what the link's `consumerOffsetSyncOptions` filter matches.
+
+Then clean up. This deletes the Kubernetes cluster and everything in it:
+
+[.manual]
+[source,bash]
+----
+include::example$steps/deploy-on-kubernetes/commands.sh[tag=clean]
+----
+
+== In production
+
+[.production-note]
+The two clusters belong in two Kubernetes clusters, in separate regions, with TLS and SASL on both and the link's credentials scoped to what it replicates, and the manifests belong in Git so that the recovery topology is reviewed like any other change. See xref:streaming:deploy:redpanda/kubernetes/k-production-deployment.adoc[] and the Security row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/kubernetes/source-cluster.yaml[kubernetes/source-cluster.yaml], link:{attachmentsdir}/kubernetes/shadow-cluster.yaml[kubernetes/shadow-cluster.yaml], and link:{attachmentsdir}/kubernetes/shadow-link.yaml[kubernetes/shadow-link.yaml]
+* link:{attachmentsdir}/scripts/check-kubernetes.sh[scripts/check-kubernetes.sh] (`chmod +x` it)
+* link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml] (the manifest check compares the two)

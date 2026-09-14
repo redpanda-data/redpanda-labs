@@ -1,0 +1,132 @@
+= Create the shadow link
+:page-layout: solution-step
+:description: Create the topic on the source cluster and one shadow link on the shadow cluster that replicates its records, the consumer group offsets, and the schemas.
+:page-solution-step-duration: 6
+
+You create the topic that carries the orders on the source cluster, then create one shadow link on the shadow cluster. The link is the only thing that connects the two clusters, and it names everything it will replicate: the topics, the consumer groups, and the Schema Registry.
+
+== What you do
+
+. Create the topic on the source cluster, with three partitions:
++
+[source,bash]
+----
+include::example$steps/create-shadow-link/commands.sh[tag=topic]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/create-shadow-link/expected/topic.txt[]
+----
++
+The name matters. The link's filters match the `dr-` prefix, so a topic named without it is not replicated.
+
+. Create the link on the shadow cluster:
++
+[source,bash]
+----
+include::example$steps/create-shadow-link/commands.sh[tag=link]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/create-shadow-link/expected/link.txt[]
+----
++
+The link is created on the cluster that will receive the data, and it is the shadow cluster that connects outward to the source. Nothing is configured on the source cluster at all.
+
+. Open the shadow Console at http://localhost:8381 and look at *Topics*. Within a few seconds `dr-orders` appears with three partitions and no records. The link created it; you did not.
+
+The link configuration has four parts. How the shadow cluster reaches the source:
+
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=client]
+----
+
+Which topics to replicate, and from which offset:
+
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=topics]
+----
+
+Which consumer groups' committed offsets to replicate:
+
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=offsets]
+----
+
+And how to replicate the schemas:
+
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[tags=registry]
+----
+
+== Why
+
+The consumer offset block is the part of this file that turns replication into recovery. Without it you get the records and none of the bookmarks: every consumer group that reconnects to the shadow cluster starts at the beginning of the topic or at the end, and both are wrong. A group that reprocesses a day of orders is an incident of its own, and a group that skips to the end loses the records written between the last commit and the outage.
+
+The filters use a prefix rather than `*` on purpose. A failover target that mirrors every topic and every group on the source is expensive and slow to promote, and includes topics nobody would fail over. Naming the prefix makes the recovery scope an explicit decision.
+
+`start_at_earliest` replicates each topic from its first offset rather than from the moment the link was created, which is what you want when you add a link to a cluster that has been running for months.
+
+== Why Redpanda
+
+One link carries the records, the consumer offsets, and the schemas, and it runs inside the destination broker. Compare that with a replication tool: a connector to deploy, a second tool for offsets whose translation is approximate, and a third for schemas. Here the offsets are not translated because they do not need to be: a shadow topic keeps the source's offsets exactly. See xref:streaming:manage:disaster-recovery/shadowing/setup.adoc[] and xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-create.adoc[].
+
+== What happens inside
+
+`rpk shadow create` posts the configuration to the shadow cluster's Admin API, which starts three tasks on the link. The topic metadata sync task polls the source cluster's metadata every five seconds, and for each topic that matches the filters and does not exist locally it creates a shadow topic with the source's partition count, replication factor, and synced properties. A shadow topic is a normal partitioned log with one difference: its partitions are fed by a fetcher that reads from the source cluster instead of by produce requests, and produce requests to it are rejected.
+
+The consumer offset sync task polls the source's `__consumer_offsets` for the groups that match its filters and writes the same offsets into the shadow cluster's own `__consumer_offsets`. The Schema Registry task replicates the source's internal `_schemas` topic, which is why `make status` lists `_schemas` alongside `dr-orders` from now on.
+
+The Makefile targets for this step:
+
+[source,makefile]
+----
+include::example$Makefile[tags=setup]
+----
+
+Complete sources for building along:
+
+.Complete source: config/shadow-link.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$config/shadow-link.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/create-shadow-link/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/create-shadow-link/expected/verify.txt[]
+----
+
+Both topics report `State: ACTIVE`, which means the link is replicating them, and every partition's lag is `0` because there is nothing to replicate yet. If `dr-orders` is missing, the topic name does not match the link's filter: check that you created `dr-orders` on the source cluster and not on the shadow cluster. If the link itself is missing, `make link` failed; run it again and read its error, which is usually the source cluster not being reachable at `redpanda-source:9092`.
+
+== In production
+
+[.production-note]
+The link connects to the source cluster over TLS with credentials that can read the topics and groups it replicates and nothing else, and its filters are reviewed with the recovery plan rather than written once. See the Security and Partitions rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
