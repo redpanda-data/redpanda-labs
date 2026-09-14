@@ -149,25 +149,11 @@ solution that asks nothing of the reader is still `beginner`.
 Rate each of the three axes below, then take the highest row any single axis
 reaches. One advanced axis makes the solution `advanced`.
 
-[cols="1,2,2,2"]
-|===
-| Axis | `beginner` | `intermediate` | `advanced`
-
-| Assumed knowledge
-| Docker, and nothing about Redpanda.
-| One or two Redpanda concepts the reader will have met in Product Docs, for example topics or consumer groups, plus comfort reading code in the solution's language.
-| Operational experience: security and ACLs, more than one cluster, Kubernetes, or schema compatibility rules.
-
-| What the reader must do
-| Every command is copy-paste.
-| The reader edits configuration or reads code.
-| The reader makes judgment calls that change the outcome.
-
-| External services
-| None to configure.
-| A free third-party account at most.
-| May need real infrastructure.
-|===
+| Axis | `beginner` | `intermediate` | `advanced` |
+|---|---|---|---|
+| Assumed knowledge | Docker, and nothing about Redpanda. | One or two Redpanda concepts the reader will have met in Product Docs, for example topics or consumer groups, plus comfort reading code in the solution's language. | Operational experience: security and ACLs, more than one cluster, Kubernetes, or schema compatibility rules. |
+| What the reader must do | Every command is copy-paste. | The reader edits configuration or reads code. | The reader makes judgment calls that change the outcome. |
+| External services | None to configure. | A free third-party account at most. | May need real infrastructure. |
 
 Worked examples, as the kind of solution each label fits:
 
