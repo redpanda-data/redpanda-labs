@@ -1,0 +1,6 @@
+PRINCIPAL      HOST  RESOURCE-TYPE  RESOURCE-NAME      RESOURCE-PATTERN-TYPE  OPERATION         PERMISSION  ERROR
+User:migrator  *     CLUSTER        kafka-cluster      LITERAL                DESCRIBE          ALLOW
+User:migrator  *     GROUP          orders-service     LITERAL                DESCRIBE          ALLOW
+User:migrator  *     GROUP          redpanda-migrator  LITERAL                READ              ALLOW
+User:migrator  *     TOPIC          shop.              PREFIXED               DESCRIBE_CONFIGS  ALLOW
+User:migrator  *     TOPIC          shop.              PREFIXED               READ              ALLOW

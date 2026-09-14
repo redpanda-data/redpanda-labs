@@ -1,0 +1,86 @@
+# The legacy application's producer: one Avro record every PRODUCER_INTERVAL
+# to one of the four shop.* topics on the source cluster, encoded through the
+# source Schema Registry. It only ever talks to the source; the migration
+# happens behind its back.
+
+# tag::input[]
+input:
+  generate:
+    interval: "${PRODUCER_INTERVAL:20ms}"
+    count: 0
+    mapping: |
+      let n = counter()
+      let now = now().ts_unix_milli()
+      # Every 10th record is an alert, every 5th a customer profile update,
+      # every 3rd an inventory event, the rest are orders.
+      meta kafka_topic = match {
+        $n % 10 == 0 => "shop.alerts"
+        $n % 5 == 0  => "shop.customer-profiles"
+        $n % 3 == 0  => "shop.inventory-events"
+        _            => "shop.orders"
+      }
+      root = match @kafka_topic {
+        "shop.alerts" => {
+          "alert_id": "alert-%06d".format($n),
+          "severity": ["info", "warning"].index($n % 2),
+          "message": "stock check for sku-%03d".format($n % 50),
+          "raised_at": $now,
+        }
+        "shop.customer-profiles" => {
+          "customer_id": "customer-%03d".format($n % 200),
+          "tier": ["bronze", "silver", "gold"].index($n % 3),
+          "updated_at": $now,
+        }
+        "shop.inventory-events" => {
+          "sku": "sku-%03d".format($n % 50),
+          "delta": ($n % 7) - 3,
+          "occurred_at": $now,
+        }
+        _ => {
+          "order_id": "order-%06d".format($n),
+          "customer_id": "customer-%03d".format($n % 200),
+          "amount": (($n * 7919) % 100000) / 100.0,
+          "created_at": $now,
+        }
+      }
+      meta kafka_key = match @kafka_topic {
+        "shop.alerts" => root.alert_id
+        "shop.customer-profiles" => root.customer_id
+        "shop.inventory-events" => root.sku
+        _ => root.order_id
+      }
+# end::input[]
+
+# tag::pipeline[]
+pipeline:
+  processors:
+    # Look the subject up in the source Schema Registry and write the wire
+    # format (magic byte, schema ID, Avro binary). The schema ID in every
+    # record is what the migrator preserves on the target.
+    - schema_registry_encode:
+        url: "${SCHEMA_REGISTRY_URL:http://source:8081}"
+        subject: '${! @kafka_topic }-value'
+        avro_raw_json: true
+        basic_auth:
+          enabled: true
+          username: "${ADMIN_USER}"
+          password: "${ADMIN_PASSWORD}"
+# end::pipeline[]
+
+# tag::output[]
+output:
+  redpanda:
+    seed_brokers: [ "${BROKERS:source:9092}" ]
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${ADMIN_USER}"
+        password: "${ADMIN_PASSWORD}"
+    topic: '${! @kafka_topic }'
+    key: '${! @kafka_key }'
+    max_in_flight: 1
+# end::output[]
+
+http:
+  enabled: false
+logger:
+  level: INFO

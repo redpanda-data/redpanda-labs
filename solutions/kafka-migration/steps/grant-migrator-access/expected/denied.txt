@@ -1,0 +1,1 @@
+unable to produce record: CLUSTER_AUTHORIZATION_FAILED: Cluster authorization failed.

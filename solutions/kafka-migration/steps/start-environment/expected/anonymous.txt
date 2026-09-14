@@ -1,0 +1,1 @@
+unable to list topics: unable to request metadata: broker closed the connection immediately after a request was issued, which often happens when SASL is required but not provided: is SASL missing?

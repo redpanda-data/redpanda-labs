@@ -1,0 +1,323 @@
+# Kafka Migration: local stack.
+#
+# Two single-broker Redpanda clusters stand in for the Kafka cluster you are
+# leaving (`source`) and the Redpanda cluster you are moving to (`target`).
+# Both start with SASL/SCRAM authentication on and one bootstrap superuser.
+# Start with `make up` (waits for every healthcheck); the Makefile then adds
+# the workload, the migrator, and the cutover step by step. `make seed` runs
+# the whole path; `make verify` proves the outcome; `make clean` tears down.
+#
+# Profiles (started by name from the Makefile, never by `make up`):
+#   workload  the legacy application: a producer and a consumer on the source
+#   migrate   Redpanda Migrator (a Redpanda Connect pipeline)
+#   cutover   the same consumer, pointed at the target
+name: kafka-migration
+
+networks:
+  migration:
+    driver: bridge
+
+volumes:
+  source-data: {}
+  target-data: {}
+
+# tag::broker-defaults[]
+# Shared by both brokers: image, network, and the healthcheck the Makefile's
+# `make up` waits for. Each broker adds its own addresses below.
+x-broker: &broker
+  image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+  networks:
+    - migration
+  environment:
+    # Created on first boot; the only user until `make migrator-access`.
+    RP_BOOTSTRAP_USER: ${ADMIN_USER:-admin}:${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+  healthcheck:
+    test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 10s
+# end::broker-defaults[]
+
+# Connection settings the Connect pipelines and the rpk helpers share.
+x-admin-env: &admin-env
+  ADMIN_USER: ${ADMIN_USER:-admin}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+  MIGRATOR_USER: ${MIGRATOR_USER:-migrator}
+  MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?set MIGRATOR_PASSWORD in .env}
+
+services:
+  # tag::source[]
+  # The cluster you are migrating away from. Redpanda stands in for Kafka:
+  # the migrator speaks the Kafka protocol to it and never notices.
+  source:
+    <<: *broker
+    container_name: kafka-migration-source
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://source:9092,external://localhost:${SOURCE_KAFKA_PORT:-49092}
+      # Schema Registry listeners are set as one value so http_basic applies
+      # to both; the --schema-registry-addr flag would replace the list.
+      - --set schema_registry.schema_registry_api=[{"address":"0.0.0.0","port":8081,"name":"internal","authentication_method":"http_basic"},{"address":"0.0.0.0","port":18081,"name":"external","authentication_method":"http_basic"}]
+      - --rpc-addr source:33145
+      - --advertise-rpc-addr source:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 1G
+      - --default-log-level=info
+      # SASL on every Kafka listener from the first boot, and the bootstrap
+      # user is the superuser. Schema Registry (above) requires HTTP basic
+      # auth with the same SCRAM credentials.
+      - --set redpanda.enable_sasl=true
+      - --set redpanda.superusers=[${ADMIN_USER:-admin}]
+      - --set redpanda.kafka_api[0].authentication_method=sasl
+      - --set redpanda.kafka_api[1].authentication_method=sasl
+    ports:
+      - "${SOURCE_KAFKA_PORT:-49092}:19092"
+      - "${SOURCE_SR_PORT:-48081}:18081"
+      - "${SOURCE_ADMIN_PORT:-49644}:9644"
+    volumes:
+      - source-data:/var/lib/redpanda/data
+  # end::source[]
+
+  # tag::target[]
+  # The Redpanda cluster you are migrating to. Same security posture, empty.
+  target:
+    <<: *broker
+    container_name: kafka-migration-target
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://target:9092,external://localhost:${TARGET_KAFKA_PORT:-59092}
+      # Schema Registry listeners are set as one value so http_basic applies
+      # to both; the --schema-registry-addr flag would replace the list.
+      - --set schema_registry.schema_registry_api=[{"address":"0.0.0.0","port":8081,"name":"internal","authentication_method":"http_basic"},{"address":"0.0.0.0","port":18081,"name":"external","authentication_method":"http_basic"}]
+      - --rpc-addr target:33145
+      - --advertise-rpc-addr target:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 1G
+      - --default-log-level=info
+      - --set redpanda.enable_sasl=true
+      - --set redpanda.superusers=[${ADMIN_USER:-admin}]
+      - --set redpanda.kafka_api[0].authentication_method=sasl
+      - --set redpanda.kafka_api[1].authentication_method=sasl
+    ports:
+      - "${TARGET_KAFKA_PORT:-59092}:19092"
+      - "${TARGET_SR_PORT:-58081}:18081"
+      - "${TARGET_ADMIN_PORT:-59644}:9644"
+    volumes:
+      - target-data:/var/lib/redpanda/data
+  # end::target[]
+
+  # tag::console[]
+  # One Redpanda Console per cluster, both signed in as the superuser. The
+  # target Console is the one the pages open.
+  console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: kafka-migration-console
+    environment:
+      CONFIG_FILEPATH: /etc/console/config.yaml
+      KAFKA_SASL_USERNAME: ${ADMIN_USER:-admin}
+      KAFKA_SASL_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      SCHEMAREGISTRY_AUTHENTICATION_BASIC_USERNAME: ${ADMIN_USER:-admin}
+      SCHEMAREGISTRY_AUTHENTICATION_BASIC_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    volumes:
+      - ./console/target.yaml:/etc/console/config.yaml:ro
+    ports:
+      - "${CONSOLE_PORT:-8280}:8080"
+    networks:
+      - migration
+    depends_on:
+      target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  console-source:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: kafka-migration-console-source
+    environment:
+      CONFIG_FILEPATH: /etc/console/config.yaml
+      KAFKA_SASL_USERNAME: ${ADMIN_USER:-admin}
+      KAFKA_SASL_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      SCHEMAREGISTRY_AUTHENTICATION_BASIC_USERNAME: ${ADMIN_USER:-admin}
+      SCHEMAREGISTRY_AUTHENTICATION_BASIC_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    volumes:
+      - ./console/source.yaml:/etc/console/config.yaml:ro
+    ports:
+      - "${CONSOLE_SOURCE_PORT:-8281}:8080"
+    networks:
+      - migration
+    depends_on:
+      source:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::console[]
+
+  # tag::rpk[]
+  # One rpk helper per cluster so the Makefile, scripts/verify.sh, and the
+  # documented commands run rpk against either side without a host install
+  # and without repeating credentials: docker compose exec -T rpk-source rpk ...
+  rpk-source:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: kafka-migration-rpk-source
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    environment:
+      <<: *admin-env
+      RPK_BROKERS: source:9092
+      RPK_ADMIN_HOSTS: source:9644
+      RPK_REGISTRY_HOSTS: source:8081
+      RPK_SASL_MECHANISM: SCRAM-SHA-256
+      RPK_USER: ${ADMIN_USER:-admin}
+      RPK_PASS: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    volumes:
+      - ./schemas:/schemas:ro
+      - ./scripts:/scripts:ro
+    networks:
+      - migration
+    depends_on:
+      source:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  rpk-target:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: kafka-migration-rpk-target
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    environment:
+      <<: *admin-env
+      RPK_BROKERS: target:9092
+      RPK_ADMIN_HOSTS: target:9644
+      RPK_REGISTRY_HOSTS: target:8081
+      RPK_SASL_MECHANISM: SCRAM-SHA-256
+      RPK_USER: ${ADMIN_USER:-admin}
+      RPK_PASS: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+    volumes:
+      - ./schemas:/schemas:ro
+      - ./scripts:/scripts:ro
+    networks:
+      - migration
+    depends_on:
+      target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+  # end::rpk[]
+
+  # tag::workload[]
+  # The legacy application, as two Redpanda Connect pipelines: an order
+  # producer and the `orders-service` consumer group. Both talk only to the
+  # source cluster and know nothing about the migration.
+  producer:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: kafka-migration-producer
+    profiles: ["workload"]
+    command: ["run", "/connect/producer.yaml"]
+    environment:
+      <<: *admin-env
+      BROKERS: source:9092
+      SCHEMA_REGISTRY_URL: http://source:8081
+      PRODUCER_INTERVAL: ${PRODUCER_INTERVAL:-20ms}
+    volumes:
+      - ./connect/producer.yaml:/connect/producer.yaml:ro
+    networks:
+      - migration
+    depends_on:
+      source:
+        condition: service_healthy
+
+  orders-consumer:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: kafka-migration-orders-consumer
+    profiles: ["workload"]
+    command: ["run", "/connect/orders-consumer.yaml"]
+    environment:
+      <<: *admin-env
+      BROKERS: source:9092
+      SCHEMA_REGISTRY_URL: http://source:8081
+      CLUSTER_NAME: source
+    volumes:
+      - ./connect/orders-consumer.yaml:/connect/orders-consumer.yaml:ro
+    networks:
+      - migration
+    depends_on:
+      source:
+        condition: service_healthy
+  # end::workload[]
+
+  # tag::migrator[]
+  # Redpanda Migrator: one Redpanda Connect pipeline that copies topics,
+  # records, schemas, and consumer group offsets from source to target,
+  # authenticating as the least-privilege `migrator` user on both sides.
+  migrator:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: kafka-migration-migrator
+    profiles: ["migrate"]
+    command: ["run", "/connect/migrator.yaml"]
+    environment:
+      <<: *admin-env
+      SCHEMA_SYNC_INTERVAL: ${SCHEMA_SYNC_INTERVAL:-10s}
+      OFFSET_SYNC_INTERVAL: ${OFFSET_SYNC_INTERVAL:-10s}
+    volumes:
+      - ./connect/migrator.yaml:/connect/migrator.yaml:ro
+    ports:
+      - "${MIGRATOR_PORT:-4295}:4195"
+    networks:
+      - migration
+    depends_on:
+      source:
+        condition: service_healthy
+      target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4195/ping >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::migrator[]
+
+  # tag::cutover[]
+  # The same consumer pipeline, pointed at the target. Started during the
+  # cutover; it joins `orders-service` there and resumes from the offsets the
+  # migrator translated.
+  orders-consumer-target:
+    image: docker.redpanda.com/redpandadata/connect:${REDPANDA_CONNECT_VERSION:-latest}
+    container_name: kafka-migration-orders-consumer-target
+    profiles: ["cutover"]
+    command: ["run", "/connect/orders-consumer.yaml"]
+    environment:
+      <<: *admin-env
+      BROKERS: target:9092
+      SCHEMA_REGISTRY_URL: http://target:8081
+      CLUSTER_NAME: target
+    volumes:
+      - ./connect/orders-consumer.yaml:/connect/orders-consumer.yaml:ro
+    networks:
+      - migration
+    depends_on:
+      target:
+        condition: service_healthy
+  # end::cutover[]

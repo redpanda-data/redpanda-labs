@@ -1,0 +1,4 @@
+shop.orders              source=926 target=926
+shop.customer-profiles   source=174 target=174
+shop.inventory-events    source=464 target=464
+shop.alerts              source=173 target=173

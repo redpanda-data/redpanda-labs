@@ -1,0 +1,1 @@
+../../../../../solutions/kafka-migration/scripts/group-offsets.sh

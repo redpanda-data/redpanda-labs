@@ -1,0 +1,78 @@
+# Redpanda Migrator: the redpanda_migrator input reads the source, the
+# redpanda_migrator output writes the target and owns every migration
+# decision (topic creation, schema sync, consumer group offset translation).
+# Both sides authenticate as the least-privilege `migrator` user.
+
+# tag::input[]
+input:
+  redpanda_migrator:
+    seed_brokers: [ "source:9092" ]
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${MIGRATOR_USER}"
+        password: "${MIGRATOR_PASSWORD}"
+    # Every shop.* topic, discovered on the fly. Internal topics such as
+    # _schemas never match.
+    regexp_topics_include: [ '^shop\..*$' ]
+    consumer_group: redpanda-migrator
+    start_offset: earliest
+    # Source Schema Registry, read with the same user.
+    schema_registry:
+      url: http://source:8081
+      basic_auth:
+        enabled: true
+        username: "${MIGRATOR_USER}"
+        password: "${MIGRATOR_PASSWORD}"
+# end::input[]
+
+# tag::output[]
+output:
+  redpanda_migrator:
+    seed_brokers: [ "target:9092" ]
+    sasl:
+      - mechanism: SCRAM-SHA-256
+        username: "${MIGRATOR_USER}"
+        password: "${MIGRATOR_PASSWORD}"
+    # One in-flight batch per source partition (12 + 6 + 8 + 3).
+    max_in_flight: 29
+    # Topics are created on the target with the source's partition count,
+    # cleanup policy, and retention. Both clusters have one broker, so the
+    # replication factor carries over as 1; set topic_replication_factor: 3
+    # for a production target.
+    sync_topic_interval: 30s
+    # Schemas: keep the source IDs (translate_ids: false), so the schema ID
+    # inside every migrated record still resolves on the target. That needs
+    # the target registry in IMPORT mode until the migration is done.
+    schema_registry:
+      url: http://target:8081
+      basic_auth:
+        enabled: true
+        username: "${MIGRATOR_USER}"
+        password: "${MIGRATOR_PASSWORD}"
+      interval: "${SCHEMA_SYNC_INTERVAL:10s}"
+      versions: all
+      include_deleted: true
+      translate_ids: false
+    # Consumer groups: translate every group's committed offsets by record
+    # timestamp and commit them on the target, except the migrator's own.
+    consumer_groups:
+      enabled: true
+      interval: "${OFFSET_SYNC_INTERVAL:10s}"
+      exclude: [ '^redpanda-migrator$' ]
+# end::output[]
+
+# tag::observability[]
+http:
+  enabled: true
+  address: 0.0.0.0:4195
+
+metrics:
+  prometheus: {}
+  mapping: |
+    # Label the lag metric so a dashboard can tell the source apart.
+    meta label = if this == "redpanda_lag" { "source" }
+
+logger:
+  level: INFO
+  format: logfmt
+# end::observability[]

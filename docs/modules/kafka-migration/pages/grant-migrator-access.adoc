@@ -1,0 +1,108 @@
+= Grant the migrator least-privilege access
+:page-layout: solution-step
+:description: Create the migrator user on both clusters with read-only ACLs on the source and write ACLs on the target for shop topics only, and put the target Schema Registry in IMPORT mode.
+:page-solution-step-duration: 5
+
+You create the identity the migrator will use and give it exactly what a migration needs: on the source, permission to read the `shop.*` topics, their configuration, and the offsets of the group being migrated; on the target, permission to create and write `shop.*` topics and commit that group's offsets, and nothing else. You also put the target Schema Registry in `IMPORT` mode so schema IDs can be preserved. A `superuser` would work, and is exactly what you do not want a migration tool to run as.
+
+== What you do
+
+. Create the user on both clusters, grant the ACLs, and switch the target registry to `IMPORT`:
++
+[source,bash]
+----
+include::example$steps/grant-migrator-access/commands.sh[tag=access]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/grant-migrator-access/expected/access.txt[]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=migrator-access]
+----
+
+. Read the two ACL sets. The script runs inside the helper of the cluster it grants on, so it never needs a broker address or a password:
++
+[source,bash]
+----
+include::example$scripts/migrator-acls.sh[tags=source]
+----
++
+[source,bash]
+----
+include::example$scripts/migrator-acls.sh[tags=target]
+----
+
+. Prove that the source side is read-only by producing as the migrator user:
++
+[source,bash]
+----
+include::example$steps/grant-migrator-access/commands.sh[tag=denied]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/grant-migrator-access/expected/denied.txt[]
+----
++
+The broker refused the write. `scripts/verify.sh` repeats this check, and the matching one on the target (the migrator cannot create a topic outside `shop.`), on every run.
+
+== Why
+
+A migration tool holds credentials for two clusters at once, one of them production, for days. The ACLs bound the damage a bug or a leaked credential can do: nothing on the source can be written or deleted, and on the target only topics under the migrated prefix can be created or written. Prefixed ACLs on `shop.` are what make the target grant safe for topics the migrator has not created yet.
+
+Two operations are easy to miss. `DESCRIBE_CONFIGS` on the source topics: `READ` implies `DESCRIBE` but not `DESCRIBE_CONFIGS`, and without it the migrator consumes records but fails to recreate the topic with its configuration. And `READ` on the target topics: committing a consumer group's offsets is authorized against the group and against every topic the commit names, so the migrator needs it to write the translated offsets of `orders-service`.
+
+`IMPORT` mode lets a client register a schema under a specific ID and version instead of the next free one. That is how the migrator keeps the source's IDs, and it is only allowed while the target registry has never held a schema, which is why this step happens before anything reaches the target.
+
+== Why Redpanda
+
+`rpk security acl create` expresses each grant in one line, with `--resource-pattern-type prefixed` for the topic prefix, and `rpk security acl list --allow-principal` shows the result the way an auditor would read it. Schema Registry mode is one `rpk registry mode set` away. Redpanda enforces ACLs for every non-superuser as soon as SASL is on, without a restart. See xref:streaming:manage:security/authorization/acl.adoc[] and xref:streaming:reference:rpk/rpk-security/rpk-security-acl-create.adoc[].
+
+== What happens inside
+
+`rpk security user create` calls each cluster's Admin API and stores a SCRAM-SHA-256 credential; the user exists on both sides with the same name and password because the migrator's input and output each carry one credential and the compose file gives them the same. Each `rpk security acl create` is a `CreateAcls` request stored in the controller log and enforced by every broker on the next request from that principal. `rpk registry mode set --mode IMPORT` sets the global registry mode on the target, which the migrator checks before it registers a schema with a fixed ID.
+
+The complete ACL script, for building along:
+
+.Complete source: scripts/migrator-acls.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/migrator-acls.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/grant-migrator-access/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/grant-migrator-access/expected/verify.txt[]
+----
+
+Five ACLs on the source: `READ` and `DESCRIBE_CONFIGS` on the `shop.` prefix, `READ` on the `redpanda-migrator` group, `DESCRIBE` on the `orders-service` group, `DESCRIBE` on the cluster. If the list is empty, the user was created but the script did not run: `docker compose exec -T rpk-source /scripts/migrator-acls.sh source`. If `rpk registry mode set` refused `IMPORT`, the target registry already holds a schema from an earlier attempt: `make clean` and start over, or migrate with `translate_ids: true` and accept new IDs.
+
+== In production
+
+[.production-note]
+Use the same ACL set with your topic prefix or an explicit topic list, add `sync_topic_acls` and cluster `ALTER` on the target only if ACLs migrate too, and rotate the migrator credential after the cutover. See the Security row in xref:index.adoc#_production_considerations[Production considerations] and xref:connect:cookbooks:redpanda_migrator.adoc#required-permissions[Required permissions].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/migrator-acls.sh[scripts/migrator-acls.sh] (`chmod +x` it)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 520" width="980" height="520" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the Kafka migration solution</title>
+  <desc id="d">A legacy producer and the orders-service consumer group work against a source Kafka-compatible cluster with SASL and Schema Registry. Redpanda Migrator, a Redpanda Connect pipeline authenticated as a least-privilege user on both sides, reads the four shop topics and the source registry and writes the same topics, records with their schema IDs, schemas with the same IDs, and translated consumer group offsets to the target Redpanda cluster. At the cutover the consumer moves to the target and resumes from the translated offsets. Redpanda Console shows each cluster.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --src: #f3f4f6; --srcline: #6b7280; --srctopic: #e5e7eb; --svc: #eefbf3; --svcline: #2e8b57; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --src: #1b1e26; --srcline: #8b909a; --srctopic: #262a33; --svc: #14281c; --svcline: #5fd38d; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .src { fill: var(--src); stroke: var(--srcline); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .srctopic { fill: var(--srctopic); stroke: var(--srcline); stroke-width: 1.2; rx: 6; }
+    .svc { fill: var(--svc); stroke: var(--svcline); stroke-width: 1.2; rx: 8; }
+    .flow { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .flow.dash { stroke-dasharray: 5 4; }
+    .flow.rp { stroke: var(--rp); fill: none; marker-end: url(#arrow-rp); }
+    #arrow path { fill: var(--line); }
+    #arrow-rp path { fill: var(--rp); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="arrow-rp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect width="980" height="520" fill="var(--bg)"/>
+
+  <!-- legacy application -->
+  <rect class="svc" x="20" y="120" width="150" height="86"/>
+  <text class="h" x="95" y="146" text-anchor="middle">producer</text>
+  <text class="muted" x="95" y="166" text-anchor="middle">Redpanda Connect</text>
+  <text class="muted" x="95" y="182" text-anchor="middle">Avro via Schema Registry</text>
+  <text class="muted" x="95" y="198" text-anchor="middle">one record / 20 ms</text>
+
+  <rect class="svc" x="20" y="300" width="150" height="86"/>
+  <text class="h" x="95" y="326" text-anchor="middle">orders-consumer</text>
+  <text class="muted" x="95" y="346" text-anchor="middle">group orders-service</text>
+  <text class="muted" x="95" y="362" text-anchor="middle">reads shop.orders</text>
+  <text class="muted" x="95" y="378" text-anchor="middle">commits offsets</text>
+
+  <!-- source cluster -->
+  <rect class="src" x="210" y="40" width="240" height="440"/>
+  <text class="h" x="330" y="66" text-anchor="middle">source (Kafka API)</text>
+  <text class="muted" x="330" y="82" text-anchor="middle">SASL/SCRAM, ACLs</text>
+  <rect class="box" x="228" y="96" width="204" height="50"/>
+  <text class="h" x="330" y="117" text-anchor="middle">Schema Registry</text>
+  <text class="muted" x="330" y="134" text-anchor="middle">4 subjects, Avro, IDs 1..5</text>
+
+  <rect class="srctopic" x="228" y="160" width="204" height="50"/>
+  <text class="mono" x="330" y="180" text-anchor="middle">shop.orders</text>
+  <text class="muted" x="330" y="198" text-anchor="middle">12 partitions, delete, 7 d</text>
+  <rect class="srctopic" x="228" y="222" width="204" height="50"/>
+  <text class="mono" x="330" y="242" text-anchor="middle">shop.customer-profiles</text>
+  <text class="muted" x="330" y="260" text-anchor="middle">6 partitions, compact</text>
+  <rect class="srctopic" x="228" y="284" width="204" height="50"/>
+  <text class="mono" x="330" y="304" text-anchor="middle">shop.inventory-events</text>
+  <text class="muted" x="330" y="322" text-anchor="middle">8 partitions, compact,delete</text>
+  <rect class="srctopic" x="228" y="346" width="204" height="50"/>
+  <text class="mono" x="330" y="366" text-anchor="middle">shop.alerts</text>
+  <text class="muted" x="330" y="384" text-anchor="middle">3 partitions, delete, 1 h</text>
+  <rect class="box" x="228" y="410" width="204" height="50"/>
+  <text class="h" x="330" y="431" text-anchor="middle">__consumer_offsets</text>
+  <text class="muted" x="330" y="448" text-anchor="middle">orders-service, redpanda-migrator</text>
+
+  <!-- app arrows -->
+  <path class="flow" d="M170,150 L226,190"/>
+  <path class="flow" d="M170,163 L226,250"/>
+  <path class="flow dash" d="M95,120 L95,110 L226,118"/>
+  <text class="muted" x="104" y="106">looks up schemas</text>
+  <path class="flow" d="M226,185 L170,330"/>
+  <path class="flow dash" d="M170,360 L226,435"/>
+
+  <!-- migrator -->
+  <rect class="svc" x="490" y="200" width="180" height="120"/>
+  <text class="h" x="580" y="226" text-anchor="middle">Redpanda Migrator</text>
+  <text class="muted" x="580" y="246" text-anchor="middle">Redpanda Connect</text>
+  <text class="muted" x="580" y="262" text-anchor="middle">redpanda_migrator in/out</text>
+  <text class="muted" x="580" y="278" text-anchor="middle">user migrator, least privilege</text>
+  <text class="muted" x="580" y="294" text-anchor="middle">group redpanda-migrator</text>
+  <text class="muted" x="580" y="310" text-anchor="middle">:4195 /metrics, redpanda_lag</text>
+
+  <path class="flow" d="M450,260 L488,260"/>
+  <text class="muted" x="452" y="250">records</text>
+  <path class="flow dash" d="M432,121 L470,121 L470,215 L488,215"/>
+  <text class="muted" x="474" y="112">schemas</text>
+  <path class="flow dash" d="M432,435 L470,435 L470,305 L488,305"/>
+  <text class="muted" x="440" y="464">group offsets</text>
+
+  <!-- target cluster -->
+  <rect class="rp" x="710" y="40" width="250" height="440"/>
+  <text class="h" x="835" y="66" text-anchor="middle" style="fill: var(--rp)">target (Redpanda)</text>
+  <text class="muted" x="835" y="82" text-anchor="middle">SASL/SCRAM, ACLs</text>
+  <rect class="box" x="728" y="96" width="214" height="50"/>
+  <text class="h" x="835" y="117" text-anchor="middle">Schema Registry</text>
+  <text class="muted" x="835" y="134" text-anchor="middle">same subjects, same IDs (IMPORT)</text>
+
+  <rect class="topic" x="728" y="160" width="214" height="50"/>
+  <text class="mono" x="835" y="180" text-anchor="middle">shop.orders</text>
+  <text class="muted" x="835" y="198" text-anchor="middle">12 partitions, delete, 7 d</text>
+  <rect class="topic" x="728" y="222" width="214" height="50"/>
+  <text class="mono" x="835" y="242" text-anchor="middle">shop.customer-profiles</text>
+  <text class="muted" x="835" y="260" text-anchor="middle">6 partitions, compact</text>
+  <rect class="topic" x="728" y="284" width="214" height="50"/>
+  <text class="mono" x="835" y="304" text-anchor="middle">shop.inventory-events</text>
+  <text class="muted" x="835" y="322" text-anchor="middle">8 partitions, compact,delete</text>
+  <rect class="topic" x="728" y="346" width="214" height="50"/>
+  <text class="mono" x="835" y="366" text-anchor="middle">shop.alerts</text>
+  <text class="muted" x="835" y="384" text-anchor="middle">3 partitions, delete, 1 h</text>
+  <rect class="box" x="728" y="410" width="214" height="50"/>
+  <text class="h" x="835" y="431" text-anchor="middle">__consumer_offsets</text>
+  <text class="muted" x="835" y="448" text-anchor="middle">orders-service, translated by timestamp</text>
+
+  <path class="flow rp" d="M670,260 L726,260"/>
+  <text class="muted" x="676" y="250">records + schema IDs</text>
+  <path class="flow rp dash" d="M670,215 L690,215 L690,121 L726,121"/>
+  <path class="flow rp dash" d="M670,305 L690,305 L690,435 L726,435"/>
+
+  <!-- cutover -->
+  <path class="flow dash" d="M95,386 L95,500 L835,500 L835,462"/>
+  <text class="muted" x="380" y="494">cutover: orders-consumer moves to the target and resumes from the translated offsets</text>
+</svg>

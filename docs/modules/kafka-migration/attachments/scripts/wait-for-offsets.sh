@@ -1,0 +1,1 @@
+../../../../../solutions/kafka-migration/scripts/wait-for-offsets.sh

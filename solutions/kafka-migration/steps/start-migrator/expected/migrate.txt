@@ -1,0 +1,8 @@
+docker compose up -d --wait migrator
+waiting for the four shop.* topics to appear on the target
+NAME                    PARTITIONS  REPLICAS
+_schemas                1           1
+shop.alerts             3           1
+shop.customer-profiles  6           1
+shop.inventory-events   8           1
+shop.orders             12          1

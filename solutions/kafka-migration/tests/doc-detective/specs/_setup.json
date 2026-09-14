@@ -1,0 +1,17 @@
+{
+  "specId": "_setup",
+  "description": "Start the two clusters, the Consoles, and the rpk helpers once before the step specs run (beforeAny in .doc-detective.json). Topics, schemas, the workload, the migrator, and the cutover are created by the step specs themselves, in step order. Never selected as a step spec.",
+  "tests": [
+    {
+      "testId": "_setup",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make up",
+            "timeout": 600000
+          }
+        }
+      ]
+    }
+  ]
+}

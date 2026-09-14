@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "CustomerProfile",
+  "namespace": "com.example.shop",
+  "fields": [
+    {"name": "customer_id", "type": "string"},
+    {"name": "tier", "type": "string"},
+    {"name": "updated_at", "type": "long"}
+  ]
+}

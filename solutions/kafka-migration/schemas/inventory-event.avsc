@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "InventoryEvent",
+  "namespace": "com.example.shop",
+  "fields": [
+    {"name": "sku", "type": "string"},
+    {"name": "delta", "type": "int"},
+    {"name": "occurred_at", "type": "long"}
+  ]
+}

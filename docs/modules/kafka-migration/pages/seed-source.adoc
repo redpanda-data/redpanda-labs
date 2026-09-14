@@ -1,0 +1,171 @@
+= Seed the source cluster
+:page-layout: solution-step
+:description: Create the four shop topics with their real partition counts and cleanup policies and register an Avro schema for each, so the source looks like a cluster with history.
+:page-solution-step-duration: 5
+
+You give the source cluster the shape of a production Kafka cluster: four topics with different partition counts, cleanup policies, and retention, and one Avro schema per topic in Schema Registry. Each of those settings is something the migration has to carry over, and xref:start-migrator.adoc[] checks that it did.
+
+== What you do
+
+. Create the topics. `make topics` runs these four commands and is safe to repeat:
++
+[source,bash]
+----
+include::example$steps/seed-source/commands.sh[tag=topics]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/seed-source/expected/topics.txt[]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=topics]
+----
+
+. Look at the topic with the most unusual configuration:
++
+[source,bash]
+----
+include::example$steps/seed-source/commands.sh[tag=describe]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/seed-source/expected/describe.txt[]
+----
++
+`compact,delete` and a one-day retention. Remember these two values: the target will show the same in xref:start-migrator.adoc[].
+
+. Register the schemas. `make schemas` registers one Avro schema per topic under the subject `<topic>-value`:
++
+[source,bash]
+----
+include::example$steps/seed-source/commands.sh[tag=schemas]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/seed-source/expected/schemas.txt[]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=schemas]
+----
++
+The order schema:
++
+[source,json]
+----
+include::example$schemas/order.avsc[]
+----
+
+The four topics and why each is here:
+
+[cols="2,1,2,3"]
+|===
+| Topic | Partitions | Configuration | Why it is in the migration
+
+| `shop.orders`
+| 12
+| `delete`, 7 days, `snappy`
+| The business stream. The `orders-service` group consumes it, so its offsets are the ones the cutover depends on.
+
+| `shop.customer-profiles`
+| 6
+| `compact`
+| A compacted topic: the migrator must keep the key of every record so compaction on the target keeps the right one.
+
+| `shop.inventory-events`
+| 8
+| `compact,delete`, 1 day
+| Both policies at once, the configuration most likely to be dropped by a naive copy.
+
+| `shop.alerts`
+| 3
+| `delete`, 1 hour
+| Short retention: a topic where the copied history is small and the configuration matters more than the data.
+|===
+
+== Why
+
+Migrations fail on the details that are not records: a partition count that changes and breaks key ordering, a cleanup policy that silently becomes `delete`, a retention that grows a disk, a schema whose ID moves. This step deliberately puts one of each on the source so the rest of the solution has something to prove. The schema subjects use the default `TopicNameStrategy` (`<topic>-value`), which is what the producer in the next step relies on and what most Kafka applications use.
+
+== Why Redpanda
+
+`rpk topic create` takes partition count, replication factor, and topic properties in one command, and `rpk registry schema create` registers a schema file under a subject with one more. Both run inside the helper container against a SASL-secured cluster with nothing but the environment variables from `.env`. See xref:streaming:reference:rpk/rpk-topic/rpk-topic-create.adoc[] and xref:streaming:manage:schema-reg/schema-reg-overview.adoc[].
+
+== What happens inside
+
+For each `CreateTopics` request the source's controller creates the partitions as Raft groups (one replica each here), records the topic properties in the controller log, and from then on applies the cleanup policy to closed segments. `rpk registry schema create` posts the Avro definition to `/subjects/<subject>/versions` with basic auth; Schema Registry stores it in its `_schemas` topic, assigns the next free ID (1 to 4 here) and version 1 of the subject, and returns the ID. Those IDs are what the producer writes into every record and what xref:verify-schemas.adoc[] shows unchanged on the target.
+
+The complete `Makefile` and the other three schemas, for building along:
+
+.Complete source: Makefile
+[%collapsible]
+====
+[source,makefile]
+----
+include::example$Makefile[]
+----
+====
+
+.Complete source: schemas/customer-profile.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/customer-profile.avsc[]
+----
+====
+
+.Complete source: schemas/inventory-event.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/inventory-event.avsc[]
+----
+====
+
+.Complete source: schemas/alert.avsc
+[%collapsible]
+====
+[source,json]
+----
+include::example$schemas/alert.avsc[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/seed-source/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/seed-source/expected/verify.txt[]
+----
+
+If a subject is missing, `make schemas` again: registering the same schema twice returns the same ID. If `rpk topic create` reports `TOPIC_ALREADY_EXISTS` with a different partition count than the table above, you created it earlier with other settings: `docker compose exec -T rpk-source rpk topic delete <name>` and run `make topics` again.
+
+== In production
+
+[.production-note]
+Inventory the source before you migrate: `rpk topic describe -c` on every topic and `rpk registry subject list` give you the list the verification at the end must match. Keep partition counts unchanged until every consumer has moved. See the Partitions row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/schemas/order.avsc[schemas/order.avsc], link:{attachmentsdir}/schemas/customer-profile.avsc[schemas/customer-profile.avsc], link:{attachmentsdir}/schemas/inventory-event.avsc[schemas/inventory-event.avsc], and link:{attachmentsdir}/schemas/alert.avsc[schemas/alert.avsc]

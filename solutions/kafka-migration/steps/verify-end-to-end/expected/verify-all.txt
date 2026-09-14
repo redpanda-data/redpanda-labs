@@ -1,0 +1,16 @@
+./scripts/verify.sh
+ok    source and target clusters are healthy
+ok    Console and the migrator answer
+ok    SASL is enforced: an unauthenticated client is rejected
+ok    migrator user can read the source but not produce to it
+ok    migrator user cannot create topics outside shop.* on the target
+ok    topics: partitions, cleanup.policy, and retention.ms match on all four topics
+ok    records: high watermarks match on every topic
+ok    records: shop.orders holds records
+ok    schemas: subjects, versions, and IDs match
+ok    schemas: shop.orders-value has 2 versions on the target
+ok    consumer group: orders-service has committed offsets on 12 source partitions
+ok    consumer group: orders-service is Stable on the target with lag 0
+ok    consumer group: no target partition is behind the source's committed offset
+ok    target Schema Registry mode is READWRITE
+PASS (14/14)

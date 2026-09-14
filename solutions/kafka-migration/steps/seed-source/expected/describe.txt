@@ -1,0 +1,2 @@
+cleanup.policy                        compact,delete  DYNAMIC_TOPIC_CONFIG
+retention.ms                          86400000        DYNAMIC_TOPIC_CONFIG

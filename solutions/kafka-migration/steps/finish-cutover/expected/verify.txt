@@ -1,0 +1,7 @@
+GROUP                  orders-service
+COORDINATOR-NODE       0
+COORDINATOR-PARTITION  __consumer_offsets/2
+STATE                  Stable
+BALANCER               cooperative-sticky
+MEMBERS                1
+TOTAL-LAG              0

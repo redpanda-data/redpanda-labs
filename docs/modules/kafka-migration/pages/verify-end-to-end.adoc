@@ -1,0 +1,82 @@
+= Verify end to end
+:page-layout: solution-step
+:description: Run the fourteen assertions that prove the two clusters agree: authentication, ACLs, topic shapes, high watermarks, schema IDs, committed offsets, and the registry mode.
+:page-solution-step-duration: 3
+
+One script asserts everything the previous steps claimed, against both running clusters, with exact comparisons. It is the same script CI runs on every change to this solution.
+
+== What you do
+
+. Run the checks:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify-all]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify-all.txt[]
+----
+
+. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `assert_contains`, `retry`) and runs fourteen checks; the complete script is at the end of _What happens inside_:
++
+[source,bash]
+----
+include::example$scripts/verify.sh[tags=checks]
+----
+
+== Why
+
+Each step's Verify section checked one thing. This one checks that the clusters agree with each other, which is the claim a migration makes: every topic with the same shape, every record, every schema under the same ID, every committed offset carried over, and the security posture intact on both sides. The negative checks matter as much as the positive ones: an unauthenticated client is refused, the migrator user cannot write to the source or create topics outside `shop.` on the target.
+
+The checks are exact because the workload is designed for it: the producer has stopped, so high watermarks are fixed numbers; records are 20 ms apart, so translated offsets equal the source's; schemas were registered in a known order, so the IDs are known.
+
+== Why Redpanda
+
+Every number the script needs is observable from outside through `rpk`: high watermarks from `rpk topic describe -p`, configurations from `-c`, committed offsets and lag from `rpk group describe`, schemas from `rpk registry schema list`, mode from `rpk registry mode get`, and ACL behaviour from a refused request. That is what makes a migration verifiable rather than trusted. See xref:streaming:reference:rpk/rpk-group/rpk-group-describe.adoc[].
+
+== What happens inside
+
+The script runs each `rpk` command inside the helper of the cluster it inspects, with a `retry` where the migrator may be a batch behind, and compares the source's answer with the target's as strings. Each check prints `ok` or `FAIL`, and `verify_summary` prints `PASS (14/14)` and exits 0, or lists the failed checks and exits 1. CI gates on that exit code.
+
+The complete script, for building along (it sources `scripts/verify-lib.sh`, an attachment):
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+A failed check names what it compared. The likely ones: `high watermarks match` fails while the producer is still running (finish xref:finish-cutover.adoc[] first), and `mode is READWRITE` fails if you skipped `make sr-readwrite`.
+
+When you are done, `make clean` stops both clusters and deletes their volumes.
+
+== In production
+
+[.production-note]
+Keep this script's comparisons as your acceptance test for each migrated topic and group, and keep the source cluster until they pass on the last one. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (save both under `scripts/`)

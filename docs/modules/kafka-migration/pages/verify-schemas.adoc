@@ -1,0 +1,112 @@
+= Verify the schemas
+:page-layout: solution-step
+:description: Show that every schema arrived on the target with its original ID and version, that a migrated record decodes there, and that a schema registered mid-migration follows within seconds.
+:page-solution-step-duration: 5
+
+You check the part of a migration that record-copying tools skip: the schemas. Every subject, version, and ID from the source registry is on the target, a record copied from the source decodes there with no configuration, and a schema version you register now, while the migrator runs, appears on the target on the next sync.
+
+== What you do
+
+. List the migrated schemas on the target:
++
+[source,bash]
+----
+include::example$steps/verify-schemas/commands.sh[tag=list-target]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-schemas/expected/list-target.txt[]
+----
++
+Compare the `ID` column with the one `make schemas` printed in xref:seed-source.adoc[]: the same four IDs.
+
+. Confirm the target registry is still in `IMPORT` mode, which is what allowed those fixed IDs:
++
+[source,bash]
+----
+include::example$steps/verify-schemas/commands.sh[tag=mode]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-schemas/expected/mode.txt[]
+----
+
+. Decode a migrated record on the target with the target's registry:
++
+[source,bash]
+----
+include::example$steps/verify-schemas/commands.sh[tag=decode]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-schemas/expected/decode.txt[]
+----
++
+`rpk` read the schema ID from the record's header, fetched schema 1 from the target registry, and decoded the Avro payload. Nothing about the record was rewritten.
+
+. Register version 2 of the order schema on the source, the way a team ships a compatible change during a migration. It adds a `channel` field with a default:
++
+[source,bash]
+----
+include::example$steps/verify-schemas/commands.sh[tag=schema-v2]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-schemas/expected/schema-v2.txt[]
+----
++
+[source,json]
+----
+include::example$schemas/order-v2.avsc[]
+----
+
+== Why
+
+Schema IDs are the join between records and their definitions. A consumer, Console, or Redpanda Connect reads the five-byte header of a record and asks the registry for that ID. If a migration registers the schemas afresh and the target hands out different IDs, every record copied from the source points at the wrong schema or at none, and every consumer needs a translation table until the old records age out. Preserving the IDs (and, for the same reason, the version numbers) makes the copied history usable on the day of the cutover.
+
+Continuous schema sync matters because migrations take days and teams do not stop shipping. A schema registered on the source after the migrator started must reach the target before a record that uses it does; with `interval: 10s` here (five minutes by default), the registry sync runs far more often than schemas change.
+
+== Why Redpanda
+
+The Redpanda Schema Registry implements `IMPORT` mode, so the migrator can register a schema under an explicit ID and version, and `rpk registry` exposes subjects, versions, and mode as commands you can diff between two clusters. `rpk topic consume --use-schema-registry` decodes records the same way an application would, which turns "the schema arrived" into "a copied record decodes". See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] and xref:streaming:manage:schema-reg/schema-reg-api.adoc[].
+
+== What happens inside
+
+On every sync the output lists the source registry's subjects (including soft-deleted ones, `include_deleted: true`) and, for each subject, every version (`versions: all`). For each version that the target does not have it calls the target registry with the source's ID and version in the request body, which the registry accepts only in `IMPORT` mode; the log line is `schema created with fixed id`. A version that already exists on the target is skipped, so the sync is idempotent. Compatibility levels set per subject carry over as well.
+
+When you registered version 2, the source registry assigned ID 5 (the next free ID after the four originals). Within ten seconds the migrator's sync found the new version and created it on the target with the same ID and version number. The producer keeps writing with schema 1; version 2 is `BACKWARD` compatible, so a consumer reading with either version decodes both.
+
+== Verify
+
+Wait for the next sync and list the order subject on the target:
+
+[source,bash]
+----
+include::example$steps/verify-schemas/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-schemas/expected/verify.txt[]
+----
+
+Two versions, IDs 1 and 5, both on the target. If version 2 does not show up within a minute, `docker compose logs migrator | grep "Schema migration"` tells you why; the usual cause is a target registry no longer in `IMPORT` mode (someone ran `make sr-readwrite` early), in which case the fixed-ID registration is refused.
+
+== In production
+
+[.production-note]
+Freeze schema deletions during the migration, keep `versions: all` so consumers pinned to an old version keep working, and plan the `READWRITE` switch as the last step of the cutover. See the Schema validation row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/schemas/order-v2.avsc[schemas/order-v2.avsc]
