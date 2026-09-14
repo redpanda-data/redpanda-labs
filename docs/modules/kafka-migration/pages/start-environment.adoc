@@ -57,6 +57,7 @@ Both brokers share one block of compose settings, and each adds its own addresse
 include::example$docker-compose.yml[tags=broker-defaults]
 ----
 
+.`docker-compose.yml`
 [source,yaml]
 ----
 include::example$docker-compose.yml[tags=source]

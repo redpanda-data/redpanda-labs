@@ -20,6 +20,7 @@ include::example$steps/grant-migrator-access/commands.sh[tag=access]
 include::example$steps/grant-migrator-access/expected/access.txt[]
 ----
 +
+.What `make migrator-access` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=migrator-access]
@@ -32,6 +33,7 @@ include::example$Makefile[tags=migrator-access]
 include::example$scripts/migrator-acls.sh[tags=source]
 ----
 +
+.`migrator-acls.sh`
 [source,bash]
 ----
 include::example$scripts/migrator-acls.sh[tags=target]

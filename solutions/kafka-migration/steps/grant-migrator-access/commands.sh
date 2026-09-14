@@ -8,7 +8,7 @@ make migrator-access
 # end::access[]
 
 # tag::denied[]
-! docker compose exec -T rpk-source sh -c 'echo x | rpk -X user=$MIGRATOR_USER -X pass=$MIGRATOR_PASSWORD topic produce shop.orders' 2>&1
+docker compose exec -T rpk-source sh -c 'echo x | rpk -X user=$MIGRATOR_USER -X pass=$MIGRATOR_PASSWORD topic produce shop.orders' 2>&1 || true
 # end::denied[]
 
 # tag::verify[]

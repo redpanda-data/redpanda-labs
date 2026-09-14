@@ -57,6 +57,7 @@ The producer's mapping decides the topic and key of each record, and the encoder
 include::example$connect/producer.yaml[tags=input]
 ----
 
+.`producer.yaml`
 [source,yaml]
 ----
 include::example$connect/producer.yaml[tags=pipeline]
