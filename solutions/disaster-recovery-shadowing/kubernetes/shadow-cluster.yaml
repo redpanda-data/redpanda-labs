@@ -1,0 +1,50 @@
+# The shadow cluster: the failover target, in its own namespace. Identical to
+# the source cluster apart from its name, its `cluster_id`, and the host port
+# its external listener is advertised on, because a failover target that
+# differs from the cluster it replaces is a failover that surprises you.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shadow
+---
+# tag::cluster[]
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Redpanda
+metadata:
+  name: redpanda
+  namespace: shadow
+spec:
+  clusterSpec:
+    image:
+      tag: v26.2.2
+    statefulset:
+      replicas: 1
+    config:
+      cluster:
+        default_topic_replications: 1
+        enable_shadow_linking: true
+        cluster_id: dr-shadow
+    external:
+      enabled: true
+      service:
+        enabled: false
+      addresses:
+        - localhost
+    listeners:
+      kafka:
+        external:
+          default:
+            enabled: true
+            port: 9094
+            advertisedPorts:
+              - 29094
+    tls:
+      enabled: false
+    auth:
+      sasl:
+        enabled: false
+    storage:
+      tiered:
+        config:
+          cloud_storage_enabled: false
+# end::cluster[]

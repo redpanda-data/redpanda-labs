@@ -1,0 +1,86 @@
+[
+  {
+    "order_id": "ord-0001",
+    "region": "eu-west",
+    "item": "keyboard",
+    "quantity": 2,
+    "amount_eur": 27.49
+  },
+  {
+    "order_id": "ord-0002",
+    "region": "us-east",
+    "item": "monitor",
+    "quantity": 3,
+    "amount_eur": 34.99
+  },
+  {
+    "order_id": "ord-0003",
+    "region": "ap-south",
+    "item": "webcam",
+    "quantity": 4,
+    "amount_eur": 42.49
+  },
+  {
+    "order_id": "ord-0004",
+    "region": "eu-west",
+    "item": "dock",
+    "quantity": 1,
+    "amount_eur": 49.99
+  },
+  {
+    "order_id": "ord-0005",
+    "region": "us-east",
+    "item": "keyboard",
+    "quantity": 2,
+    "amount_eur": 57.49
+  },
+  {
+    "order_id": "ord-0006",
+    "region": "ap-south",
+    "item": "monitor",
+    "quantity": 3,
+    "amount_eur": 64.99
+  },
+  {
+    "order_id": "ord-0007",
+    "region": "eu-west",
+    "item": "webcam",
+    "quantity": 4,
+    "amount_eur": 72.49
+  },
+  {
+    "order_id": "ord-0008",
+    "region": "us-east",
+    "item": "dock",
+    "quantity": 1,
+    "amount_eur": 79.99
+  },
+  {
+    "order_id": "ord-0009",
+    "region": "ap-south",
+    "item": "keyboard",
+    "quantity": 2,
+    "amount_eur": 87.49
+  },
+  {
+    "order_id": "ord-0010",
+    "region": "eu-west",
+    "item": "monitor",
+    "quantity": 3,
+    "amount_eur": 94.99
+  },
+  {
+    "order_id": "ord-0011",
+    "region": "us-east",
+    "item": "webcam",
+    "quantity": 4,
+    "amount_eur": 102.49
+  },
+  {
+    "order_id": "ord-0012",
+    "region": "ap-south",
+    "item": "dock",
+    "quantity": 1,
+    "amount_eur": 109.99
+  }
+]

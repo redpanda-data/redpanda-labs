@@ -1,0 +1,59 @@
+# The shadow link, created on the shadow cluster.
+#
+# `rpk shadow create --config-file` reads this file inside the rpk-shadow
+# helper container, where it is mounted at /config. One link carries the three
+# things a failover needs: the topics and their records, the consumer group
+# offsets that say where each application stopped, and the schemas.
+name: disaster-recovery-shadowing
+
+# tag::client[]
+client_options:
+  # How the shadow cluster reaches the source. This is the only place the
+  # source cluster is named; clients never see it.
+  bootstrap_servers:
+    - redpanda-source:9092
+  tls_settings:
+    enabled: false
+# end::client[]
+
+# tag::topics[]
+topic_metadata_sync_options:
+  interval: 5s
+  # Every topic whose name starts with `dr-` is created on the shadow cluster
+  # and kept in step with the source. A topic outside the filter is not
+  # replicated, which is how you keep a failover target free of the topics
+  # that do not matter.
+  auto_create_shadow_topic_filters:
+    - pattern_type: PREFIX
+      filter_type: INCLUDE
+      name: dr-
+  # Properties that must not silently differ after a failover.
+  synced_shadow_topic_properties:
+    - retention.ms
+    - segment.ms
+  # Replicate each topic from its first offset, not from the moment the link
+  # was created.
+  start_at_earliest: {}
+# end::topics[]
+
+# tag::offsets[]
+consumer_offset_sync_options:
+  interval: 5s
+  # Consumer groups whose ids start with `dr-`. Their committed offsets are
+  # written to the shadow cluster's `__consumer_offsets`, so a consumer that
+  # reconnects after the failover resumes where it stopped instead of
+  # reprocessing the topic.
+  group_filters:
+    - pattern_type: PREFIX
+      filter_type: INCLUDE
+      name: dr-
+# end::offsets[]
+
+# tag::registry[]
+schema_registry_sync_options:
+  # Topic mode: the source is another Redpanda cluster, so the shadow cluster
+  # replicates its internal `_schemas` topic directly. API mode
+  # (`shadow_schema_registry_api`) is for a source that is not Redpanda, such
+  # as a Confluent Schema Registry.
+  shadow_schema_registry_topic: {}
+# end::registry[]

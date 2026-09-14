@@ -1,0 +1,11 @@
+# Redpanda Console for the shadow cluster: the replicated topics, the
+# replicated consumer groups, and the records produced after failover.
+kafka:
+  brokers: ["redpanda-shadow:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda-shadow:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda-shadow:9644"]

@@ -1,0 +1,96 @@
+# Envoy in front of two Redpanda clusters.
+#
+# Clients are given one bootstrap server, envoy:9092. Envoy sends Kafka traffic
+# to the source cluster while the source answers its health check, and to the
+# shadow cluster when it stops. Envoy moves the connections; it does not move
+# the data and it does not promote the shadow topics. Shadowing replicates the
+# data, and `rpk shadow failover` makes the shadow writable.
+
+admin:
+  address:
+    socket_address:
+      protocol: TCP
+      address: 0.0.0.0
+      port_value: 9901
+
+static_resources:
+  listeners:
+  - name: kafka
+    address:
+      socket_address:
+        protocol: TCP
+        address: 0.0.0.0
+        port_value: 9092
+    filter_chains:
+    - filters:
+      # tag::rewrite[]
+      # A Kafka client reads the broker list out of a metadata response and
+      # then connects to those addresses directly, which would take it straight
+      # to whichever cluster answered and defeat the proxy. This filter parses
+      # the Kafka protocol and rewrites the address of broker 0 (both clusters
+      # are single-node, so both call their broker 0) to Envoy's own address,
+      # so every connection the client opens comes back here.
+      - name: envoy.filters.network.kafka_broker
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.kafka_broker.v3.KafkaBroker
+          stat_prefix: kafka_broker
+          id_based_broker_address_rewrite_spec:
+            rules:
+            - id: 0
+              host: envoy
+              port: 9092
+      # end::rewrite[]
+      - name: envoy.filters.network.tcp_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: kafka_tcp
+          cluster: redpanda
+
+  clusters:
+  - name: redpanda
+    connect_timeout: 5s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    # tag::health[]
+    # Envoy has no Kafka health check, so it probes each cluster's Schema
+    # Registry, which runs in the same Redpanda process as the Kafka API: if
+    # the registry stops answering, the broker is gone too. Three failed
+    # probes three seconds apart, so a dead source is detected in about ten
+    # seconds.
+    health_checks:
+    - timeout: 2s
+      interval: 3s
+      unhealthy_threshold: 3
+      healthy_threshold: 2
+      http_health_check:
+        path: /schemas/types
+    load_assignment:
+      cluster_name: redpanda
+      endpoints:
+      # Priority 0 takes all the traffic while at least one of its endpoints is
+      # healthy. Envoy falls to priority 1 only when priority 0 has none.
+      - priority: 0
+        lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: redpanda-source
+                port_value: 9092
+            health_check_config:
+              port_value: 8081
+      - priority: 1
+        lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: redpanda-shadow
+                port_value: 9092
+            health_check_config:
+              port_value: 8081
+    common_lb_config:
+      # Without this, Envoy starts load balancing across every endpoint,
+      # healthy or not, once fewer than half are healthy: exactly the split
+      # traffic a failover must avoid.
+      healthy_panic_threshold:
+        value: 0.0
+    # end::health[]

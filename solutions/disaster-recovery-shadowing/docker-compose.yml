@@ -1,78 +1,148 @@
-# Disaster Recovery Shadowing: local stack.
+# Disaster Recovery with Shadowing and Envoy: local stack.
 #
-# Start with `make up` (waits for every healthcheck), seed with `make seed`,
-# prove the outcome with `make verify`, tear down with `make clean`.
-# Versions and host ports come from .env (copied from .env.example on first
-# `make up`); the nightly CI run overrides the versions with `latest`. Run one
-# stack at a time, or give each its own host ports in .env.
+# Two Redpanda clusters, both with Shadowing enabled. One shadow link on the
+# shadow cluster replicates the source cluster's topics, records, and consumer
+# group offsets. An Envoy proxy in front of both clusters is the only Kafka
+# endpoint clients are given: it sends traffic to the source while the source
+# is healthy and to the shadow when it is not, so a failover needs no client
+# change. One Redpanda Console per cluster shows both sides of the link.
+#
+# Start with `make up` (waits for every healthcheck), run the whole recovery
+# path with `make seed`, prove the outcome with `make verify`, tear down with
+# `make clean`. Versions and host ports come from .env (copied from
+# .env.example on the first `make up`).
 name: disaster-recovery-shadowing
 
 networks:
-  redpanda:
+  dr:
     driver: bridge
 
 volumes:
-  redpanda-data: {}
+  source-data: {}
+  shadow-data: {}
 
 services:
-  # tag::redpanda[]
-  redpanda:
+  # tag::source[]
+  # SOURCE: the cluster clients write to until it fails. `cluster_id` is set so
+  # that a client can name the cluster it reached through Envoy, and
+  # `enable_shadow_linking` lets the shadow cluster fetch from it.
+  redpanda-source:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
-    container_name: disaster-recovery-shadowing-redpanda
+    container_name: disaster-recovery-shadowing-source
+    hostname: redpanda-source
     command:
       - redpanda
       - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-19092}
-      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${REDPANDA_PROXY_PORT:-18082}
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
-      - --rpc-addr redpanda:33145
-      - --advertise-rpc-addr redpanda:33145
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:63092
+      - --advertise-kafka-addr internal://redpanda-source:9092,external://localhost:${SOURCE_KAFKA_PORT:-63092}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:63081
+      - --rpc-addr redpanda-source:33145
+      - --advertise-rpc-addr redpanda-source:33145
       - --mode dev-container
       - --smp 1
+      - --memory 1G
       - --default-log-level=info
+      - --set redpanda.enable_shadow_linking=true
+      - --set redpanda.cluster_id=dr-source
     ports:
-      - "${REDPANDA_SR_PORT:-18081}:18081"
-      - "${REDPANDA_PROXY_PORT:-18082}:18082"
-      - "${REDPANDA_KAFKA_PORT:-19092}:19092"
-      - "${REDPANDA_ADMIN_PORT:-19644}:9644"
+      - "${SOURCE_KAFKA_PORT:-63092}:63092"
+      - "${SOURCE_SR_PORT:-63081}:63081"
+      - "${SOURCE_ADMIN_PORT:-63644}:9644"
     volumes:
-      - redpanda-data:/var/lib/redpanda/data
+      - source-data:/var/lib/redpanda/data
     networks:
-      - redpanda
+      - dr
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 10s
-  # end::redpanda[]
+  # end::source[]
 
-  # tag::console[]
-  console:
-    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
-    container_name: disaster-recovery-shadowing-console
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
-    environment:
-      CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda:9092"]
-        schemaRegistry:
-          enabled: true
-          urls: ["http://redpanda:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda:9644"]
-    ports:
-      - "${CONSOLE_PORT:-8080}:8080"
-    networks:
+  # tag::shadow[]
+  # SHADOW: the failover target. The shadow link is created here, so this is
+  # the cluster that fetches from the source. Its topics stay read-only until
+  # you fail them over.
+  redpanda-shadow:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: disaster-recovery-shadowing-shadow
+    hostname: redpanda-shadow
+    command:
       - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:61092
+      - --advertise-kafka-addr internal://redpanda-shadow:9092,external://localhost:${SHADOW_KAFKA_PORT:-61092}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:61081
+      - --rpc-addr redpanda-shadow:33145
+      - --advertise-rpc-addr redpanda-shadow:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 1G
+      - --default-log-level=info
+      - --set redpanda.enable_shadow_linking=true
+      - --set redpanda.cluster_id=dr-shadow
+    ports:
+      - "${SHADOW_KAFKA_PORT:-61092}:61092"
+      - "${SHADOW_SR_PORT:-61081}:61081"
+      - "${SHADOW_ADMIN_PORT:-61644}:9644"
+    volumes:
+      - shadow-data:/var/lib/redpanda/data
+    networks:
+      - dr
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::shadow[]
+
+  # tag::envoy[]
+  # The client-facing Kafka endpoint. The `contrib` image is required: the
+  # Kafka broker filter that rewrites broker addresses in metadata responses
+  # ships only in that build. The configuration is in envoy/envoy.yaml.
+  envoy:
+    image: envoyproxy/envoy:${ENVOY_VERSION:-contrib-v1.31-latest}
+    container_name: disaster-recovery-shadowing-envoy
+    hostname: envoy
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "${ENVOY_KAFKA_PORT:-60092}:9092"
+      - "${ENVOY_ADMIN_PORT:-60901}:9901"
+    networks:
+      - dr
     depends_on:
-      redpanda:
+      redpanda-source:
+        condition: service_healthy
+      redpanda-shadow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/9901' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+  # end::envoy[]
+
+  # tag::consoles[]
+  # One Console per cluster. The source Console is the view clients lose in the
+  # disaster; the shadow Console shows what the link replicated and, after
+  # failover, the records produced on the shadow.
+  console-source:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: disaster-recovery-shadowing-console-source
+    environment:
+      CONFIG_FILEPATH: /etc/console/config.yaml
+    volumes:
+      - ./console/source.yaml:/etc/console/config.yaml:ro
+    ports:
+      - "${SOURCE_CONSOLE_PORT:-8380}:8080"
+    networks:
+      - dr
+    depends_on:
+      redpanda-source:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
@@ -80,25 +150,68 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
-  # end::console[]
+
+  console-shadow:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: disaster-recovery-shadowing-console-shadow
+    environment:
+      CONFIG_FILEPATH: /etc/console/config.yaml
+    volumes:
+      - ./console/shadow.yaml:/etc/console/config.yaml:ro
+    ports:
+      - "${SHADOW_CONSOLE_PORT:-8381}:8080"
+    networks:
+      - dr
+    depends_on:
+      redpanda-shadow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::consoles[]
 
   # tag::rpk[]
-  # Helper container so `make seed`, scripts/verify.sh, and the Doc Detective
-  # specs can run rpk without a host install: docker compose exec -T rpk rpk ...
-  rpk:
+  # One rpk helper per cluster, so the Makefile, scripts/verify.sh, and the
+  # generated Doc Detective specs run rpk without a host install and without
+  # repeating -X flags. The shadow helper also mounts the link configuration
+  # where `rpk shadow create` reads it.
+  rpk-source:
     image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
-    container_name: disaster-recovery-shadowing-rpk
+    container_name: disaster-recovery-shadowing-rpk-source
     entrypoint: ["/bin/sh", "-c", "sleep infinity"]
     environment:
-      RPK_BROKERS: redpanda:9092
-      RPK_ADMIN_HOSTS: redpanda:9644
-      RPK_REGISTRY_HOSTS: redpanda:8081
-    volumes:
-      - ./sample-data:/sample-data:ro
+      RPK_BROKERS: redpanda-source:9092
+      RPK_ADMIN_HOSTS: redpanda-source:9644
+      RPK_REGISTRY_HOSTS: redpanda-source:8081
     networks:
-      - redpanda
+      - dr
     depends_on:
-      redpanda:
+      redpanda-source:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  rpk-shadow:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: disaster-recovery-shadowing-rpk-shadow
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    environment:
+      RPK_BROKERS: redpanda-shadow:9092
+      RPK_ADMIN_HOSTS: redpanda-shadow:9644
+      RPK_REGISTRY_HOSTS: redpanda-shadow:8081
+    volumes:
+      - ./config:/config:ro
+    networks:
+      - dr
+    depends_on:
+      redpanda-shadow:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
@@ -107,3 +220,37 @@ services:
       retries: 6
       start_period: 5s
   # end::rpk[]
+
+  # tag::client[]
+  # The application. It is given one bootstrap server, `envoy:9092`, and never
+  # learns that there are two clusters behind it: every script in scripts/ uses
+  # that endpoint, before, during, and after the failover. kafka-python is the
+  # client library because its protocol versions are the ones Envoy's Kafka
+  # broker filter understands.
+  client:
+    build: ./client
+    image: disaster-recovery-shadowing-client
+    container_name: disaster-recovery-shadowing-client
+    command: ["sleep", "infinity"]
+    environment:
+      BOOTSTRAP_SERVERS: envoy:9092
+      SOURCE_BOOTSTRAP_SERVERS: redpanda-source:9092
+      SHADOW_BOOTSTRAP_SERVERS: redpanda-shadow:9092
+      DR_TOPIC: ${DR_TOPIC:-dr-orders}
+      DR_GROUP: ${DR_GROUP:-dr-consumers}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./sample-data:/sample-data:ro
+      - ./state:/state
+    networks:
+      - dr
+    depends_on:
+      envoy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import kafka, json'"]
+      interval: 5s
+      timeout: 10s
+      retries: 6
+      start_period: 2s
+  # end::client[]

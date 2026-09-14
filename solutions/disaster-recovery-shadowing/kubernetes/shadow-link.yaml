@@ -1,0 +1,61 @@
+# The shadow link as a Kubernetes resource.
+#
+# This is the same link the compose stack creates with `rpk shadow create`,
+# expressed as a `ShadowLink` custom resource: the same source and shadow
+# clusters, the same `dr-` topic and group filters, the same intervals. The
+# operator reconciles it, so the link is part of the cluster's desired state
+# instead of a command someone remembered to run.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: ShadowLink
+metadata:
+  name: disaster-recovery-shadowing
+  namespace: shadow
+spec:
+  # tag::clusters[]
+  # The cluster the link writes to: the one this resource lives next to.
+  shadowCluster:
+    staticConfiguration:
+      kafka:
+        brokers: ["redpanda.shadow.svc.cluster.local:9093"]
+      admin:
+        urls: ["http://redpanda.shadow.svc.cluster.local:9644/"]
+      schemaRegistry:
+        urls: ["http://redpanda.shadow.svc.cluster.local:8081/"]
+
+  # The cluster the link reads from, across namespaces.
+  sourceCluster:
+    staticConfiguration:
+      kafka:
+        brokers: ["redpanda.source.svc.cluster.local:9093"]
+      admin:
+        urls: ["http://redpanda.source.svc.cluster.local:9644/"]
+      schemaRegistry:
+        urls: ["http://redpanda.source.svc.cluster.local:8081/"]
+  # end::clusters[]
+
+  # tag::filters[]
+  # Topics whose names start with `dr-`, replicated from their first offset.
+  topicMetadataSyncOptions:
+    interval: 5s
+    autoCreateShadowTopicFilters:
+      - name: dr-
+        patternType: prefix
+        filterType: include
+    syncedShadowTopicProperties:
+      - retention.ms
+      - segment.ms
+
+  # Consumer groups whose ids start with `dr-`, so a consumer resumes instead
+  # of reprocessing after the failover.
+  consumerOffsetSyncOptions:
+    interval: 5s
+    groupFilters:
+      - name: dr-
+        patternType: prefix
+        filterType: include
+
+  # Topic mode: the source is another Redpanda cluster, so its internal
+  # `_schemas` topic is replicated directly.
+  schemaRegistrySyncOptions:
+    schema_registry_shadowing_mode: topic
+  # end::filters[]
