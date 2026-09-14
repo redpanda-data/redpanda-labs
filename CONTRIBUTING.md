@@ -281,6 +281,9 @@ pasted source file.
   exists.
 - `scripts/verify.sh` is unchanged by all of this: it is code, shown with a
   tagged include like any other file, and it stays the last step's command.
+- A recording's engine is deliberately not declared, and a screenshot or
+  recording only replaces the committed file when it meaningfully changed.
+  Both are explained under "Recording engines and idempotence" below.
 - Media is captured by the tests, never edited by hand. A step that shows the
   running system has `steps/<step-id>/media.json`: an array of Doc Detective
   browser steps (`goTo`, `find`, `wait`, `screenshot`, `record`, `stopRecord`;
@@ -297,6 +300,57 @@ pasted source file.
   screenshot's `crop`, delete the old image first: `aboveVariation` compares
   against the existing file and refuses to compare images with different
   aspect ratios, so the first cropped capture must seed a new baseline.
+
+### Recording engines and idempotence
+
+Two settings on a `record` step look like details and are not.
+
+**Leave `engine` undeclared.** doc-detective resolves it from the context, and
+that resolution is what lets one `media.json` work on a laptop and on a
+runner. `resolveRecordPlan` picks the `browser` engine only for a Chrome
+context with `headless === false` and no app surface, and the `ffmpeg` engine
+otherwise; `coerceRecordContextBrowser` says why in its own comment, "the
+browser engine can't record headless". Declaring `browser` breaks any headless
+context: the step does not fall back, it skips, with "Recording isn't
+supported in headless mode with the browser engine. Use the ffmpeg engine to
+record headless." Declaring `ffmpeg` breaks macOS, where capturing the screen
+needs a screen-recording permission that no CI runner and no fresh laptop
+grants. Undeclared, a headed Chrome context records its tab and a headless one
+records the display, and both work.
+
+That is also why the CI workflows install `xvfb` and run the suite under
+`xvfb-run`: the generated spec pins headed Chrome for a recording, headed
+Chrome needs a display, and a runner has none. It is why
+`tools/run-doc-detective.sh` counts a SKIPPED test as a failure, too. A
+recording step that skips is silent otherwise, and a run that recorded nothing
+would report success.
+
+`target` (`display`, `window`, `viewport`) is not set, because the schema says
+it is "Ignored by the `browser` engine, which always captures its tab", and
+the browser engine is the one both a laptop and a runner under `xvfb-run`
+resolve to. It would only matter for a genuinely headless run.
+
+**Use `overwrite: aboveVariation`, never `true`.** `true` re-encodes and
+replaces the file on every run, so the committed recording differs after every
+run, and the nightly would open a drift pull request every night for a file
+nobody needs to look at. `aboveVariation` compares checkpoint screenshots
+taken during the recording against a stored baseline and replaces the file
+only when they differ meaningfully. It enables those checkpoints by itself;
+point them somewhere git-ignored, outside `docs/modules/<slug>/images/`
+(`.doc-detective/recording-checkpoints` in the flagship), because baseline
+PNGs are neither published media nor allowed under the nightly's guard.
+
+Screenshots already behave this way through `overwrite: aboveVariation` with a
+`maxVariation`. Verify both when you change a media step: run the suite twice
+from a clean stack, and the second run must leave
+`docs/modules/<slug>/images/` untouched.
+
+One rewrite is expected the first time CI records, and is not a bug. A capture
+on a Linux runner is not byte-identical to one from a Mac (a Retina capture is
+2x, so the same page records at twice the pixel dimensions), so the first
+nightly to record a given file replaces it once and opens a drift pull request
+saying so. After that the checkpoint baselines, which the nightly caches
+between runs, keep it stable.
 
 ### What the nightly may change by itself
 
@@ -342,6 +396,16 @@ A fix pull request only ever appears after the whole suite has passed again
 from a clean stack with the change in place, so a green nightly PR is a
 statement that the solution still works, not just that the captures were
 updated.
+
+**A healthy nightly opens nothing at all.** Every documented command runs,
+every captured output and every capture matches what is committed, the
+verification manifest is rewritten with a new `run_at` and nothing else, and
+the drift step skips a manifest-only change because there would be nothing for
+a reviewer to look at. So silence is the expected result, and a pull request
+means something genuinely moved: the output of a documented command, a
+screenshot, or a recording whose checkpoints drifted. Treat one as a signal,
+not as noise, which is the whole reason the manifest-only and byte-identical
+cases are suppressed.
 
 ### verification.json is evidence, so nobody edits it
 
