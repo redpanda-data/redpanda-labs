@@ -148,7 +148,62 @@ jobs:
       # display. Screenshot-only solutions do not need this, but installing it
       # unconditionally keeps this job identical for every slug.
       - name: Install a virtual display
+        # The virtual display the recording needs, and the reason it is not
+        # optional. doc-detective resolves a record step's engine from the
+        # context rather than from the spec: headed Chrome gets the browser
+        # engine, which captures the tab; anything headless gets the ffmpeg
+        # engine, which captures a screen. A record step on a headless context
+        # does not fall back, it SKIPS, with "Recording isn't supported in
+        # headless mode with the browser engine" (verified against 4.38.1).
+        # The generated spec therefore pins headed Chrome, headed Chrome needs
+        # a display, and a runner has none. A skipped spec is also why
+        # tools/run-doc-detective.sh treats SKIPPED as a failure: without that,
+        # a run with no display would report success having recorded nothing.
         run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      # doc-detective lazily installs its runtime packages, browser binaries
+      # and ffmpeg on first use: about 1.3 GB, and by default into a temp
+      # directory the runner throws away, so every run downloads the lot
+      # again. DOC_DETECTIVE_CACHE_DIR moves it into the workspace where
+      # actions/cache can carry it between runs. The engine version decides
+      # what belongs in there, so it is the whole cache key; read from the
+      # runner script rather than repeated here, because a bumped pin must not
+      # silently reuse the old cache.
+      - name: Point the doc-detective cache at the workspace
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^DD_VERSION=\$\{DD_VERSION:-([0-9.]+)\}.*/\1/p' tools/run-doc-detective.sh)
+          [ -n "$version" ] || { echo "::error::could not read DD_VERSION from tools/run-doc-detective.sh"; exit 1; }
+          echo "DD_VERSION=$version" >> "$GITHUB_ENV"
+          echo "DOC_DETECTIVE_CACHE_DIR=$GITHUB_WORKSPACE/.doc-detective-cache" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.doc-detective-cache
+          key: doc-detective-cache-${{ runner.os }}-${{ env.DD_VERSION }}
+
+      # Downloads anything the cache did not restore, before the suite starts,
+      # so a cache miss shows up as its own step rather than as a slow first
+      # spec. `install all` covers the runtime packages and the browsers;
+      # agents and the mobile toolchains are deliberately not included.
+      - name: Pre-warm the doc-detective cache
+        run: npx --yes "doc-detective@$DD_VERSION" install all --yes
+
+      # The recording's checkpoint baselines are what decide whether the
+      # committed mp4 is replaced (see the record step in
+      # steps/scale-and-replay/media.json). They are git-ignored, because they
+      # are working files rather than published media, so without a cache every
+      # nightly starts with none, reseeds them, finds nothing to compare
+      # against, and rewrites the recording: a drift PR every night for a file
+      # nobody needs to look at, which is how a nightly stops being read. The
+      # run id in the key with a prefix restore means each run saves a fresh
+      # copy and restores the most recent previous one.
+      - uses: actions/cache@v4
+        with:
+          path: solutions/${{ matrix.slug }}/.doc-detective/recording-checkpoints
+          key: dd-recording-checkpoints-${{ matrix.slug }}-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            dd-recording-checkpoints-${{ matrix.slug }}-${{ runner.os }}-
 
       # The suite's own commands source solutions/<slug>/.env, so exporting
       # REDPANDA_VERSION into the job environment would be overridden inside
