@@ -78,6 +78,7 @@ The input and the one line of the mapping that differs from the Postgres pipelin
 include::example$connect/mysql-cdc.yaml[tags=input]
 ----
 
+.`mysql-cdc.yaml`
 [source,yaml]
 ----
 include::example$connect/mysql-cdc.yaml[tags=pipeline]
