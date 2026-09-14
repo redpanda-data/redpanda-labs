@@ -129,7 +129,7 @@ checking categories against the shared list).
 | `:page-categories:` | yes | comma list from `valid-categories.yml` | Unknown values fail the build. List the specific subcategories the solution teaches (`Consumer Groups`, `Retention and Compaction`, `Pipelines`): only subcategory overlap creates recommendations between pages and solutions, and the top-level values are added automatically. Avoid catch-all values such as `Clients` or `Development`, which match dozens of pages and turn the card into noise. When one particular page is related, use `:page-solution-related-docs:` instead. |
 | `:page-solution-use-cases:` | no | comma list | |
 | `:personas:` | no | ids from `docs/modules/ROOT/partials/personas.yaml` | |
-| `:page-solution-steps:` | yes | ordered comma list of step ids | The only source of step order. Each id is `pages/<id>.adoc` and `specs/<id>.json`. |
+| `:page-solution-steps:` | yes | ordered comma list of step ids | The only source of step order. Each id is `pages/<id>.adoc` and `steps/<id>/commands.sh`; the Doc Detective spec is generated from the page. |
 | `:page-solution-related-docs:` | recommended | fully qualified resource IDs | Must resolve. Warn when absent. These are the strongest "Build it in practice" edges on Product Docs, and the right tool for a single related page that a category would over-match. |
 | `:page-solution-related-solutions:` | no | solution ids | |
 | `:page-solution-superseded-by:` | when deprecated | solution id | |
