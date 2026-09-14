@@ -134,8 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           cp .env.example .env
-          brokers="$(rpk profile print -o yaml | awk '/brokers:/{f=1;next} f&&/- /{gsub(/^ *- /,"");print;exit}')"
-          sr="$(rpk profile print -o yaml | awk '/schema_registry:/{f=1} f&&/- http/{gsub(/^ *- /,"");print;exit}')"
+          brokers="$(rpk profile print | awk '/brokers:/{f=1;next} f&&/- /{gsub(/^ *- /,"");print;exit}')"
+          sr="$(rpk profile print | awk '/schema_registry:/{f=1} f&&/- http/{gsub(/^ *- /,"");print;exit}')"
           [ -n "$brokers" ] || { echo "could not read the bootstrap server from the profile"; exit 1; }
           [ -n "$sr" ] || { echo "could not read the Schema Registry URL from the profile"; exit 1; }
           # Overwrite exactly the keys env.cloud.example lists, so this stays
@@ -168,7 +168,7 @@ jobs:
         # The cluster is shared. Teardown deletes the difference between this
         # list and the list afterwards, so it can never remove a topic this run
         # did not create, whoever else is using the cluster.
-        run: rpk topic list -f '%n\n' | tail -n +2 | sort > "$RUNNER_TEMP/topics-before.txt"
+        run: rpk topic list --format json | jq -r '(.topics // .)[].name' | sort > "$RUNNER_TEMP/topics-before.txt"
 
       - name: Start the stack against Cloud
         if: steps.opt-in.outputs.run == 'true'
@@ -211,7 +211,7 @@ jobs:
             # Two independent conditions, because deleting someone else's topic
             # on a shared cluster is the one unrecoverable mistake here.
             if [ -f "$RUNNER_TEMP/topics-before.txt" ] && [ -n "$prefix" ]; then
-              rpk topic list -f '%n\n' 2>/dev/null | tail -n +2 | sort > "$RUNNER_TEMP/topics-after.txt"
+              rpk topic list --format json 2>/dev/null | jq -r '(.topics // .)[].name' | sort > "$RUNNER_TEMP/topics-after.txt"
               comm -13 "$RUNNER_TEMP/topics-before.txt" "$RUNNER_TEMP/topics-after.txt" \
                 | grep -E "^$(printf '%s' "$prefix" | sed 's/[.[\*^$()+?{|]/\\&/g')" \
                 | while read -r t; do
