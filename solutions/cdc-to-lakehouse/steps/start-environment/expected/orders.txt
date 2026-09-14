@@ -1,0 +1,8 @@
+ order_id | customer_id | total  | status  
+----------+-------------+--------+---------
+        1 |           1 |  50.00 | placed
+        2 |           2 | 100.00 | placed
+        3 |           2 |  50.00 | shipped
+        4 |           3 |  10.00 | placed
+        5 |           4 |  90.00 | shipped
+(5 rows)

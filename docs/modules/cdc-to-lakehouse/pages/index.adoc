@@ -42,7 +42,7 @@ Two operational databases, one streaming pipeline each, and one lakehouse table.
 * *Redpanda Console* on the topic, its configuration, and the registered schema.
 
 .Captured by this solution's test run
-image::console-iceberg-topic.png[The cdc_orders topic in Redpanda Console after the Postgres change events arrived]
+image::console-iceberg-topic.png[The cdc_orders topic's configuration in Redpanda Console, with an Iceberg category holding the two properties that make Redpanda write the topic to a table]
 
 == Architecture
 

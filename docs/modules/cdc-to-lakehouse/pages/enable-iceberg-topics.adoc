@@ -62,10 +62,10 @@ include::example$steps/enable-iceberg-topics/commands.sh[tag=describe]
 include::example$steps/enable-iceberg-topics/expected/describe.txt[]
 ----
 
-. Open Redpanda Console at http://localhost:8480/topics/cdc_orders. The topic is empty, and the *Schema Registry* page now lists `cdc_orders-value`.
+. Open Redpanda Console at http://localhost:8480/topics/cdc_orders and select *Configuration*. The *Iceberg* category holds the two properties you just set, and the *Modified* filter shows that they are the only two this topic overrides. The topic itself is empty, because nothing has produced to it yet, and the *Schema Registry* page now lists `cdc_orders-value`.
 +
 .Captured by this solution's test run
-image::console-iceberg-topic.png[The cdc_orders topic in Redpanda Console]
+image::console-iceberg-topic.png[The cdc_orders topic's Configuration tab in Redpanda Console, with the Iceberg category showing two properties]
 
 == Why
 

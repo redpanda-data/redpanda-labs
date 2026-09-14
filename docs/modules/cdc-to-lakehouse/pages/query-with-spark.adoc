@@ -35,7 +35,7 @@ include::example$steps/query-with-spark/commands.sh[tag=columns]
 include::example$steps/query-with-spark/expected/columns.txt[]
 ----
 +
-Nine columns from the schema plus a `redpanda` struct Redpanda adds itself, holding the record's key, timestamp, partition, and offset.
+Nine columns from the schema, one per property, plus a `redpanda` struct Redpanda adds to every Iceberg table it writes, holding the record's `partition`, `offset`, `timestamp`, `timestamp_type`, `key`, and `headers`. The trailer shows the table's default partitioning, `hours(redpanda.timestamp)`: Redpanda partitions every Iceberg table it writes by the hour the record arrived, which is what makes a query over a time range read only the files it needs.
 
 . Read the change log:
 +
@@ -80,7 +80,7 @@ Redpanda created the table when the first record was translated. The name is `<c
 
 Each translation cycle writes one or more Parquet data files under `s3://redpanda/redpanda/cdc_orders/data/` and commits a snapshot to the catalog that lists them. Spark's Iceberg catalog is configured with `cache-enabled false`, so every query re-reads the current snapshot rather than serving a cached table state; with caching on, a query run seconds after a change can miss it.
 
-The `redpanda` struct column is worth knowing about. Redpanda adds it to every Iceberg table it writes, whatever the mode, and it carries the record's Kafka coordinates: key, timestamp, partition, and offset. It is the join key back to the topic when a row in the table needs explaining.
+The `redpanda` struct column is worth knowing about. Redpanda adds it to every Iceberg table it writes, whatever the mode, and it carries the record's Kafka coordinates: `partition`, `offset`, `timestamp`, `timestamp_type`, `key`, and `headers`. It is the join back to the topic when a row in the table needs explaining, and `redpanda.key` here holds the `order_id` the pipeline keyed on, as raw bytes. See xref:streaming:manage:iceberg/specify-iceberg-schema.adoc[].
 
 Complete sources for building along:
 

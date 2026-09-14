@@ -2,9 +2,6 @@
 # authentication: this is a local stack behind a local port.
 kafka:
   brokers: ["redpanda:9092"]
-  schemaRegistry:
-    enabled: true
-    urls: ["http://redpanda:8081"]
 schemaRegistry:
   enabled: true
   urls: ["http://redpanda:8081"]

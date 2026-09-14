@@ -63,7 +63,7 @@ include::example$steps/start-environment/commands.sh[tag=orders]
 include::example$steps/start-environment/expected/orders.txt[]
 ----
 
-. Check that the object store's bucket exists and is empty:
+. Check the object store's bucket. It is not empty: Redpanda has already written its cluster metadata and the Tiered Storage metastore manifest there, which is the proof that the object store credentials and the endpoint work before any topic exists:
 +
 [source,bash]
 ----

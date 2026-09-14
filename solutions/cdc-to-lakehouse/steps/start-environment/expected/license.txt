@@ -1,0 +1,8 @@
+LICENSE INFORMATION
+===================
+License status:              valid
+License violation:           false
+Enterprise features in use:  [datalake_iceberg partition_auto_balancing_continuous cloud_storage core_balancing_continuous]
+Organization:                Redpanda Built-In Evaluation Period
+Type:                        free_trial
+Expires:                     Oct 14 2026

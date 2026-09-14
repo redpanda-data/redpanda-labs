@@ -1,0 +1,9 @@
+catalog: healthy
+console: healthy
+mc: healthy
+minio: healthy
+mysql: healthy
+postgres: healthy
+redpanda: healthy
+rpk: healthy
+spark: healthy

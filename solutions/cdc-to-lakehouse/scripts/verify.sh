@@ -79,7 +79,11 @@ expected=$((expected_pg + expected_my))
 hwm=$(retry 30 5 sh -c "test \"\$(docker compose exec -T rpk rpk topic describe $TOPIC -p 2>/dev/null </dev/null | awk 'NR>1 {s+=\$NF} END {print s+0}')\" -ge $expected" \
   && rpk_exec topic describe "$TOPIC" -p 2>/dev/null </dev/null | awk 'NR>1 {s+=$NF} END {print s+0}')
 assert_eq "$TOPIC holds $expected change events" "$expected" "$hwm"
-assert_contains "an update event carries the new status" '"op":"update"' "$(rpk_exec topic consume "$TOPIC" --offset start --num "$expected" -f '%v' 2>/dev/null </dev/null)"
+# Whitespace is stripped so the check is about the event, not about how the
+# producer chose to space its JSON.
+events=$(rpk_exec topic consume "$TOPIC" --offset start --num "$expected" -f '%v' 2>/dev/null </dev/null | tr -d ' \t')
+assert_contains "the topic holds an update event" '"op":"update"' "$events"
+assert_contains "the topic holds a delete event" '"op":"delete"' "$events"
 
 # 6. Redpanda wrote the Iceberg files into the object store and registered the
 #    table with the catalog.

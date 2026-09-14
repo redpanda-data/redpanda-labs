@@ -1,0 +1,6 @@
+KEY                                     VALUE                       SOURCE
+redpanda.iceberg.delete                 true                        DEFAULT_CONFIG
+redpanda.iceberg.invalid.record.action  dlq_table                   DYNAMIC_TOPIC_CONFIG
+redpanda.iceberg.mode                   value_schema_latest         DYNAMIC_TOPIC_CONFIG
+redpanda.iceberg.partition.spec         (hour(redpanda.timestamp))  DEFAULT_CONFIG
+redpanda.iceberg.target.lag.ms          10000                       DEFAULT_CONFIG

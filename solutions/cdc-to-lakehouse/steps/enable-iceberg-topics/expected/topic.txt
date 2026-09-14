@@ -1,0 +1,2 @@
+TOPIC       STATUS
+cdc_orders  OK
