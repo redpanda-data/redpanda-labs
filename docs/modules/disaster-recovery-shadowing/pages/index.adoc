@@ -11,7 +11,6 @@
 :page-solution-technologies: Redpanda, Shadowing, Envoy, Redpanda Console, Redpanda Operator, Kubernetes, Python, Docker Compose
 :page-categories: Disaster Recovery, Data Replication, Failover and Recovery, Consumer Groups, Networking
 :page-solution-use-cases: Disaster recovery, Business continuity
-:page-solution-assumes: failover, Kubernetes, client configuration
 :personas: platform_operator, streaming_developer
 :page-solution-steps: start-environment, create-shadow-link, route-clients-through-envoy, simulate-disaster, fail-over, verify-end-to-end, deploy-on-kubernetes
 :page-solution-related-docs: streaming:manage:disaster-recovery/shadowing/index.adoc, streaming:manage:disaster-recovery/shadowing/overview.adoc, streaming:manage:disaster-recovery/shadowing/setup.adoc, streaming:manage:disaster-recovery/shadowing/failover.adoc, streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc, streaming:manage:disaster-recovery/shadowing/monitor.adoc, streaming:develop:consume-data/consumer-offsets.adoc, streaming:deploy:redpanda/kubernetes/index.adoc
