@@ -8,7 +8,7 @@ make up
 # end::up[]
 
 # tag::anonymous[]
-! docker compose exec -T rpk-source env -u RPK_USER -u RPK_PASS -u RPK_SASL_MECHANISM rpk topic list 2>&1
+docker compose exec -T rpk-source env -u RPK_USER -u RPK_PASS -u RPK_SASL_MECHANISM rpk topic list 2>&1 || true
 # end::anonymous[]
 
 # tag::users[]

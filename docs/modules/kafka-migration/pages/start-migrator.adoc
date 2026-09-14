@@ -20,6 +20,7 @@ include::example$steps/start-migrator/commands.sh[tag=migrate]
 include::example$steps/start-migrator/expected/migrate.txt[]
 ----
 +
+.What `make migrate` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=migrate]

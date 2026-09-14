@@ -63,6 +63,7 @@ include::example$steps/verify-schemas/commands.sh[tag=schema-v2]
 include::example$steps/verify-schemas/expected/schema-v2.txt[]
 ----
 +
+.`order-v2.avsc`
 [source,json]
 ----
 include::example$schemas/order-v2.avsc[]

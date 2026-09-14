@@ -20,6 +20,7 @@ include::example$steps/seed-source/commands.sh[tag=topics]
 include::example$steps/seed-source/expected/topics.txt[]
 ----
 +
+.What `make topics` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=topics]
@@ -53,6 +54,7 @@ include::example$steps/seed-source/commands.sh[tag=schemas]
 include::example$steps/seed-source/expected/schemas.txt[]
 ----
 +
+.What `make schemas` runs
 [source,makefile]
 ----
 include::example$Makefile[tags=schemas]

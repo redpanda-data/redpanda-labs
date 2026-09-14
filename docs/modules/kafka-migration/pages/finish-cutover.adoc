@@ -49,6 +49,7 @@ Twelve partitions, twelve identical offsets. The records on this workload are 20
 include::example$steps/finish-cutover/commands.sh[tag=consumer-target]
 ----
 +
+.`docker-compose.yml`
 [source,yaml]
 ----
 include::example$docker-compose.yml[tags=cutover]
@@ -89,6 +90,7 @@ include::example$steps/finish-cutover/commands.sh[tag=wait-lag]
 include::example$steps/finish-cutover/expected/wait-lag.txt[]
 ----
 +
+.`commands.sh`
 [source,bash]
 ----
 include::example$steps/finish-cutover/commands.sh[tag=watermarks]
