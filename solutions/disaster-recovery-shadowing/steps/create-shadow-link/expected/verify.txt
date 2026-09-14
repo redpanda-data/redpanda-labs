@@ -1,0 +1,26 @@
+TOPICS
+======
+Name: _schemas, State: ACTIVE
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+      0          0        0        0        0
+
+Name: dr-orders, State: ACTIVE
+      PARTITION  SRC-LSO  SRC-HWM  DST-HWM  LAG
+      0          0        0        0        0
+      1          0        0        0        0
+      2          0        0        0        0
+
+Synced Shadow Topic Properties:
+  - cleanup.policy
+  - compression.type
+  - delete.retention.ms
+  - max.compaction.lag.ms
+  - max.message.bytes
+  - message.timestamp.type
+  - min.compaction.lag.ms
+  - redpanda.storage.mode
+  - redpanda.storage.mode.impl
+  - replication.factor
+  - retention.bytes
+  - retention.ms
+  - segment.ms

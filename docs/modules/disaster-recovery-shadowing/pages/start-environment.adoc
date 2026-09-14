@@ -1,0 +1,137 @@
+= Start the environment
+:page-layout: solution-step
+:description: Start both Redpanda clusters with Shadowing enabled, the Envoy proxy in front of them, a Console for each cluster, and the client, and confirm that all eight services are healthy.
+:page-solution-step-duration: 6
+
+You bring up both sides of the recovery with one command: a source cluster, a shadow cluster, the Envoy proxy that will hide the difference between them, one Redpanda Console per cluster, and the Python client that plays the application. Nothing is replicated yet, and no link exists.
+
+== What you do
+
+. Choose one of two paths. Both end with the same running stack.
++
+*Download the complete example* (sign in required). Unzip it and change into `disaster-recovery-shadowing/`.
++
+*Or build along.* Create a directory `disaster-recovery-shadowing/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example`, `Makefile.mk` as `Makefile`, and `client/Dockerfile.txt` as `client/Dockerfile`, and `chmod +x` the files under `scripts/`.
+
+. Start everything and wait for the healthchecks:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+The first run pulls Redpanda, Redpanda Console, and the Envoy contrib image, and builds the client image. Later starts take under a minute. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every host port. The last thing `make up` prints is which cluster Envoy is sending clients to, because it does not return until Envoy has an endpoint it will serve.
+
+. Open the two Consoles. The source cluster is at http://localhost:8380 and the shadow cluster is at http://localhost:8381. Both topic lists hold only `_schemas`, the topic Redpanda's Schema Registry keeps its state in. Keep the shadow Console open: from the next step on, it is where replication shows up.
+
+== Why
+
+The two clusters are separate Redpanda deployments, not two brokers of one cluster, because that is what a disaster recovery topology is: a failure that takes out a cluster takes out all of its brokers. Everything that follows depends on the two being independent, including the fact that stopping one leaves the other running.
+
+Envoy starts in front of both from the beginning, before there is anything to fail over to. A proxy introduced during an incident is a change made under pressure; a proxy that has been the only address clients know since the first day is the reason the incident is short.
+
+== Why Redpanda
+
+Shadowing is part of the broker. `enable_shadow_linking=true` is the whole configuration on both clusters, and the link you create in the next step runs inside the shadow cluster: there is no replication service to deploy, scale, or monitor separately. See xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[].
+
+== What happens inside
+
+Each Redpanda container starts in `dev-container` mode with one shard and 1 GB of memory, and reports healthy once its Raft groups have a leader. Both set `enable_shadow_linking=true`, because the source has to serve the fetches the link makes and the shadow has to run the link. Both also set `cluster_id`, which is what `rpk cluster info` and the two Consoles show, so that you can always tell which cluster a window is looking at.
+
+Envoy waits for both clusters to pass their healthchecks, then starts its own active health checks against each of them. It marks an endpoint healthy only after two consecutive successful checks, and until one endpoint is healthy it has nowhere to send Kafka traffic: a client that connects in that window gets no metadata back. So `make up` ends by asking Envoy which cluster it is routing to and waits until there is an answer, and every client script waits the same way rather than failing.
+
+The source cluster's service in the compose file:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=source]
+----
+
+The two Consoles, each pointed at one cluster:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=consoles]
+----
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: console/source.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console/source.yaml[]
+----
+====
+
+.Complete source: console/shadow.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console/shadow.yaml[]
+----
+====
+
+.Complete source: client/Dockerfile
+[%collapsible]
+====
+[source,dockerfile]
+----
+include::example$client/Dockerfile[]
+----
+====
+
+.Complete source: Makefile
+[%collapsible]
+====
+[source,makefile]
+----
+include::example$Makefile[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The two usual causes are Docker having less than 4 GB of memory available, so one of the brokers cannot allocate its 1 GB, and a host port already in use, which you move with the matching `*_PORT` variable in `.env` before substituting it in the commands that follow.
+
+== In production
+
+[.production-note]
+The two clusters are deployed, secured, and sized separately, in separate failure domains, and the proxy is a highly available deployment rather than one container. See the Brokers and replication and Security rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/envoy/envoy.yaml[envoy/envoy.yaml]
+* link:{attachmentsdir}/config/shadow-link.yaml[config/shadow-link.yaml]
+* link:{attachmentsdir}/console/source.yaml[console/source.yaml] and link:{attachmentsdir}/console/shadow.yaml[console/shadow.yaml]
+* link:{attachmentsdir}/client/Dockerfile.txt[client/Dockerfile.txt] (save it as `client/Dockerfile`) and link:{attachmentsdir}/client/requirements.txt[client/requirements.txt]
+* link:{attachmentsdir}/sample-data/orders.json[sample-data/orders.json], link:{attachmentsdir}/sample-data/orders-after-failover.json[sample-data/orders-after-failover.json], and link:{attachmentsdir}/sample-data/README.md[sample-data/README.md]
+* link:{attachmentsdir}/scripts/common.py[scripts/common.py], link:{attachmentsdir}/scripts/produce.py[scripts/produce.py], link:{attachmentsdir}/scripts/consume.py[scripts/consume.py], link:{attachmentsdir}/scripts/parity.py[scripts/parity.py], link:{attachmentsdir}/scripts/offsets.py[scripts/offsets.py], link:{attachmentsdir}/scripts/endpoint.py[scripts/endpoint.py], link:{attachmentsdir}/scripts/state.py[scripts/state.py], link:{attachmentsdir}/scripts/check-kubernetes.sh[scripts/check-kubernetes.sh], link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh], and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (`chmod +x` the two shell scripts)

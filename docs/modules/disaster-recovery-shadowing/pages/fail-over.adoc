@@ -1,0 +1,104 @@
+= Fail the shadow topics over
+:page-layout: solution-step
+:description: Promote the shadow topics so the shadow cluster accepts writes, produce six more orders through the same address, and watch the consumer group resume from its replicated offsets.
+:page-solution-step-duration: 6
+
+The shadow cluster holds every record and every committed offset, and clients already reach it. One decision is left: promote the shadow topics so that they accept writes. This is the irreversible step, and the one a real failover asks a human to authorize.
+
+== What you do
+
+. Fail every topic of the link over. `make failover` runs `rpk shadow failover --all` and then waits until each topic reports `FAILED_OVER`:
++
+[source,bash]
+----
+include::example$steps/fail-over/commands.sh[tag=failover]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/fail-over/expected/failover.txt[]
+----
++
+The partition rows are empty now. A failed-over topic has no source to compare itself with, so there is no lag to report.
+
+. Produce the six remaining orders through the same Envoy address, the one that was refused a moment ago:
++
+[source,bash]
+----
+include::example$steps/fail-over/commands.sh[tag=produce]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/fail-over/expected/produce.txt[]
+----
+
+. In the shadow Console at http://localhost:8381, `dr-orders` now holds 18 records, and *Consumer Groups* lists `dr-consumers` with no lag. It is a group that never connected to this cluster before the outage, caught up to the end of a topic it has now read on both clusters. The `observer-during-disaster` group next to it is the one that read during the outage.
++
+.Captured by this solution's test run
+image::console-shadow-group.png[The shadow cluster's consumer groups in Redpanda Console: dr-consumers and observer-during-disaster, both with zero offset lag]
+
+== Why
+
+Failover is a separate, explicit step from the client move because the two answer different questions. Envoy answers "which cluster can serve this connection", automatically, in seconds, and reversibly. `rpk shadow failover` answers "is the source cluster gone for good", and there is no automatic answer to that: a cluster that is unreachable for thirty seconds during a network event must not be replaced, and a proxy cannot tell the difference. Making the promotion manual is what keeps a blip from becoming a split brain.
+
+Once the topics are promoted the link stops fetching, so the shadow cluster is no longer tracking the source. If the source cluster came back now, its records after the last replicated offset would exist nowhere on the shadow cluster, and the two logs would have diverged. That is why this step is last and why it cannot be undone.
+
+== Why Redpanda
+
+Promotion is a state change, not a copy. The data is already in the shadow topic's partitions at the source's offsets, so failing over three partitions takes as long as an Admin API call: each partition stops its replication fetcher and starts accepting produce requests, and the next record is appended at the offset after the last replicated one. The consumer group's committed offsets are already in the shadow cluster's `__consumer_offsets`, so the group resumes without being told anything. See xref:streaming:manage:disaster-recovery/shadowing/failover.adoc[] and xref:streaming:reference:rpk/rpk-shadow/rpk-shadow-failover.adoc[].
+
+== What happens inside
+
+`rpk shadow failover --all` asks the shadow cluster's Admin API to move every topic of the link from `ACTIVE` through `FAILING_OVER` to `FAILED_OVER`. For each partition, the fetcher that was reading from the source stops and the partition becomes an ordinary leader that accepts produce requests. The link itself stays, with its topics in `FAILED_OVER`, so `rpk shadow status` remains the record of what happened; delete the link when you no longer need it.
+
+The client then produces `ord-0013` to `ord-0018`, which are appended after the replicated records on the same three partitions. When the `dr-consumers` group rejoins, the coordinator on the shadow cluster hands it the committed offsets the link replicated, so it starts at partition 0 offset 4, partition 1 offset 6, and partition 2 offset 2, and reads only the six new records.
+
+The Makefile targets for this step:
+
+[source,makefile]
+----
+include::example$Makefile[tags=failover]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/offsets.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/offsets.py[]
+----
+====
+
+== Verify
+
+Read as the same group that was reading before the outage:
+
+[source,bash]
+----
+include::example$steps/fail-over/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/fail-over/expected/verify.txt[]
+----
+
+Six records, not eighteen: the group resumed from the offsets the link replicated instead of reprocessing the topic. If it reads 18 records, the offsets did not arrive before the failover, which means the group's id does not match the link's group filter. If it reads 0, the group was already advanced to the end of the topic by an earlier run; `make clean` and start again.
+
+== In production
+
+[.production-note]
+The decision to promote belongs in a runbook with the criteria for making it, who makes it, and what happens to the old primary afterwards. See the Disaster recovery row in xref:index.adoc#_production_considerations[Production considerations] and xref:streaming:manage:disaster-recovery/shadowing/failover-runbook.adoc[].
+
+.Files for this step
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/scripts/produce.py[scripts/produce.py] and link:{attachmentsdir}/scripts/consume.py[scripts/consume.py]
+* link:{attachmentsdir}/sample-data/orders-after-failover.json[sample-data/orders-after-failover.json]

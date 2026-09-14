@@ -1,0 +1,1 @@
+../../../../../tools/verify-lib.sh

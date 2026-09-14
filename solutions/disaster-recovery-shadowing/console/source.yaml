@@ -1,0 +1,11 @@
+# Redpanda Console for the source cluster. This is the view that goes dark in
+# the disaster.
+kafka:
+  brokers: ["redpanda-source:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda-source:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda-source:9644"]

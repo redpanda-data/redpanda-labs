@@ -1,0 +1,8 @@
+client: healthy
+console-shadow: healthy
+console-source: healthy
+envoy: healthy
+redpanda-shadow: healthy
+redpanda-source: healthy
+rpk-shadow: healthy
+rpk-source: healthy

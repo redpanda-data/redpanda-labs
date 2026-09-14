@@ -1,0 +1,5 @@
+group: dr-consumers
+partition 0: source offset 4, shadow offset 4
+partition 1: source offset 6, shadow offset 6
+partition 2: source offset 2, shadow offset 2
+the shadow cluster holds the same committed offsets as the source

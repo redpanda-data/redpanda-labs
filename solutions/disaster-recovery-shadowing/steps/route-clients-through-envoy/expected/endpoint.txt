@@ -1,0 +1,6 @@
+bootstrap: envoy:9092
+broker 0 at envoy:9092
+topic dr-orders has 3 partition(s)
+source cluster (priority 0): healthy
+shadow cluster (priority 1): healthy
+Envoy is routing clients to the source cluster

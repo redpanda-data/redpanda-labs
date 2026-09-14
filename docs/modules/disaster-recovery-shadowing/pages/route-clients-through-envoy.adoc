@@ -1,0 +1,184 @@
+= Route clients through Envoy
+:page-layout: solution-step
+:description: Produce and consume orders through the Envoy proxy while the source cluster is healthy, then prove that the records and the consumer group's offsets both reached the shadow cluster.
+:page-solution-step-duration: 8
+
+The client has one address, `envoy:9092`, and it is about to use it for everything: producing the orders, reading them as a consumer group, and later reading them again from a different cluster. In this step the source cluster is the one behind that address, and you prove that the shadow cluster is keeping up.
+
+== What you do
+
+. Ask the client what it can see, and ask Envoy where it is sending traffic:
++
+[source,bash]
+----
+include::example$steps/route-clients-through-envoy/commands.sh[tag=endpoint]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/route-clients-through-envoy/expected/endpoint.txt[]
+----
++
+The broker address the client was given is Envoy's own, not the source broker's. That rewrite is the whole trick, and it is the reason a failover needs no client change.
+
+. Produce the 12 orders through Envoy:
++
+[source,bash]
+----
+include::example$steps/route-clients-through-envoy/commands.sh[tag=produce]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/route-clients-through-envoy/expected/produce.txt[]
+----
+
+. Read them back as the `dr-consumers` group and commit the offsets:
++
+[source,bash]
+----
+include::example$steps/route-clients-through-envoy/commands.sh[tag=consume]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/route-clients-through-envoy/expected/consume.txt[]
+----
++
+The group had no committed offsets, so it started at the beginning of each partition. It now has offsets, and they are the thing the link replicates next.
+
+. Compare the two clusters record for record. This script is the one part of the client that connects to each cluster directly, because a proxy that hides which cluster answered cannot be used to compare them:
++
+[source,bash]
+----
+include::example$steps/route-clients-through-envoy/commands.sh[tag=parity]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/route-clients-through-envoy/expected/parity.txt[]
+----
+
+. In the shadow Console at http://localhost:8381, open *Topics*. `dr-orders` is there with its three partitions and the data the link replicated, next to the `_schemas` topic the link also brought across. Open the topic to see the 12 records on the same partitions and at the same offsets as on the source cluster.
++
+.Captured by this solution's test run
+image::console-shadow-topic.png[The shadow cluster's topic list in Redpanda Console: the replicated dr-orders topic with three partitions, the replicated _schemas topic, and the cluster's own __consumer_offsets]
+
+== Why
+
+Replication parity is a claim you check before you need it, not after. Lag reported by the link is a good signal, but the question a recovery plan has to answer is "does the other cluster hold my records", so `make parity` asks the two clusters instead of asking the link about itself. It compares high watermarks partition by partition, because a total that matches while one partition is behind is exactly the failure a total would hide.
+
+The consumer offsets are checked separately, in the Verify step, because they travel on a different task of the same link and can lag behind the records. A recovery that has the data but not the offsets still works; it just costs you a reprocessing run that nobody planned for.
+
+== Why Redpanda
+
+The shadow topic preserves the source's offsets, so partition 1 offset 5 is the same record on both clusters and the replicated committed offsets need no translation. That is what makes a consumer's resume point portable, and it is why `make parity` can compare raw watermarks and mean something. See xref:streaming:develop:consume-data/consumer-offsets.adoc[] and xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[].
+
+== What happens inside
+
+The client asks Envoy for metadata about `dr-orders`. Envoy forwards the request to the source cluster, parses the response, and rewrites the address of broker 0 from `redpanda-source:9092` to `envoy:9092` before passing it on. The client then opens its produce connections to that address, so they arrive at Envoy too, and Envoy forwards each one to whichever endpoint it currently considers healthy. Redpanda hashes each record's key to pick a partition, which is why the 12 orders land 4, 6, and 2 across the three partitions on every run.
+
+The filter that does the rewriting:
+
+[source,yaml]
+----
+include::example$envoy/envoy.yaml[tags=rewrite]
+----
+
+On the other side, the link's fetcher reads the new records from the source cluster's partitions and appends them to the shadow topic's partitions at the same offsets, and the offset sync task copies the group's committed offsets across a few seconds after the consumer commits them.
+
+The Makefile targets for this step:
+
+[source,makefile]
+----
+include::example$Makefile[tags=workload]
+----
+
+Complete sources for building along:
+
+.Complete source: envoy/envoy.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$envoy/envoy.yaml[]
+----
+====
+
+.Complete source: scripts/common.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/common.py[]
+----
+====
+
+.Complete source: scripts/produce.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/produce.py[]
+----
+====
+
+.Complete source: scripts/consume.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/consume.py[]
+----
+====
+
+.Complete source: scripts/parity.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/parity.py[]
+----
+====
+
+.Complete source: scripts/endpoint.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/endpoint.py[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/route-clients-through-envoy/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/route-clients-through-envoy/expected/verify.txt[]
+----
+
+The offsets on the shadow cluster are the same numbers the group committed on the source. If the script times out, the group filter does not match: the link replicates groups whose ids start with `dr-`, and the group here is `dr-consumers`. If the offsets differ by a few records, the sync task has not caught up; the script polls for two minutes, so a timeout means something is wrong rather than slow.
+
+== In production
+
+[.production-note]
+Parity and offset lag are monitored continuously rather than checked by hand, and alerting on them is what tells you whether a failover is safe on the day. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/envoy/envoy.yaml[envoy/envoy.yaml]
+* link:{attachmentsdir}/scripts/common.py[scripts/common.py], link:{attachmentsdir}/scripts/produce.py[scripts/produce.py], link:{attachmentsdir}/scripts/consume.py[scripts/consume.py], link:{attachmentsdir}/scripts/parity.py[scripts/parity.py], link:{attachmentsdir}/scripts/offsets.py[scripts/offsets.py], and link:{attachmentsdir}/scripts/endpoint.py[scripts/endpoint.py]
+* link:{attachmentsdir}/sample-data/orders.json[sample-data/orders.json]

@@ -1,0 +1,55 @@
+# The source cluster: one Redpanda broker in the `source` namespace, managed by
+# the Redpanda Operator. Shadow linking is a cluster property, so it is set
+# here as well as on the shadow cluster: the source has to serve the fetches
+# the link makes.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: source
+---
+# tag::cluster[]
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Redpanda
+metadata:
+  name: redpanda
+  namespace: source
+spec:
+  clusterSpec:
+    image:
+      tag: v26.2.2
+    statefulset:
+      replicas: 1
+    config:
+      cluster:
+        default_topic_replications: 1
+        enable_shadow_linking: true
+        cluster_id: dr-source
+    # An external listener on a fixed node port so that `rpk` on your machine
+    # can reach the cluster through `kubectl port-forward`.
+    external:
+      enabled: true
+      service:
+        enabled: false
+      addresses:
+        - localhost
+    listeners:
+      kafka:
+        external:
+          default:
+            enabled: true
+            port: 9094
+            advertisedPorts:
+              - 19094
+    # Plaintext and no authentication, to keep the walkthrough to the
+    # replication itself. Production clusters need both on each side of the
+    # link.
+    tls:
+      enabled: false
+    auth:
+      sasl:
+        enabled: false
+    storage:
+      tiered:
+        config:
+          cloud_storage_enabled: false
+# end::cluster[]

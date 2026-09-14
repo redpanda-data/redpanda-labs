@@ -1,0 +1,6 @@
+kubernetes/source-cluster.yaml: namespace source, Redpanda v26.2.2, cluster_id dr-source, shadow linking true, external Kafka port 19094
+kubernetes/shadow-cluster.yaml: namespace shadow, Redpanda v26.2.2, cluster_id dr-shadow, shadow linking true, external Kafka port 29094
+kubernetes/shadow-link.yaml: ShadowLink disaster-recovery-shadowing reads redpanda.source.svc.cluster.local and writes redpanda.shadow.svc.cluster.local
+kubernetes/shadow-link.yaml: topics with prefix dr-, consumer groups with prefix dr-, Schema Registry mode topic
+the filters match config/shadow-link.yaml, so both paths create the same link
+3 manifest(s) ready to apply

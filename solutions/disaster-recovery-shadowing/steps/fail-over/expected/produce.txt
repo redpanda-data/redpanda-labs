@@ -1,0 +1,4 @@
+bootstrap: envoy:9092
+Envoy is routing clients to the shadow cluster
+produced 6 record(s) to dr-orders
+keys ord-0013 to ord-0018

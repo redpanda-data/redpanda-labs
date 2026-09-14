@@ -1,0 +1,5 @@
+bootstrap: envoy:9092
+Envoy is routing clients to the shadow cluster
+group dr-consumers read 6 record(s) from dr-orders
+keys ord-0013 to ord-0018
+resumed from partition 0 at offset 4, partition 1 at offset 6, partition 2 at offset 2

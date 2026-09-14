@@ -1,0 +1,92 @@
+= Verify the recovery end to end
+:page-layout: solution-step
+:description: Run the verification script, which asserts replication parity before the outage, client continuity during it, and the consumer group resuming on the shadow cluster afterwards.
+:page-solution-step-duration: 3
+
+Every step so far proved one claim as you made it. This step checks all of them at once, including the ones that were only true earlier in the walkthrough, and prints a single verdict.
+
+== What you do
+
+. Look at the end state of the topic on the shadow cluster:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=topic]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/topic.txt[]
+----
++
+Eighteen records across the three partitions: the 12 the source cluster received and the 6 written after the failover, on one cluster, at consecutive offsets.
+
+== Why
+
+A recovery you cannot verify is a recovery you have to take on trust, and the parts that matter most are the hardest to check afterwards. By the time this script runs, the source cluster is gone, so nothing can measure whether the two clusters were at parity before the outage or whether a reader really worked while the source was down.
+
+So each step records what it measured, at the moment it measured it, into `state/`, and this script asserts those recorded facts alongside what it can still measure live. That is why the checks about the state before and during the outage are as exact as the ones about the end state.
+
+== Why Redpanda
+
+The claims are checkable because the primitives are exact. Offsets are preserved, so a watermark on one cluster can be compared with a watermark on the other. Committed offsets are replicated rather than approximated, so "the group resumed where it stopped" is an equality, not an estimate. Shadow topic state is reported per topic, so `FAILED_OVER` is something the script reads rather than infers. See xref:streaming:manage:disaster-recovery/shadowing/monitor.adoc[].
+
+== What happens inside
+
+The script sources `tools/verify-lib.sh` for its assertions, reads the recorded facts through a small helper that runs inside the client container so that the host needs no JSON tooling, and measures the rest against the shadow cluster, Envoy's admin API, and the shadow Console. Its 23 checks fall into eight groups: what is left standing, the state before the outage, replication parity, the replicated consumer offsets, client continuity during the outage, the failover, the consumer resuming, and the end state of the topic.
+
+The assertions themselves:
+
+[source,bash]
+----
+include::example$scripts/verify.sh[tags=checks]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+.Complete source: scripts/state.py
+[%collapsible]
+====
+[source,python]
+----
+include::example$scripts/state.py[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+`PASS (23/23)` and exit code 0. A failed check names what it expected and what it got. A check that reads a state file and fails because the file does not exist means that step was skipped: run `make clean`, then `make up` and `make seed`, which runs the whole path in order.
+
+== In production
+
+[.production-note]
+The equivalent of this script is a scheduled failover rehearsal against a real pair of clusters, with the same assertions and a report that someone reads. See the Disaster recovery row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (`chmod +x` them)
+* link:{attachmentsdir}/scripts/state.py[scripts/state.py]
