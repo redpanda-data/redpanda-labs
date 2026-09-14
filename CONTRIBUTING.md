@@ -316,7 +316,10 @@ supported in headless mode with the browser engine. Use the ffmpeg engine to
 record headless." Declaring `ffmpeg` breaks macOS, where capturing the screen
 needs a screen-recording permission that no CI runner and no fresh laptop
 grants. Undeclared, a headed Chrome context records its tab and a headless one
-records the display, and both work.
+records the display, and both work. doc-detective's own CI guide says the
+browser engine works headless, which the runtime contradicts; that is
+doc-detective issue 717, so check whether it has been resolved before trusting
+that page or revisiting this.
 
 That is also why the CI workflows install `xvfb` and run the suite under
 `xvfb-run`: the generated spec pins headed Chrome for a recording, headed
@@ -340,7 +343,10 @@ per millisecond, which took the flagship's 15-second recording from 1.6 MB at
 50 fps to 6.2 MB at 1000 fps (measured; checkpoints alone, with no steps in
 the window, are harmless). Shipping that in every reader's bundle to work
 around a tool bug is the wrong trade, so recordings stay on `true` and are
-rewritten by every run.
+rewritten by every run. That blow-up is doc-detective issue 718, and if it is
+fixed `aboveVariation` becomes the better setting for a recording too, so this
+paragraph and the nightly's recording suppression should be revisited
+together.
 
 The consequence is worth knowing. The nightly's drift step never opens a pull
 request for a changed recording on its own, so the screenshot is the detector:
