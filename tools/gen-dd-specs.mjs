@@ -164,7 +164,10 @@ function commandText(step, tag, where) {
 }
 
 // Regex for stdout from a captured expected-output file.
-const D = "\u0000D", S = "\u0000S";
+// D digits, S one run without spaces, T a timestamp (which can hold a space
+// between the date and the time, so S cannot stand in for it), L a set that a
+// tool prints in brackets in an order it does not promise to keep.
+const D = "\u0000D", S = "\u0000S", T = "\u0000T", L = "\u0000L";
 function expectedRegex(step, tag, where) {
   const file = join(codeDir, "steps", step, "expected", `${tag}.txt`);
   if (!existsSync(file)) {
@@ -181,8 +184,15 @@ function expectedRegex(step, tag, where) {
     .map((line) =>
       line
         .replace(/\s+$/, "")
-        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/g, S) // ISO timestamps
-        .replace(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/g, S) // Go log timestamps
+        // Bracketed sets first: rpk prints them in map order, which varies from
+        // run to run, so their order cannot be asserted. Doing it first also keeps
+        // the tokens inside from being digit-mangled by the rules below.
+        .replace(/\[[a-z0-9_]+(?: [a-z0-9_]+)+\]/g, L) // unordered sets
+        // Before the digit rule, so both hex halves survive: a Postgres LSN is hex,
+        // and generalizing only its digit runs leaves the A-F characters literal.
+        .replace(/\b[0-9A-F]{6,}\/[0-9A-F]{6,}\b/g, S) // Postgres LSNs
+        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/g, T) // ISO timestamps
+        .replace(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/g, T) // Go log timestamps
         .replace(/\b\d{1,2}:\d{2}:\d{2}\b/g, S) // clock times
         .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, S) // uuids
         .replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{12,}\b/gi, S) // long hex ids
@@ -190,6 +200,8 @@ function expectedRegex(step, tag, where) {
         .replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")
         .split(D).join("\\d+")
         .split(S).join("\\S+")
+        .split(T).join("\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}\\S*")
+        .split(L).join("\\[[^\\]]*\\]")
     )
     .join("[ \\t]*\\n");
   return `/${pattern}[ \\t]*/`;
