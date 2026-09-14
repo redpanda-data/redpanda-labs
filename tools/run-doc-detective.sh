@@ -117,4 +117,26 @@ node -e '
   if (failed.length) { console.error("run-doc-detective: failed tests: " + failed.map((t) => t.testId).join(", ")); process.exit(1); }
   if (skipped.length) { console.error("run-doc-detective: skipped tests (a browser context could not start?): " + skipped.map((t) => t.testId).join(", ")); process.exit(1); }
 ' "$PWD/$results"
+
+# The run passed (the verdict above exits non-zero otherwise, and set -e stops
+# the script there), so record what it proved. Nothing at build time can see
+# the generated specs -- they live in the run directory above and never reach
+# the Antora catalog -- so this manifest is the only way a published page can
+# be backed by the run that tested it. Written from the results file by the
+# runner, never by hand and never by a model: see tools/write-verification.mjs.
+#
+# SOLUTIONS_SKIP_VERIFICATION exists for one caller: the nightly's
+# investigation step, where a model may rerun this script to check a fix. The
+# manifest there must come from the workflow's own rerun after the change has
+# been through the allowlist guard, so the agent's rerun must not write one.
+#
+# A manifest that cannot be written is a warning, not a failure: the test
+# verdict is what this script exists to report, and turning a green run red
+# over its own bookkeeping would be the wrong trade. check-metadata.sh is
+# what notices a published solution with no manifest.
+if [ "$rc" -eq 0 ] && [ -z "${SOLUTIONS_SKIP_VERIFICATION:-}" ]; then
+  node "$root/tools/write-verification.mjs" "$slug" "$PWD/$results" || \
+    echo "::warning::run-doc-detective: the run passed but its verification manifest could not be written" >&2
+fi
+
 exit "$rc"
