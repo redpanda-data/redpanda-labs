@@ -1,0 +1,4 @@
+        slot_name        |  plugin  | slot_type | active 
+-------------------------+----------+-----------+--------
+ cdc_to_lakehouse_orders | pgoutput | logical   | t
+(1 row)

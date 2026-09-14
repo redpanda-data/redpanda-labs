@@ -1,0 +1,1 @@
+lakehouse table holds 10 change rows

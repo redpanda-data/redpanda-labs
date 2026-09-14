@@ -1,0 +1,25 @@
+./scripts/verify.sh
+ok    redpanda is healthy
+ok    Redpanda Console answers
+ok    MinIO answers
+ok    the Iceberg REST catalog answers
+ok    Postgres holds the orders table
+ok    iceberg_enabled is true on the cluster
+ok    the cluster commits to the REST catalog
+ok    Tiered Storage is enabled
+ok    cdc_orders writes Iceberg in value_schema_latest mode
+ok    the cdc_orders-value subject holds a JSON schema
+ok    Postgres holds 5 orders after the insert and the delete
+ok    cdc_orders holds 10 change events
+ok    the topic holds an update event
+ok    the topic holds a delete event
+ok    the catalog lists the redpanda namespace
+ok    the catalog holds the cdc_orders table
+ok    the object store holds the table's data files
+ok    the Iceberg table holds the same 10 rows as the topic
+ok    8 of them came from Postgres
+ok    7 are snapshot rows, and there is one insert, one update, and one delete
+ok    the change log reconstructs the 5 orders Postgres holds now
+ok    2 rows came from MySQL into the same table
+ok    Redpanda created no dead-letter table
+PASS (23/23)

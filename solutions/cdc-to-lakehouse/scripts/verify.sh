@@ -98,7 +98,12 @@ retry 40 6 sh -c "./scripts/lakehouse.sh count | grep -qE '^[0-9]+$' && [ \"\$(.
 SUMMARY=$(./scripts/lakehouse.sh query summary | tail -1)
 assert_eq "the Iceberg table holds the same $expected rows as the topic" "$expected" "$(summary_field total)"
 assert_eq "8 of them came from Postgres" 8 "$(summary_field postgres)"
-assert_eq "5 are snapshot rows, and there is one insert, one update, and one delete" "5 1 1 1" \
+# `snapshot` counts the whole table, so it grows by MySQL's rows once that
+# pipeline has been started. The insert, update and delete are Postgres only:
+# scripts/change-orders.sh never touches MySQL.
+expected_snapshot=$((5 + expected_my))
+assert_eq "$expected_snapshot are snapshot rows, and there is one insert, one update, and one delete" \
+  "$expected_snapshot 1 1 1" \
   "$(summary_field snapshot) $(summary_field insert) $(summary_field update) $(summary_field delete)"
 assert_eq "the change log reconstructs the 5 orders Postgres holds now" 5 \
   "$(./scripts/lakehouse.sh query current_count | tail -1 | tr -d '[:space:]')"
