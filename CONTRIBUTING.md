@@ -298,6 +298,49 @@ pasted source file.
   against the existing file and refuses to compare images with different
   aspect ratios, so the first cropped capture must seed a new baseline.
 
+### What the nightly may change by itself
+
+`nightly.yml` runs every solution's generated suite against the latest
+Redpanda, Console, and Connect images and then acts on the result, so the
+boundary of what an unattended run may rewrite is part of this contract.
+
+It may change three things, and only for the solution it just tested:
+
+- `solutions/<slug>/steps/<step-id>/expected/<name>.txt`, the captured output
+  of a documented command.
+- `docs/modules/<slug>/images/<file>`, the captured screenshots and recordings.
+- `solutions/<slug>/.env.example`, to pin an image version when a `latest`
+  image is what broke the run.
+
+It may never change anything else: no page, no `commands.sh`, no `media.json`,
+no `scripts/verify.sh`, no service source, no tooling, and nothing belonging to
+another solution. `tools/nightly-allowed-change.sh` enforces that
+mechanically, over both the suite's own output and anything the automated
+investigation touches; a run that tries to go outside the list has its whole
+change set discarded. A failing assertion must never be resolvable by editing
+the assertion, so the one repair a nightly cannot make is the one that would
+make a broken promise look kept.
+
+Two outcomes reach you as a result:
+
+- A pull request on `automation/nightly-<slug>`, when every spec passed and
+  only captures changed. That is drift in what the system prints or renders,
+  and the suite passing is the evidence that the documented outcome still
+  holds. Review it like any capture change, and merge or close it promptly:
+  while it is open the default branch's baseline is stale, so every later
+  night lands back on it.
+- An issue labelled `needs-human`, when a spec failed and nothing safe fixed
+  it. That label means what it says: the documented outcome may no longer
+  hold, and no automation can settle it. The issue names the failing specs,
+  carries the investigation's diagnosis, and lists any file the investigation
+  wanted to change but was not allowed to, which is usually the clearest
+  pointer to what actually broke.
+
+A fix pull request only ever appears after the whole suite has passed again
+from a clean stack with the change in place, so a green nightly PR is a
+statement that the solution still works, not just that the captures were
+updated.
+
 ## Production checklist
 
 Before a solution goes `published`, every row of the Production considerations

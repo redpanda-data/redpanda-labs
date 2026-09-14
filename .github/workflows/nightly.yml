@@ -1,32 +1,75 @@
-# Runs every solution against the latest Redpanda, Console, and Connect images
-# through its generated Doc Detective specs, opens (or updates) one issue when
-# anything fails, and opens a pull request when the run regenerated the media
-# the pages show (screenshots and recordings are captured by the tests, never
-# edited by hand).
+# Runs every solution's generated Doc Detective suite against the latest
+# Redpanda, Console, and Connect images, once a night, and then does something
+# about the result. Three outcomes per solution, and exactly one of them:
+#
+#   every spec passed, nothing changed        the job is green and silent
+#   every spec passed, captures changed       drift: one PR per solution, no model involved
+#   a spec failed                             one issue per solution, then an investigation
+#
+# "Captures changed" means the suite rewrote what it records: a captured
+# command output under solutions/<slug>/steps/*/expected/, or a screenshot or
+# recording under docs/modules/<slug>/images/. Those files are produced by the
+# tests (CONTRIBUTING.md, "One source of truth for everything a page shows"),
+# so the nightly can refresh them by itself. What it can never do by itself is
+# change what the tests assert: see the guard step and
+# tools/nightly-allowed-change.sh.
+#
+# The investigation runs Claude Code non-interactively under a tool allowlist,
+# leaves its changes in the working tree, and has no way to commit, push, or
+# open a PR. This workflow does that afterwards, and only after the change
+# passes the allowlist and a full clean rerun of the same suite. A failing
+# assertion must never be resolvable by editing the assertion.
 name: nightly
 
 on:
   schedule:
+    # 03:17 UTC. Off the hour so this does not land with every other cron in
+    # the organization, and early enough that a drift PR is waiting when the
+    # docs team starts.
     - cron: '17 3 * * *'
   workflow_dispatch:
+# Deliberately no pull_request trigger, and no push trigger. This workflow
+# holds contents: write, issues: write and id-token: write, pushes branches,
+# opens PRs and runs a model: none of that belongs on a pull request, where
+# the head ref is whatever the author pushed. docs.yml is the PR-time check.
 
 permissions:
   contents: read
-  issues: write
-  # The report job lists this run's jobs to name the failed solutions.
-  actions: read
-
-concurrency:
-  group: nightly
-  cancel-in-progress: true
 
 jobs:
+  # Refuses the whole run unless it is on the default branch, then lists the
+  # slugs to test. The refusal lives here, once, rather than in the matrix job
+  # below, so a wrong ref fails one job loudly instead of N jobs.
   matrix:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       slugs: ${{ steps.set.outputs.slugs }}
     steps:
       - uses: actions/checkout@v4
+
+      # Every branch this workflow pushes and every PR it opens targets
+      # github.ref_name. On a dispatch against a topic branch that would mean
+      # automation/nightly-<slug> branched from that topic branch and a PR
+      # against it, which is how adp-docs#265 became a 35-file pull request
+      # whose real change was four lines. There is no way to test this
+      # workflow on a branch as a result: merge it, then dispatch it.
+      - name: Refuse to run anywhere but the default branch
+        env:
+          REF: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            echo "::error::could not read the repository's default branch from the event payload"
+            exit 1
+          fi
+          if [ "$REF" != "$DEFAULT_BRANCH" ]; then
+            echo "::error::the nightly only runs on $DEFAULT_BRANCH (this run is on $REF). It pushes branches and opens PRs against the ref it runs on, so running it elsewhere would open PRs against that ref."
+            exit 1
+          fi
+          echo "Running on $REF, the default branch."
+
       - id: set
         run: |
           slugs=$(tools/changed-solutions.sh --all)
@@ -36,117 +79,705 @@ jobs:
     needs: matrix
     if: needs.matrix.outputs.slugs != '[]'
     strategy:
+      # One solution's failure must not cancel another's run: each has its own
+      # issue, its own drift PR, and its own stack.
       fail-fast: false
       matrix:
         slug: ${{ fromJSON(needs.matrix.outputs.slugs) }}
-    uses: ./.github/workflows/test-solution.yml
-    with:
-      slug: ${{ matrix.slug }}
-      latest-images: true
-      doc-detective: true
-
-  # Every solution job uploads a media-<slug> artifact when its Doc Detective
-  # run changed docs/modules/<slug>/images. Put them back into a checkout and
-  # open one pull request for the lot.
-  media:
-    needs: [matrix, solution]
-    if: always() && needs.matrix.outputs.slugs != '[]'
+    name: ${{ matrix.slug }}
     runs-on: ubuntu-latest
+    # Per solution, not per workflow: two solutions test different stacks on
+    # different runners and never contend. cancel-in-progress: false because a
+    # cancelled run can leave a half-pushed branch, or an issue filed with no
+    # investigation behind it; a nightly that overlaps the previous night's is
+    # better than one killed mid-PR.
+    concurrency:
+      group: nightly-${{ matrix.slug }}
+      cancel-in-progress: false
+    # 120 = the suite's own 45-minute budget (the cap on the two run steps
+    # below, matching test-solution.yml for the same workload) + one 45-minute
+    # rerun + the 30-minute investigation cap, which is the worst path through
+    # this job: fail, investigate, rerun. Without it a hang anywhere falls back
+    # to GitHub's 6-hour default. If you change either run step's cap or the
+    # investigation's, change this.
+    timeout-minutes: 120
     permissions:
+      # Broader than the workflow-level contents: read, scoped to this job:
+      # the drift step pushes a branch and opens a PR, the issue steps file and
+      # comment, and the fix step pushes and opens a PR.
       contents: write
       pull-requests: write
+      issues: write
+      # Lets the investigation assume the repo's OIDC role to read the
+      # docs-team agent client credential from Secrets Manager. Note what this
+      # implies: anything in this job that can run curl and aws could re-mint
+      # it, which is why the credential is scrubbed before the model starts and
+      # why its tool allowlist denies curl, wget and aws.
+      id-token: write
+    env:
+      SLUG: ${{ matrix.slug }}
+      DRIFT_BRANCH: automation/nightly-${{ matrix.slug }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.ref_name }}
+      ISSUE_TITLE: 'Nightly Doc Detective failure: ${{ matrix.slug }}'
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
         with:
-          pattern: media-*
-          path: ${{ runner.temp }}/media
-      - name: Place the regenerated media
-        id: place
+          # fetch-depth: 0 because the drift and fix steps switch to
+          # automation/nightly-<slug> and compare against the default branch;
+          # a shallow checkout has no other ref to compare with.
+          fetch-depth: 0
+          # true (not the usual false): the drift and fix steps push as this
+          # job's own token. Safe because the job's permissions block above
+          # already scopes that token to contents/pull-requests/issues write.
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Redpanda uses Linux AIO and a multi-service stack exceeds the runner
+      # default of 65536 events. Same line as test-solution.yml.
+      - name: Raise the AIO limit
+        run: sudo sysctl -w fs.aio-max-nr=1048576
+
+      # A step that records a page runs headed Chrome, the only engine
+      # doc-detective 4.38.1 can record a browser with, and the runner has no
+      # display. Screenshot-only solutions do not need this, but installing it
+      # unconditionally keeps this job identical for every slug.
+      - name: Install a virtual display
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      # The suite's own commands source solutions/<slug>/.env, so exporting
+      # REDPANDA_VERSION into the job environment would be overridden inside
+      # every spec. The versions have to be written into .env itself. make up
+      # only copies .env.example when .env is absent, so writing it here is
+      # what makes "test against latest" true for the generated specs.
+      - name: Point .env at the latest images
+        working-directory: solutions/${{ matrix.slug }}
         run: |
-          slugs=""
-          for d in "$RUNNER_TEMP"/media/media-*; do
-            [ -d "$d" ] || continue
-            slug=${d##*/media-}
-            mkdir -p "docs/modules/$slug/images"
-            cp -R "$d"/. "docs/modules/$slug/images/"
-            slugs="$slugs $slug"
+          set -euo pipefail
+          cp .env.example .env
+          for v in REDPANDA_VERSION REDPANDA_CONSOLE_VERSION REDPANDA_CONNECT_VERSION; do
+            if grep -q "^$v=" .env; then
+              sed -i "s|^$v=.*|$v=latest|" .env
+            fi
           done
-          if [ -n "$(git status --porcelain docs/modules/*/images)" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "slugs=$(echo $slugs | tr ' ' ',')" >> "$GITHUB_OUTPUT"
-            git status --porcelain docs/modules/*/images
+          grep -E '^REDPANDA(_CONSOLE|_CONNECT)?_VERSION=' .env
+
+      # The suite: every command the pages show, every captured output, and
+      # every screenshot or recording the pages embed. Its setup spec brings
+      # the stack up and its teardown spec takes it down, so this one command
+      # is the whole test. Fails the job on a failing spec, which is what the
+      # failure path below keys on.
+      - name: Run the Doc Detective suite
+        id: dd
+        timeout-minutes: 45
+        run: |
+          set +e
+          xvfb-run -a -s "-screen 0 1280x800x24" tools/run-doc-detective.sh "$SLUG"
+          verdict=$?
+          set -e
+          if [ "$verdict" -ne 0 ]; then
+            # The failing spec ids key the issue, so the same failure two
+            # nights running lands on one issue. The results file is the
+            # runner's own copy in the solution directory.
+            # Glob, not `ls | head`: a literal glob survives a filename with
+            # a space and keeps shellcheck quiet (SC2012).
+            results=""
+            for f in "solutions/$SLUG"/testResults-*.json; do
+              [ -e "$f" ] && results=$f && break
+            done
+            failing=""
+            if [ -n "$results" ]; then
+              failing=$(jq -r '[.specs[]?.tests[]? | select(.result == "FAIL" or .result == "SKIPPED") | .testId] | unique | join(", ")' "$results" 2>/dev/null || true)
+            fi
+            [ -n "$failing" ] || failing="no spec reached a verdict"
+            echo "Failing: $failing"
+            echo "failing=$failing" >> "$GITHUB_OUTPUT"
+            echo "results=$results" >> "$GITHUB_OUTPUT"
           fi
-      - name: Open the media pull request
-        if: steps.place.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+          exit "$verdict"
+
+      - name: Upload the run's results and reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          branch: nightly/refresh-media
-          title: "Refresh generated media for ${{ steps.place.outputs.slugs }}"
-          commit-message: "Refresh generated media for ${{ steps.place.outputs.slugs }}"
-          body: |
-            The nightly Doc Detective run regenerated the screenshots or recordings under `docs/modules/*/images` for: ${{ steps.place.outputs.slugs }}.
+          name: nightly-${{ matrix.slug }}
+          include-hidden-files: true
+          path: |
+            solutions/${{ matrix.slug }}/testResults-*.json
+            solutions/${{ matrix.slug }}/.doc-detective/
+          retention-days: 7
+          if-no-files-found: ignore
 
-            Media is captured by the tests, never edited by hand. Review the images, then merge.
-          add-paths: docs/modules/*/images/*
-          delete-branch: true
-
-  report:
-    needs: [matrix, solution]
-    if: always() && needs.matrix.outputs.slugs != '[]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Open or update the failure issue
-        uses: actions/github-script@v7
+      # Drift: every spec passed, and the suite rewrote something it captures.
+      # No model is involved and none is needed, because a passing suite has
+      # already proved the documented outcome still holds; what changed is only
+      # what the system prints or renders. One PR per solution, on a branch
+      # this automation owns, refreshed in place on later nights rather than
+      # duplicated, because nothing merges these automatically and an unmerged
+      # drift PR leaves the default branch's baseline stale (five duplicate PRs
+      # in cloud-docs came from exactly that).
+      - name: Handle capture drift
+        id: drift
+        if: success()
         env:
-          SOLUTION_RESULT: ${{ needs.solution.result }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A Markdown bullet with the path in backticks. A function rather
+          # than a sed expression: a path containing & or | cannot corrupt the
+          # output, and nothing here needs a single-quoted $.
+          bullets() { while IFS= read -r line; do [ -n "$line" ] && printf '%s\n' "- \`$line\`"; done; }
+          # --porcelain, not git diff: a brand-new captured output or a first
+          # screenshot is untracked, and git diff would not list it.
+          #
+          # A newline-delimited string rather than an array: bash 3.2 (what a
+          # macOS contributor gets when lifting this snippet to try it) has no
+          # mapfile, and expanding an empty array under `set -u` fails there
+          # too. The paths here are plain, so line-by-line is safe.
+          CHANGED=$(git status --porcelain --untracked-files=all -- \
+            "docs/modules/$SLUG/images" "solutions/$SLUG/steps" | sed 's/^...//')
+          if [ -z "$CHANGED" ]; then
+            echo "No capture drift."
+            exit 0
+          fi
+
+          # Same allowlist the investigation is held to. A passing suite should
+          # only ever rewrite captures, so anything else here is a bug in the
+          # suite or in a media.json, not drift to be committed.
+          if ! printf '%s\n' "$CHANGED" | tools/nightly-allowed-change.sh "$SLUG" > /tmp/drift-violations.txt; then
+            echo "::error::the suite changed files it should not have:"
+            sed 's/^/  /' /tmp/drift-violations.txt
+            exit 1
+          fi
+
+          IMAGES=$(printf '%s\n' "$CHANGED" | grep "^docs/modules/$SLUG/images/" || true)
+          OUTPUTS=$(printf '%s\n' "$CHANGED" | grep "^solutions/$SLUG/steps/" || true)
+          WHAT=""
+          [ -n "$OUTPUTS" ] && WHAT="captured command output"
+          [ -n "$IMAGES" ] && WHAT="${WHAT:+$WHAT and }captured media"
+          echo "Drift in $WHAT:"
+          printf '%s\n' "$CHANGED" | sed 's/^/  /'
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Is there already an open PR from this solution's automation branch?
+          # Keyed on the head ref, which this workflow owns by construction.
+          gh pr list --state open --head "$DRIFT_BRANCH" \
+            --json number,author --jq '.[0] | [(.number // ""), (.author.login // ""), ((.author.is_bot // false) | tostring)] | @tsv' > /tmp/drift-pr.tsv || true
+          PR_NUMBER=$(cut -f1 /tmp/drift-pr.tsv)
+          PR_LOGIN=$(cut -f2 /tmp/drift-pr.tsv)
+          PR_IS_BOT=$(cut -f3 /tmp/drift-pr.tsv)
+
+          # Never push over a branch a person has taken over: their commits may
+          # be a deliberate correction of a capture. Say the drift is still
+          # there and stop.
+          if [ -n "$PR_NUMBER" ] && [ "$PR_IS_BOT" != "true" ] && [ "$PR_LOGIN" != "github-actions[bot]" ]; then
+            gh pr comment "$PR_NUMBER" --body "Tonight's nightly run ($RUN_URL) still finds $WHAT drifted for \`$SLUG\`, but this PR's branch is no longer automation-owned (last author: @$PR_LOGIN), so nothing was pushed here. Refresh the captures on this branch, or close it and let the next nightly open a fresh one."
+            echo "Open PR #$PR_NUMBER is human-owned; commented instead of pushing."
+            exit 0
+          fi
+
+          # Carry the regenerated files across the branch switch. Copy aside,
+          # restore the tree so the switch is clean, then reapply.
+          TMP=$(mktemp -d)
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            mkdir -p "$TMP/$(dirname "$f")"
+            cp "$f" "$TMP/$f"
+          done <<< "$CHANGED"
+          git checkout -- "docs/modules/$SLUG/images" "solutions/$SLUG/steps" 2>/dev/null || true
+          if git ls-remote --exit-code --heads origin "$DRIFT_BRANCH" >/dev/null 2>&1 && [ -n "$PR_NUMBER" ]; then
+            git fetch origin "$DRIFT_BRANCH"
+            git checkout -B "$DRIFT_BRANCH" "origin/$DRIFT_BRANCH"
+          else
+            # No open PR: start the branch again from the ref under test, so a
+            # stale branch from a closed PR cannot carry old captures forward.
+            git checkout -B "$DRIFT_BRANCH"
+          fi
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            mkdir -p "$(dirname "$f")"
+            cp "$TMP/$f" "$f"
+          done <<< "$CHANGED"
+
+          # Only paths that exist: a solution with no media has no images/
+          # directory, and `git add` on a pathspec matching nothing is an error
+          # under `set -e`.
+          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps"; do
+            [ -e "$p" ] && git add -- "$p"
+          done
+          if git diff --cached --quiet; then
+            echo "The branch already carries these exact captures."
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr comment "$PR_NUMBER" --body "Tonight's nightly run ($RUN_URL) reproduced the same drift and regenerated byte-identical captures to the ones already on this branch. No new commit, and deliberately no second PR. The drift stays until this merges, so every later run lands here too."
+            fi
+            exit 0
+          fi
+
+          git commit -m "$SLUG: refresh captured $WHAT from the nightly run"
+          git push --force origin "HEAD:$DRIFT_BRANCH"
+
+          {
+            echo "The nightly run of the \`$SLUG\` suite against the **latest** Redpanda, Console, and Connect images passed every spec, and regenerated $WHAT:"
+            echo
+            if [ -n "$OUTPUTS" ]; then
+              echo "Captured command output:"
+              echo
+              printf '%s\n' "$OUTPUTS" | bullets
+              echo
+            fi
+            if [ -n "$IMAGES" ]; then
+              echo "Captured media:"
+              echo
+              printf '%s\n' "$IMAGES" | bullets
+              echo
+            fi
+            echo "Every documented command still ran and every other assertion still held, so this is drift in what the system prints or renders, not a regression. Review the diff the way you would any capture change: the outputs are what a reader will see, and the media is what the pages embed."
+            echo
+            echo "Captures are produced by the tests and never edited by hand (CONTRIBUTING.md, \"One source of truth for everything a page shows\"), which is why this PR exists instead of a person rerunning \`tools/capture-expected.sh\`."
+            echo
+            echo "**Merge or close this promptly.** While it sits open the default branch's baseline stays stale, so every later nightly reproduces the same drift and lands back on this PR."
+            echo
+            echo "Run: $RUN_URL"
+          } > /tmp/drift-body.md
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/drift-body.md
+            echo "Refreshed PR #$PR_NUMBER in place."
+          else
+            gh pr create --base "$BASE_REF" --head "$DRIFT_BRANCH" \
+              --title "$SLUG: refresh captured $WHAT" \
+              --body-file /tmp/drift-body.md --label nightly,doc-detective
+          fi
+
+      # A failing spec is a possible regression, so it gets an issue before any
+      # model runs: whatever happens to the investigation, the failure is on
+      # the record. One issue per solution, deduped on the title, mirroring
+      # cloud-docs' file-failure-issue.sh: an open issue is commented rather
+      # than duplicated, and a closed one is reopened. Only a freshly created
+      # issue is investigated, because `reopened` means the same failure as
+      # last night and paying for the same diagnosis every morning is exactly
+      # the cost adp-docs removed.
+      - name: File an issue on a failing spec
+        id: issue
+        if: failure() && steps.dd.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILING: ${{ steps.dd.outputs.failing }}
+        run: |
+          set -euo pipefail
+          FAILING="${FAILING:-no spec reached a verdict}"
+          BODY="The nightly run of the \`$SLUG\` Doc Detective suite against the **latest** Redpanda, Console, and Connect images failed: $RUN_URL
+
+          Failing spec(s): $FAILING
+
+          Every command and expected output in that suite is generated from the solution's pages (CONTRIBUTING.md, \"One source of truth for everything a page shows\"), so a failing spec means one of: the output of a documented command changed shape (drift), a documented command no longer works (a regression in the product or in this solution), or the environment was flaky.
+
+          Start with the \`nightly-$SLUG\` artifact on the run: \`testResults-*.json\` names the failing step, the command, and the expected-output regex that did not match, and \`.doc-detective/runs/\` holds the per-run report and any screenshots."
+
+          # --search, not --state open: a closed issue for the same failure
+          # should reopen rather than spawn a sibling.
+          EXISTING=$(gh issue list --repo "$REPO" --state all --limit 50 \
+            --search "in:title \"$ISSUE_TITLE\"" \
+            --json number,title,state \
+            --jq "[.[] | select(.title == \"$ISSUE_TITLE\")] | first | [(.number // \"\"), (.state // \"\")] | @tsv")
+          NUMBER=$(printf '%s' "$EXISTING" | cut -f1)
+          STATE=$(printf '%s' "$EXISTING" | cut -f2)
+
+          if [ -z "$NUMBER" ]; then
+            URL=$(gh issue create --repo "$REPO" --title "$ISSUE_TITLE" --body "$BODY" --label nightly,doc-detective)
+            NUMBER=${URL##*/}
+            OUTCOME=created
+          elif [ "$STATE" = "CLOSED" ]; then
+            gh issue reopen "$NUMBER" --repo "$REPO"
+            gh issue comment "$NUMBER" --repo "$REPO" --body "$BODY"
+            OUTCOME=reopened
+          else
+            gh issue comment "$NUMBER" --repo "$REPO" --body "$BODY"
+            OUTCOME=existing
+          fi
+          echo "Issue #$NUMBER ($OUTCOME)"
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          echo "outcome=$OUTCOME" >> "$GITHUB_OUTPUT"
+
+      # Installed before any credential enters the job: the package runs a
+      # postinstall script, so an unpinned install placed after the mint would
+      # execute whatever the registry serves with every credential present.
+      # Exact version, not a range.
+      - name: Install Claude Code
+        if: failure() && steps.dd.outcome == 'failure' && steps.issue.outputs.outcome == 'created'
+        run: npm install -g @anthropic-ai/claude-code@2.1.263
+
+      - name: Configure AWS credentials (OIDC)
+        id: aws_creds
+        if: failure() && steps.dd.outcome == 'failure' && steps.issue.outputs.outcome == 'created'
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          script: |
-            const title = 'Nightly solutions run failed';
-            const label = 'nightly-failure';
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const { owner, repo } = context.repo;
+          aws-region: ${{ vars.RP_AWS_CRED_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.RP_AWS_CRED_ACCOUNT_ID }}:role/${{ vars.RP_AWS_CRED_BASE_ROLE_NAME }}${{ github.event.repository.name }}
 
-            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-              owner, repo, run_id: context.runId, per_page: 100,
-            });
-            // Reusable-workflow matrix jobs are named "solution (<slug>) / <slug>".
-            const failed = jobs
-              .filter((j) => j.conclusion === 'failure' && /^solution \(/.test(j.name))
-              .map((j) => (j.name.match(/^solution \(([^)]+)\)/) || [])[1])
-              .filter(Boolean);
+      - name: Fetch the docs-team agent client credential
+        id: adp_secret
+        if: failure() && steps.aws_creds.outcome == 'success'
+        continue-on-error: true
+        uses: aws-actions/aws-secretsmanager-get-secrets@v3
+        with:
+          # Leading comma = no name prefix, so the JSON keys land verbatim as
+          # the environment variable names. Which names those are is fixed by
+          # devprod convention, not by us: every key must start with the
+          # secret name's last path segment upper-cased, so this secret's keys
+          # are DOCS_TEAM_AGENTS_CLIENT_ID / _SECRET.
+          secret-ids: |
+            ,sdlc/prod/github/docs_team_agents_client
+          parse-json-secrets: true
 
-            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: label, per_page: 10 });
-            const existing = open.data.find((i) => i.title === title);
+      - name: Mint the ADP gateway token
+        id: adp_mint
+        if: failure() && steps.adp_secret.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCS_TEAM_AGENTS_CLIENT_ID:-}" ] || [ -z "${DOCS_TEAM_AGENTS_CLIENT_SECRET:-}" ]; then
+            echo "::warning::ADP client credential missing; no investigation will run."
+            exit 1
+          fi
+          # The self-managed agent token endpoint on the gateway itself, not
+          # the Cloud auth service, and it takes no audience. The credential
+          # belongs to the docs-team agent service account, which is what makes
+          # the spend attribute to that agent rather than landing in the
+          # provider's Untagged bucket. The secret rides stdin
+          # (client_secret@-) so it never appears in argv.
+          status=$(printf '%s' "$DOCS_TEAM_AGENTS_CLIENT_SECRET" | curl -sS --request POST \
+            --connect-timeout 10 --max-time 30 \
+            --retry 3 --retry-all-errors --retry-delay 2 \
+            --output "$RUNNER_TEMP/adp_token.json" --write-out '%{http_code}' \
+            --url 'https://aigw.d6kjl4h19241bg3ek3h0.clusters.rdpa.co/oauth/idp/token' \
+            --header 'content-type: application/x-www-form-urlencoded' \
+            --data grant_type=client_credentials \
+            --data-urlencode client_id="$DOCS_TEAM_AGENTS_CLIENT_ID" \
+            --data-urlencode client_secret@-) || status=000
+          token=$(jq -r '.access_token // empty' "$RUNNER_TEMP/adp_token.json" 2>/dev/null || true)
+          rm -f "$RUNNER_TEMP/adp_token.json"
+          if [ -z "$token" ]; then
+            echo "::warning::failed to mint the gateway token (HTTP $status); no investigation will run."
+            exit 1
+          fi
+          # A token containing whitespace could smuggle extra variables into
+          # GITHUB_ENV, and ::add-mask:: covers only the first line.
+          case "$token" in *[[:space:][:cntrl:]]*)
+            echo "::warning::minted token contains whitespace or control characters; no investigation will run."
+            exit 1 ;;
+          esac
+          echo "::add-mask::$token"
+          # Bedrock mode sends the bearer as Authorization: Bearer, which is
+          # what the gateway authenticates on. AWS_REGION is required by the
+          # Bedrock client but unused once the base URL is explicit.
+          {
+            echo "AWS_BEARER_TOKEN_BEDROCK=$token"
+            echo "CLAUDE_CODE_USE_BEDROCK=1"
+            echo "CLAUDE_CODE_SKIP_BEDROCK_AUTH=1"
+            echo "ANTHROPIC_BEDROCK_BASE_URL=https://aigw.d6kjl4h19241bg3ek3h0.clusters.rdpa.co/llm/v1/providers/claude-code-provider-adp"
+            echo "ANTHROPIC_MODEL=us.anthropic.claude-opus-5"
+            echo "ANTHROPIC_DEFAULT_HAIKU_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0"
+            echo "AWS_REGION=us-west-2"
+          } >> "$GITHUB_ENV"
 
-            if (process.env.SOLUTION_RESULT === 'success') {
-              if (existing) {
-                await github.rest.issues.createComment({ owner, repo, issue_number: existing.number,
-                  body: `Nightly run passed again: ${runUrl}. Closing.` });
-                await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
-              }
-              return;
-            }
+      # The AWS session and the long-lived client credential must not be
+      # readable from the investigation's environment; the short-lived bearer
+      # survives because it is the model auth. GITHUB_ENV cannot unset a
+      # variable, so these become present-but-empty. On its own this is not a
+      # security boundary, since the job holds id-token: the tool allowlist
+      # below, which denies curl, wget and aws, is what closes that path.
+      - name: Drop the AWS session and client credential from the job env
+        if: failure() && steps.aws_creds.outcome == 'success'
+        run: |
+          set -euo pipefail
+          for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN DOCS_TEAM_AGENTS_CLIENT_ID DOCS_TEAM_AGENTS_CLIENT_SECRET; do
+            echo "$v=" >> "$GITHUB_ENV"
+          done
 
-            const date = new Date().toISOString().slice(0, 10);
-            const list = failed.length ? failed.map((s) => `- \`${s}\``).join('\n') : '- (see the run for details)';
-            const body = [
-              `The nightly run on ${date} failed against the latest images.`,
-              '',
-              'Failed solutions:',
-              list,
-              '',
-              `Run: ${runUrl}`,
-              '',
-              'Each failed job uploads a `logs-<slug>-latest` artifact with `docker compose ps` and the service logs.',
-            ].join('\n');
+      # Fails closed: no gateway bearer, no investigation. No long-lived
+      # API-key fallback on purpose, because a fallback hands a model a
+      # standing credential on exactly the days something is already wrong.
+      # The issue is filed either way, so nothing is lost.
+      - name: Say so when the gateway is unavailable
+        if: failure() && steps.dd.outcome == 'failure' && steps.issue.outputs.outcome == 'created' && steps.adp_mint.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+        run: |
+          set -euo pipefail
+          echo "::warning::No gateway bearer, so no investigation ran."
+          case "${ISSUE_NUMBER:-}" in ''|0|*[!0-9]*) exit 0 ;; esac
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "No automated investigation ran for this failure: the gateway credential chain did not complete, and this workflow deliberately has no long-lived API-key fallback. Run: $RUN_URL. Diagnose from the \`nightly-$SLUG\` artifact by hand, or re-dispatch once the gateway is back."
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label needs-human
 
-            if (existing) {
-              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
-            } else {
-              try {
-                await github.rest.issues.createLabel({ owner, repo, name: label, color: 'B60205',
-                  description: 'Opened by the nightly workflow' });
-              } catch (e) { /* label exists */ }
-              await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
-            }
+      # Diagnoses the failure and, for drift, refreshes what the suite
+      # captures. It cannot commit, push, or open a PR: it leaves changes in
+      # the working tree and the steps after this one decide what happens to
+      # them. That ordering is what makes the allowlist guard meaningful, and
+      # it is the one place this workflow deliberately differs from the
+      # cloud-docs and adp-docs investigations, which let the model open its
+      # own PR.
+      - name: Investigate the failure with Claude
+        id: agent
+        if: failure() && steps.dd.outcome == 'failure' && steps.issue.outputs.outcome == 'created' && steps.adp_mint.outcome == 'success'
+        # Sized for the prompt's budget: diagnose from the results file and the
+        # run's reports, then at most one targeted reproduction. A full suite
+        # run is ~15 minutes for this solution, so 30 covers one plus analysis.
+        # Keep this, the job's timeout-minutes and the prompt's reproduction
+        # budget in agreement; they have drifted apart in the sibling repos.
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          FAILING: ${{ steps.dd.outputs.failing }}
+          RESULTS_FILE: ${{ steps.dd.outputs.results }}
+        run: |
+          set -euo pipefail
+          VERDICT_FILE="$RUNNER_TEMP/nightly-verdict.md"
+          echo "verdict_file=$VERDICT_FILE" >> "$GITHUB_OUTPUT"
+
+          # The renderer substitutes literally and fails on a placeholder with
+          # no value, so the model can never be handed a prompt that still says
+          # ${ISSUE_NUMBER}. VERDICT_FILE is exported because the prompt tells
+          # the model where to write its verdict.
+          export VERDICT_FILE
+          node tools/nightly-render-prompt.mjs tools/nightly-investigate-prompt.md /tmp/nightly-prompt.md
+          date -u +%Y-%m-%dT%H:%M:%SZ > "$RUNNER_TEMP/investigation-started-at"
+
+          # Command-shaped, not prefix-open: Bash(git:*), Bash(gh:*),
+          # Bash(node:*) and Bash(find:*) each grant arbitrary code or network
+          # (git -c alias.x='!curl ...', gh alias set, node -e, find -exec).
+          # Two rule-shape facts, both verified against Claude Code 2.1.263: a
+          # Bash(prefix:*) rule needs a word boundary after the prefix, so
+          # Bash(npx doc-detective:*) does not match npx doc-detective@4.38.1;
+          # and a deny beats a more specific allow, so nothing broad is denied
+          # where a narrow form of it is allowed. A tool absent from the allow
+          # list is already denied, which is what stops bare node -e.
+          #
+          # Narrower than the sibling repos' policy in one deliberate way:
+          # no git commit, no git push, no gh pr create. The guard and the
+          # rerun below are what open a PR here, so the model having that
+          # capability would let it route around them. It keeps gh issue
+          # comment, which is how it reports the diagnosis.
+          ALLOWED="Read,Edit,Write,Glob,Grep"
+          ALLOWED="$ALLOWED,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git branch --show-current:*)"
+          ALLOWED="$ALLOWED,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
+          ALLOWED="$ALLOWED,Bash(tools/run-doc-detective.sh:*),Bash(./tools/run-doc-detective.sh:*),Bash(bash tools/run-doc-detective.sh:*)"
+          ALLOWED="$ALLOWED,Bash(node tools/gen-dd-specs.mjs:*),Bash(tools/check-metadata.sh:*),Bash(make:*),Bash(docker compose:*)"
+          ALLOWED="$ALLOWED,Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(diff:*),Bash(jq:*),Bash(sort:*),Bash(grep:*),Bash(sed -n:*)"
+          DISALLOWED="WebFetch,WebSearch,Bash(curl:*),Bash(wget:*),Bash(aws:*),Bash(env:*),Bash(printenv:*),Bash(git config:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git restore:*),Bash(git add:*),Bash(gh alias:*),Bash(gh api:*),Bash(gh auth:*),Bash(gh pr create:*),Bash(gh pr review:*),Bash(gh pr merge:*),Bash(gh issue close:*),Bash(gh issue edit:*),Bash(gh workflow:*),Bash(gh secret:*),Bash(find:*),Bash(cat:*),Bash(echo:*)"
+
+          # env -u strips the OIDC request token, the runtime token and the AWS
+          # session from the model's process and its children, so re-minting
+          # this repo's role is unreachable from inside the model even though
+          # the job holds id-token: write. Without it the tool policy is the
+          # only thing in the way, and a tool policy is a usable-capability
+          # limit rather than a sandbox.
+          #
+          # No --output-format json: it buffers everything until exit, so a run
+          # cut short by the step cap would leave an empty log. Text streams.
+          # --effort medium, not high: this runs on the same 7GB runner right
+          # after a Chrome-heavy suite, and high was observed OOM-killing the
+          # equivalent step in cloud-docs.
+          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_RUNTIME_TOKEN \
+            -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+            claude -p "$(cat /tmp/nightly-prompt.md)" \
+            --allowed-tools "$ALLOWED" \
+            --disallowed-tools "$DISALLOWED" \
+            --effort medium \
+            --max-budget-usd 15
+
+      # The hard guard, and the point of the whole design. Runs whether the
+      # investigation succeeded, failed, or hit its cap, because a model cut
+      # off mid-edit still leaves a dirty tree.
+      #
+      # Three verdicts:
+      #   violation  it touched something outside the allowlist: the tree is
+      #              reset, nothing is committed, and the issue gets
+      #              needs-human with the list of files it tried to change
+      #   empty      it changed nothing: a regression or a flake, so there is
+      #              nothing to open
+      #   clean      only captures and pinned versions changed: the rerun below
+      #              decides whether that becomes a PR
+      - name: Check what the investigation changed
+        id: guard
+        if: always() && steps.agent.conclusion != 'skipped'
+        run: |
+          set -uo pipefail
+          # --untracked-files=all, which is wider than the brief's git diff:
+          # a new file is a change too, and a page or a media.json added rather
+          # than edited would not appear in git diff at all.
+          git status --porcelain --untracked-files=all | sed 's/^...//' | sort -u > /tmp/agent-changed.txt
+          if [ ! -s /tmp/agent-changed.txt ]; then
+            echo "The investigation changed nothing."
+            echo "verdict=empty" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Changed:"; sed 's/^/  /' /tmp/agent-changed.txt
+          if tools/nightly-allowed-change.sh "$SLUG" < /tmp/agent-changed.txt > /tmp/agent-violations.txt; then
+            echo "Every change is inside the allowlist."
+            echo "verdict=clean" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::the investigation changed files outside the allowlist:"
+          sed 's/^/  /' /tmp/agent-violations.txt
+          {
+            echo "violations<<EOF"
+            cat /tmp/agent-violations.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "verdict=violation" >> "$GITHUB_OUTPUT"
+          # Reset everything, tracked and untracked, so nothing it wrote can
+          # reach a branch, a PR, or the next step.
+          git checkout -- .
+          git clean -fd
+          echo "Tree reset."
+
+      # A fix only becomes a PR after the whole suite passes again from a clean
+      # stack with the change in place. Not the failing spec alone: a refreshed
+      # capture can break a later step that reads the same state.
+      #
+      # .env is regenerated from .env.example rather than forced to latest
+      # again, because pinning a version in .env.example is one of the fixes
+      # the investigation is allowed to make, and forcing latest here would
+      # test something other than the proposed fix.
+      - name: Rerun the suite with the change in place
+        id: rerun
+        if: always() && steps.guard.outputs.verdict == 'clean'
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          ( cd "solutions/$SLUG" && make clean >/dev/null 2>&1 || true )
+          cp "solutions/$SLUG/.env.example" "solutions/$SLUG/.env"
+          xvfb-run -a -s "-screen 0 1280x800x24" tools/run-doc-detective.sh "$SLUG"
+
+      - name: Open the fix pull request
+        id: fix_pr
+        if: always() && steps.rerun.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          VERDICT_FILE: ${{ steps.agent.outputs.verdict_file }}
+        run: |
+          set -euo pipefail
+          BRANCH="automation/nightly-fix-$SLUG-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The rerun rewrites captures itself, so stage from the allowlist's
+          # paths rather than from the list the guard saw.
+          git checkout -b "$BRANCH"
+          for p in "docs/modules/$SLUG/images" "solutions/$SLUG/steps" "solutions/$SLUG/.env.example"; do
+            [ -e "$p" ] && git add -- "$p"
+          done
+          # Re-check the staged set: the rerun ran a whole suite since the
+          # guard looked, and only these three path shapes may ship.
+          git diff --cached --name-only | tools/nightly-allowed-change.sh "$SLUG" > /tmp/fix-violations.txt || {
+            echo "::error::the rerun staged files outside the allowlist:"; sed 's/^/  /' /tmp/fix-violations.txt; exit 1; }
+          if git diff --cached --quiet; then
+            echo "::warning::nothing staged after a passing rerun; opening no PR."
+            exit 0
+          fi
+          git commit -m "$SLUG: refresh captures after a nightly failure"
+          git push -u origin "$BRANCH"
+          {
+            echo "The nightly run of the \`$SLUG\` suite failed against the **latest** images ($RUN_URL). The automated investigation classified it and refreshed what the suite captures; the whole suite then passed again from a clean stack with this change in place."
+            echo
+            echo "Only these are in scope for that automation, and the run is aborted if it touches anything else: captured command outputs under \`solutions/$SLUG/steps/*/expected/\`, captured media under \`docs/modules/$SLUG/images/\`, and the pinned image versions in \`solutions/$SLUG/.env.example\`. It cannot change a page, a \`commands.sh\`, a \`media.json\`, \`scripts/verify.sh\`, or any service source, so a failing assertion can never be resolved here by weakening the assertion."
+            echo
+            echo "## Diagnosis"
+            echo
+            if [ -n "${VERDICT_FILE:-}" ] && [ -s "$VERDICT_FILE" ]; then
+              cat "$VERDICT_FILE"
+            else
+              echo "The investigation left no verdict file; read its step log on the run."
+            fi
+            echo
+            echo "Closes #$ISSUE_NUMBER"
+          } > /tmp/fix-body.md
+          gh pr create --base "$BASE_REF" --head "$BRANCH" \
+            --title "$SLUG: refresh captures after a nightly failure" \
+            --body-file /tmp/fix-body.md --label nightly,doc-detective
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Fixed by a pull request from the nightly investigation, which passed a full clean rerun of the \`$SLUG\` suite: see the PR linked above. Closing; reopen if review disagrees with the diagnosis."
+          gh issue close "$ISSUE_NUMBER" --repo "$REPO"
+
+      # Everything that is not a fix PR ends here, with the issue left open,
+      # labelled, and told why. This is the only place needs-human is applied,
+      # so the label always means the same thing: the documented outcome may no
+      # longer hold and no automation can settle it.
+      - name: Label the issue needs-human
+        if: always() && steps.issue.outputs.outcome == 'created' && steps.adp_mint.outcome == 'success' && steps.fix_pr.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          VERDICT: ${{ steps.guard.outputs.verdict }}
+          VIOLATIONS: ${{ steps.guard.outputs.violations }}
+          RERUN: ${{ steps.rerun.outcome }}
+          AGENT: ${{ steps.agent.outcome }}
+          VERDICT_FILE: ${{ steps.agent.outputs.verdict_file }}
+        run: |
+          set -euo pipefail
+          bullets() { while IFS= read -r line; do [ -n "$line" ] && printf '%s\n' "- \`$line\`"; done; }
+          case "${ISSUE_NUMBER:-}" in ''|0|*[!0-9]*) exit 0 ;; esac
+          {
+            case "$VERDICT" in
+              violation)
+                echo "The automated investigation tried to change files it is not allowed to change, so its entire change set was discarded and no pull request was opened."
+                echo
+                echo "Files it tried to change and could not:"
+                echo
+                printf '%s\n' "$VIOLATIONS" | bullets
+                echo
+                echo "That list is the signal worth reading: the fix it wanted to make is outside what a nightly may do by itself, which usually means the failure is a real regression rather than drift. A failing assertion must never be resolved by editing the assertion."
+                ;;
+              empty)
+                echo "The automated investigation changed nothing, so there is nothing to open a pull request from. It either classified this as a regression, which needs a human decision, or as a flake."
+                ;;
+              clean)
+                if [ "$RERUN" = "failure" ]; then
+                  echo "The automated investigation proposed a change inside its allowlist, but the full suite still failed on a clean rerun with that change in place, so the change was not committed and no pull request was opened."
+                else
+                  echo "The automated investigation proposed a change inside its allowlist, but the rerun did not complete (outcome: \`$RERUN\`), so nothing was committed."
+                fi
+                ;;
+              *)
+                echo "The automated investigation did not reach a verdict (agent outcome: \`$AGENT\`). It may have errored, timed out, or exceeded its budget."
+                ;;
+            esac
+            echo
+            if [ -n "${VERDICT_FILE:-}" ] && [ -s "$VERDICT_FILE" ]; then
+              echo "## Its diagnosis"
+              echo
+              cat "$VERDICT_FILE"
+              echo
+            fi
+            echo "Run: $RUN_URL"
+          } > /tmp/needs-human.md
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file /tmp/needs-human.md
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label needs-human
+
+      # The other half of the gate on the failure path. When the job is red but
+      # the suite itself passed, the failure is in this workflow's own tooling:
+      # no issue was filed and no investigation ran, so without this the run
+      # would be a red square with no explanation of what kind of red it is.
+      - name: Explain a tooling-only failure
+        if: failure() && steps.dd.outcome != 'failure'
+        run: |
+          echo "The Doc Detective suite itself did not fail. Its outcome was: '${{ steps.dd.outcome }}'"
+          echo "  (empty means the job never reached it: checkout, node, xvfb or the .env step failed first;"
+          echo "   'success' means every spec passed and a later step went red, most likely 'Handle capture drift'.)"
+          echo
+          echo "Find the red step above and read its log. This is a bug in"
+          echo ".github/workflows/nightly.yml or in tools/, not a signal about the"
+          echo "solutions, their specs, or the product. No issue was filed and no"
+          echo "investigation ran, both deliberately: a broken workflow step is for a"
+          echo "human to fix, not for a model to work around."
+          exit 1
