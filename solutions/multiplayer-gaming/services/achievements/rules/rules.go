@@ -43,6 +43,24 @@ func NewPlayerState() *PlayerState {
 	return &PlayerState{Unlocked: map[string]bool{}}
 }
 
+// Clone returns a deep copy. The achievements service takes one before Apply
+// so it can roll the state back when the produce that publishes an unlock
+// fails: Apply advances the state as it detects, so without a rollback a
+// replay of the same event sees the streak already spent and never re-emits
+// the unlock, which loses it from the topic for good.
+func (s *PlayerState) Clone() *PlayerState {
+	c := &PlayerState{
+		streak:   append([]time.Time(nil), s.streak...),
+		Wins:     s.Wins,
+		Matches:  s.Matches,
+		Unlocked: make(map[string]bool, len(s.Unlocked)),
+	}
+	for k, v := range s.Unlocked {
+		c.Unlocked[k] = v
+	}
+	return c
+}
+
 // end::state[]
 
 // tag::apply[]

@@ -186,12 +186,31 @@ func (s *service) handle(ctx context.Context, r *kgo.Record) error {
 		}
 		s.byPart[r.Partition][ev.GetPlayerId()] = struct{}{}
 	}
+	// Apply advances the state as it detects, so snapshot first. The produce
+	// below is the commit point: until an unlock is on the topic, this service
+	// has not observed it, and the state must not have moved past it.
+	before := st.Clone()
 	unlocks := s.rules.Apply(st, ev)
+	s.mu.Unlock()
+
+	if err := s.produceUnlocks(ctx, ev, unlocks); err != nil {
+		// Roll the state back so the replay re-derives these unlocks. Without
+		// this the streak is already spent, Apply returns nothing second time
+		// round, and the unlock is lost from the topic while still counted.
+		s.mu.Lock()
+		*s.players[ev.GetPlayerId()] = *before
+		s.mu.Unlock()
+		return err
+	}
+
+	// Counted only once the unlocks are on the topic, so the count this
+	// service reports and the records on the topic cannot disagree.
+	s.mu.Lock()
 	for _, u := range unlocks {
 		s.unlocked[u.Achievement]++
 	}
 	s.mu.Unlock()
-	return s.produceUnlocks(ctx, ev, unlocks)
+	return nil
 }
 
 // end::handle[]

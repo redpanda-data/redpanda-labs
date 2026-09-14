@@ -36,7 +36,13 @@ topics: ## Create the five topics (idempotent)
 	@$(RPK) topic create game.player-events -p 6 -r $(REPLICAS) -c retention.ms=604800000 || $(RPK) topic describe game.player-events >/dev/null
 	@$(RPK) topic create game.match-events -p 3 -r $(REPLICAS) || $(RPK) topic describe game.match-events >/dev/null
 	@$(RPK) topic create game.achievements -p 3 -r $(REPLICAS) || $(RPK) topic describe game.achievements >/dev/null
-	@$(RPK) topic create game.leaderboard -p 3 -r $(REPLICAS) -c cleanup.policy=compact -c segment.ms=60000 || $(RPK) topic describe game.leaderboard >/dev/null
+	@# segment.ms is what makes compaction visible within a minute on a local
+	@# broker. Redpanda Cloud enforces a floor and rejects it, so fall back to
+	@# the same topic without it: compaction still happens, at the cluster's
+	@# own floor. cleanup.policy=compact is not optional, it is the solution.
+	@$(RPK) topic create game.leaderboard -p 3 -r $(REPLICAS) -c cleanup.policy=compact -c segment.ms=60000 >/dev/null 2>&1 \
+	  || $(RPK) topic create game.leaderboard -p 3 -r $(REPLICAS) -c cleanup.policy=compact \
+	  || $(RPK) topic describe game.leaderboard >/dev/null
 	@$(RPK) topic create game.player-events.dlq -p 1 -r $(REPLICAS) || $(RPK) topic describe game.player-events.dlq >/dev/null
 	@$(RPK) topic list
 # end::topics[]
@@ -70,13 +76,18 @@ seed: topics schemas ## Let the simulator produce SIM_EVENTS_MAX events and wait
 # tag::wait[]
 wait: ## Wait until every consumer group has caught up (lag 0, stable) and the dashboard has read the whole board
 	@port=$${LEADERBOARD_PORT:-$$(sed -nE 's/^LEADERBOARD_PORT=//p' .env)}; port=$${port:-3000}; \
-	for i in $$(seq 1 180); do \
+	for i in $$(seq 1 $${WAIT_SECONDS:-180}); do \
 	  lag=$$($(RPK) group describe leaderboard achievements connect-history 2>/dev/null </dev/null | awk '$$1=="TOTAL-LAG" {n++; s+=$$2} END {if (n<3) print "x"; else print s+0}'); \
 	  unstable=$$($(RPK) group describe leaderboard achievements connect-history 2>/dev/null </dev/null | awk '$$1=="STATE" && $$2!="Stable" {b=1} END {print b+0}'); \
 	  caught=$$(curl -fsS http://localhost:$$port/api/status 2>/dev/null | grep -c '"caught_up": true'); \
 	  if [ "$$lag" = 0 ] && [ "$$unstable" = 0 ] && [ "$$caught" = 1 ]; then echo "consumer groups leaderboard, achievements, connect-history have lag 0; the dashboard has read the whole board"; exit 0; fi; \
 	  sleep 1; \
-	done; echo "consumer groups did not catch up in time (lag: $$lag)"; exit 1
+	done; \
+	if [ "$$lag" = x ]; then \
+	  echo "gave up after $${WAIT_SECONDS:-180}s: fewer than three consumer groups were describable (are leaderboard, achievements and connect-history all running, and does the user have describe on them?)"; \
+	else \
+	  echo "gave up after $${WAIT_SECONDS:-180}s: total lag across the three groups was $$lag, unstable=$$unstable, dashboard caught up=$$caught. Against Redpanda Cloud set WAIT_SECONDS higher: the consumers are the same but the round trip is not."; \
+	fi; exit 1
 # end::wait[]
 
 verify: ## Prove the outcome; prints PASS (n/n) or FAIL
