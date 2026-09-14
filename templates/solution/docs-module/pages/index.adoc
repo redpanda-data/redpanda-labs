@@ -10,8 +10,15 @@
 // vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
 // and publishes <slug>-<version>.zip when a merged version has no tag yet.
 :page-solution-version: vX.Y.Z
-// beginner | intermediate | advanced
+// beginner | intermediate | advanced. What the reader must BRING, not how deep the
+// material goes: rate assumed knowledge, what the reader must do, and external
+// services, then take the highest. See CONTRIBUTING.md, "Difficulty and assumed
+// knowledge".
 :page-solution-difficulty: intermediate
+// 1 to 4 short phrases naming what the reader should already know, in their words
+// (not ids or xrefs). Renders beside the difficulty chip; with it, this is what
+// readers use to choose a solution.
+:page-solution-assumes: [Docker, two or three things the reader should already know]
 // Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
 :page-solution-duration: 45
 // draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.

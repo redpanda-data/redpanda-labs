@@ -119,6 +119,7 @@ checking categories against the shared list).
 | `:description:` | yes | one sentence, 200 chars or fewer | Card text, meta description, search snippet |
 | `:page-solution-version:` | yes | `vX.Y.Z` | The only version input. Drives the tag `<slug>/<version>` and asset `<slug>-<version>.zip`. Released only when status is `published` or `deprecated`. Bump on any change a reader would notice. Keep each attribute on one line. |
 | `:page-solution-difficulty:` | yes | `beginner`, `intermediate`, `advanced` | What the reader must bring, not how deep the material goes. See "Difficulty and assumed knowledge". The landing page filters on it. |
+| `:page-solution-assumes:` | no | comma list of 1 to 4 short phrases | What the reader should already know, in their words, not ids or xrefs: `Docker, topics, reading Go`. Renders beside the difficulty chip. With difficulty, this is what readers use to choose a solution. Warn when a `published` solution has none. |
 | `:page-solution-duration:` | yes | integer minutes, 5 to 600 | Whole build-along path; within 10% of the sum of the step durations |
 | `:page-solution-status:` | yes | `draft`, `published`, `deprecated` | Drafts build only with `SOLUTIONS_INCLUDE_DRAFTS=true`. Deprecated publishes with a banner and leaves recommendations. |
 | `:page-solution-featured:` | no | `true` | Featured on the landing page. Omit otherwise. |
