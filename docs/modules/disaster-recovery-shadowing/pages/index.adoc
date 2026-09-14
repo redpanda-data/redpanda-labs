@@ -42,7 +42,7 @@ Two single-broker Redpanda clusters with Shadowing enabled, one shadow link betw
 * *Kubernetes manifests*: the same two clusters and the same link as `Redpanda` and `ShadowLink` resources for the Redpanda Operator.
 
 .Captured by this solution's test run
-image::console-shadow-topic.png[Redpanda Console on the shadow cluster showing the replicated dr-orders topic with the records the source cluster received]
+image::console-shadow-topic.png[Redpanda Console on the shadow cluster listing the replicated dr-orders topic with its three partitions, alongside the replicated _schemas topic]
 
 == Architecture
 

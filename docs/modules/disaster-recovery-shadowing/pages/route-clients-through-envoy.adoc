@@ -63,10 +63,10 @@ include::example$steps/route-clients-through-envoy/commands.sh[tag=parity]
 include::example$steps/route-clients-through-envoy/expected/parity.txt[]
 ----
 
-. In the shadow Console at http://localhost:8381, open *Topics* and then `dr-orders`. The 12 records are there, on the same partitions and at the same offsets as on the source cluster.
+. In the shadow Console at http://localhost:8381, open *Topics*. `dr-orders` is there with its three partitions and the data the link replicated, next to the `_schemas` topic the link also brought across. Open the topic to see the 12 records on the same partitions and at the same offsets as on the source cluster.
 +
 .Captured by this solution's test run
-image::console-shadow-topic.png[The dr-orders topic on the shadow cluster in Redpanda Console, listing the records replicated from the source cluster]
+image::console-shadow-topic.png[The shadow cluster's topic list in Redpanda Console: the replicated dr-orders topic with three partitions, the replicated _schemas topic, and the cluster's own __consumer_offsets]
 
 == Why
 

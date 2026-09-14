@@ -35,10 +35,10 @@ include::example$steps/fail-over/commands.sh[tag=produce]
 include::example$steps/fail-over/expected/produce.txt[]
 ----
 
-. In the shadow Console at http://localhost:8381, `dr-orders` now holds 18 records, and *Consumer Groups* lists `dr-consumers` with the offsets that came from the source cluster.
+. In the shadow Console at http://localhost:8381, `dr-orders` now holds 18 records, and *Consumer Groups* lists `dr-consumers` with no lag. It is a group that never connected to this cluster before the outage, caught up to the end of a topic it has now read on both clusters. The `observer-during-disaster` group next to it is the one that read during the outage.
 +
 .Captured by this solution's test run
-image::console-shadow-group.png[The dr-consumers consumer group on the shadow cluster in Redpanda Console, with the offsets replicated from the source cluster]
+image::console-shadow-group.png[The shadow cluster's consumer groups in Redpanda Console: dr-consumers and observer-during-disaster, both with zero offset lag]
 
 == Why
 
