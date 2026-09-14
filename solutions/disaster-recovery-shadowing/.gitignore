@@ -1,2 +1,7 @@
 # Facts the walkthrough records as it runs, asserted later by scripts/verify.sh.
 state/*.json
+
+# `make up` writes its build progress to stdout, so tools/capture-expected.sh
+# records it. No page includes it, and the image digest in it changes whenever
+# the client image is rebuilt.
+steps/start-environment/expected/up.txt

@@ -1,0 +1,25 @@
+./scripts/verify.sh
+ok    the source cluster is not running
+ok    the shadow cluster is healthy
+ok    Redpanda Console for the shadow cluster answers
+ok    Envoy sends clients to the shadow cluster
+ok    the 12 seed orders were produced through Envoy
+ok    the group read all 12 of them from the source cluster
+ok    both clusters held the same 12 records
+ok    every partition held the same records on both clusters
+ok    the group's committed offsets reached the shadow cluster unchanged
+ok    those offsets accounted for all 12 records
+ok    the same bootstrap address was served by the shadow cluster
+ok    a reader still got all 12 records with the source cluster down
+ok    a write was refused while the topic was still a shadow topic
+ok    no topic of the link is still replicating
+ok    dr-orders reports FAILED_OVER
+ok    the Schema Registry topic came across and failed over too
+ok    the 6 new orders were produced through the same Envoy address
+ok    the group resumed from the offsets the link replicated
+ok    it read only the 6 records written after the failover
+ok    and they were the new keys, so nothing was reprocessed
+ok    dr-orders holds 18 records on the shadow cluster
+ok    dr-orders still has its 3 partitions
+ok    the dr-consumers group is committed to the end of all 18 records
+PASS (23/23)

@@ -45,9 +45,13 @@ topic: ## Create the replicated topic on the source cluster
 link: ## Create the shadow link on the shadow cluster from config/shadow-link.yaml
 	@$(SHADOW) shadow create --config-file /config/shadow-link.yaml --no-confirm
 
-status: ## Wait until the link lists its topics, then show their state and lag
+# Wait for both: the link has listed its topics, and it has read the source's
+# watermarks, which it reports as -1 until its first poll of the source.
+status: ## Wait until the link lists its topics and their lag, then show them
 	@for i in $$(seq 1 60); do \
-	  if [ "$$($(SHADOW) shadow status $(LINK) --print-topic 2>/dev/null </dev/null | grep -c '^Name: ')" -ge 2 ]; then break; fi; \
+	  out=$$($(SHADOW) shadow status $(LINK) --print-topic 2>/dev/null </dev/null); \
+	  if [ "$$(printf '%s' "$$out" | grep -c '^Name: ')" -ge 2 ] \
+	     && [ "$$(printf '%s' "$$out" | grep -c -- '-1')" -eq 0 ]; then break; fi; \
 	  sleep 2; \
 	done
 	@$(SHADOW) shadow status $(LINK) --print-topic

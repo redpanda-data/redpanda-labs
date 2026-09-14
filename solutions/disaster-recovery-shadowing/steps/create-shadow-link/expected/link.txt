@@ -1,0 +1,6 @@
+Link Name:          disaster-recovery-shadowing
+Bootstrap Servers:  
+                    - redpanda-source:9092
+Creating Shadow Link...
+Successfully created shadow link "disaster-recovery-shadowing" with ID "9f979e40-4d7f-402e-b910-50e18d8b7fc2". To query the status, run:
+  'rpk shadow status disaster-recovery-shadowing'

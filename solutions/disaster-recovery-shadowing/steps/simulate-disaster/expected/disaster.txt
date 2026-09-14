@@ -1,0 +1,2 @@
+the source cluster is stopped
+Envoy is routing clients to the shadow cluster

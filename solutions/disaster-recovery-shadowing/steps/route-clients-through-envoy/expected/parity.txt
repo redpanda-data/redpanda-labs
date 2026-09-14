@@ -1,0 +1,5 @@
+topic: dr-orders
+partition 0: source 4, shadow 4
+partition 1: source 6, shadow 6
+partition 2: source 2, shadow 2
+source holds 12 record(s), shadow holds 12: the clusters are at parity
