@@ -1,0 +1,109 @@
+# Cdc To Lakehouse: local stack.
+#
+# Start with `make up` (waits for every healthcheck), seed with `make seed`,
+# prove the outcome with `make verify`, tear down with `make clean`.
+# Versions and host ports come from .env (copied from .env.example on first
+# `make up`); the nightly CI run overrides the versions with `latest`. Run one
+# stack at a time, or give each its own host ports in .env.
+name: cdc-to-lakehouse
+
+networks:
+  redpanda:
+    driver: bridge
+
+volumes:
+  redpanda-data: {}
+
+services:
+  # tag::redpanda[]
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: cdc-to-lakehouse-redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${REDPANDA_KAFKA_PORT:-19092}
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${REDPANDA_PROXY_PORT:-18082}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+    ports:
+      - "${REDPANDA_SR_PORT:-18081}:18081"
+      - "${REDPANDA_PROXY_PORT:-18082}:18082"
+      - "${REDPANDA_KAFKA_PORT:-19092}:19092"
+      - "${REDPANDA_ADMIN_PORT:-19644}:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - redpanda
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::redpanda[]
+
+  # tag::console[]
+  console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-latest}
+    container_name: cdc-to-lakehouse-console
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - "${CONSOLE_PORT:-8080}:8080"
+    networks:
+      - redpanda
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+  # end::console[]
+
+  # tag::rpk[]
+  # Helper container so `make seed`, scripts/verify.sh, and the Doc Detective
+  # specs can run rpk without a host install: docker compose exec -T rpk rpk ...
+  rpk:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-latest}
+    container_name: cdc-to-lakehouse-rpk
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    environment:
+      RPK_BROKERS: redpanda:9092
+      RPK_ADMIN_HOSTS: redpanda:9644
+      RPK_REGISTRY_HOSTS: redpanda:8081
+    volumes:
+      - ./sample-data:/sample-data:ro
+    networks:
+      - redpanda
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+  # end::rpk[]
