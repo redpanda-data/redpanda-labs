@@ -189,22 +189,6 @@ jobs:
       - name: Pre-warm the doc-detective cache
         run: npx --yes "doc-detective@$DD_VERSION" install all --yes
 
-      # The recording's checkpoint baselines are what decide whether the
-      # committed mp4 is replaced (see the record step in
-      # steps/scale-and-replay/media.json). They are git-ignored, because they
-      # are working files rather than published media, so without a cache every
-      # nightly starts with none, reseeds them, finds nothing to compare
-      # against, and rewrites the recording: a drift PR every night for a file
-      # nobody needs to look at, which is how a nightly stops being read. The
-      # run id in the key with a prefix restore means each run saves a fresh
-      # copy and restores the most recent previous one.
-      - uses: actions/cache@v4
-        with:
-          path: solutions/${{ matrix.slug }}/.doc-detective/recording-checkpoints
-          key: dd-recording-checkpoints-${{ matrix.slug }}-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            dd-recording-checkpoints-${{ matrix.slug }}-${{ runner.os }}-
-
       # The suite's own commands source solutions/<slug>/.env, so exporting
       # REDPANDA_VERSION into the job environment would be overridden inside
       # every spec. The versions have to be written into .env itself. make up
@@ -316,16 +300,33 @@ jobs:
 
           IMAGES=$(printf '%s\n' "$CHANGED" | grep "^docs/modules/$SLUG/images/" || true)
           OUTPUTS=$(printf '%s\n' "$CHANGED" | grep "^solutions/$SLUG/steps/" || true)
+          RECORDINGS=$(printf '%s\n' "$IMAGES" | grep -iE '\.(mp4|gif|webm)$' || true)
+          SCREENSHOTS=$(printf '%s\n' "$IMAGES" | grep -ivE '\.(mp4|gif|webm)$' | grep . || true)
           WHAT=""
           [ -n "$OUTPUTS" ] && WHAT="captured command output"
-          [ -n "$IMAGES" ] && WHAT="${WHAT:+$WHAT and }captured media"
-          # The manifest changes on every run (its run_at is the run), so it is
-          # never the reason for a PR on its own: when it is all that changed,
-          # there is nothing for a reviewer to look at.
+          [ -n "$SCREENSHOTS" ] && WHAT="${WHAT:+$WHAT and }captured screenshots"
+          # Two things change on every run and are never a reason for a PR by
+          # themselves.
+          #
+          # The manifest, because its run_at IS the run.
+          #
+          # A recording, because a record step with steps inside its window
+          # rewrites its file on every run: doc-detective's aboveVariation,
+          # which would compare it against a baseline and leave it alone,
+          # captures a frame per millisecond in that shape (6.2 MB against
+          # 1.6 MB, measured), so the solutions here use overwrite: "true" and
+          # take the rewrite. The screenshot is the detector instead: it is
+          # pixel-compared against the committed file and is stable across
+          # runs, so a real UI change still opens a PR, and the recording is
+          # committed alongside it by the git add below.
+          #
+          # A recording that has silently gone stale is therefore caught by the
+          # next screenshot drift or by a human rerun, not by this step.
           if [ -z "$WHAT" ]; then
-            echo "Only the verification manifest changed; nothing to review."
+            echo "Nothing a reviewer can act on changed (only the manifest and/or the recording)."
             exit 0
           fi
+          [ -n "$RECORDINGS" ] && WHAT="$WHAT, with the recording refreshed alongside"
           echo "Drift in $WHAT:"
           printf '%s\n' "$CHANGED" | sed 's/^/  /'
 
@@ -398,10 +399,16 @@ jobs:
               printf '%s\n' "$OUTPUTS" | bullets
               echo
             fi
-            if [ -n "$IMAGES" ]; then
-              echo "Captured media:"
+            if [ -n "$SCREENSHOTS" ]; then
+              echo "Captured screenshots:"
               echo
-              printf '%s\n' "$IMAGES" | bullets
+              printf '%s\n' "$SCREENSHOTS" | bullets
+              echo
+            fi
+            if [ -n "$RECORDINGS" ]; then
+              echo "Recordings, refreshed because something else in this solution changed (a recording alone never opens a PR; see .github/workflows/nightly.yml):"
+              echo
+              printf '%s\n' "$RECORDINGS" | bullets
               echo
             fi
             echo "Every documented command still ran and every other assertion still held, so this is drift in what the system prints or renders, not a regression. Review the diff the way you would any capture change: the outputs are what a reader will see, and the media is what the pages embed."
