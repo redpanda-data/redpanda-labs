@@ -178,6 +178,37 @@ From `kubernetes/iceberg`:
   variables. It is used unmodified, as a container image.
 - No Debezium code or configuration is carried over.
 
+## What is verified, and what is not
+
+Everything in this solution except the two change data capture inputs has been
+run: the stack comes up with nine healthy services, the Iceberg topic and its
+JSON schema are created, Redpanda lays out the table and writes Parquet into
+MinIO, the REST catalog holds the table, and every query in `sql/queries.sql`
+returns what the pages say it returns. `scripts/verify.sh` prints
+`PASS (22/22)` against the documented event stream.
+
+That run fed the topic with `rpk topic produce`, in the exact shape
+`connect/postgres-cdc.yaml` emits, because `postgres_cdc` and `mysql_cdc` are
+enterprise components and Redpanda Connect found no license:
+
+```
+level=error msg="service closing due to: failed to init input 'orders_cdc'
+path root.input: this feature requires a valid Redpanda Enterprise Edition
+license that includes the Connect product."
+```
+
+The broker's own 30-day trial license does not help: it is the cluster's, and
+Redpanda Connect reads its license from `REDPANDA_LICENSE` and starts no trial
+of its own. So the capture half is verified as far as it can be without a key
+(both pipelines pass `connect lint`, and the Bloblang mapping was run against
+the row shapes Postgres reports, including a delete that carries only the
+primary key), and the expected outputs for `capture-postgres-changes`,
+`shape-events`, `query-with-spark`, `capture-mysql-changes`, and
+`verify-end-to-end` are not captured yet. Put a trial or Enterprise Edition
+key in `REDPANDA_LICENSE` in `.env`, then run
+`tools/capture-expected.sh cdc-to-lakehouse` on a clean stack followed by
+`tools/run-doc-detective.sh cdc-to-lakehouse`, and the solution is complete.
+
 ## Aliases and redirects at decommission
 
 All four labs redirect into this solution. Add these to
