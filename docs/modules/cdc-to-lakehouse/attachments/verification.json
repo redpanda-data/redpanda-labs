@@ -1,0 +1,11 @@
+{
+  "suite": "doc-detective",
+  "specs": 9,
+  "steps": 35,
+  "commands": 30,
+  "checks": 27,
+  "media": 1,
+  "verify_script": "PASS (23/23)",
+  "redpanda_version": "v26.2.2",
+  "run_at": "2026-09-14T14:16:34.044Z"
+}
