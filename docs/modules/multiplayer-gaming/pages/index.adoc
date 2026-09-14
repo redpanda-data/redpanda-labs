@@ -4,6 +4,7 @@
 :description: Stream game events through Redpanda to a live leaderboard, an achievements engine, and a match history without one consumer ever slowing down another.
 :page-solution-version: v1.0.0
 :page-solution-difficulty: intermediate
+:page-solution-assumes: Docker, topics, reading Go
 :page-solution-duration: 50
 :page-solution-status: draft
 :page-solution-featured: true
