@@ -304,13 +304,15 @@ pasted source file.
 Redpanda, Console, and Connect images and then acts on the result, so the
 boundary of what an unattended run may rewrite is part of this contract.
 
-It may change three things, and only for the solution it just tested:
+It may change these, and only for the solution it just tested:
 
 - `solutions/<slug>/steps/<step-id>/expected/<name>.txt`, the captured output
   of a documented command.
 - `docs/modules/<slug>/images/<file>`, the captured screenshots and recordings.
 - `solutions/<slug>/.env.example`, to pin an image version when a `latest`
   image is what broke the run.
+- `docs/modules/<slug>/attachments/verification.json`, the manifest described
+  below, which only the runner ever writes.
 
 It may never change anything else: no page, no `commands.sh`, no `media.json`,
 no `scripts/verify.sh`, no service source, no tooling, and nothing belonging to
@@ -340,6 +342,35 @@ A fix pull request only ever appears after the whole suite has passed again
 from a clean stack with the change in place, so a green nightly PR is a
 statement that the solution still works, not just that the captures were
 updated.
+
+### verification.json is evidence, so nobody edits it
+
+`tools/run-doc-detective.sh` writes
+`docs/modules/<slug>/attachments/verification.json` at the end of every
+passing run, from that run's own results file
+(`tools/write-verification.mjs`). It records only what the run produced: how
+many specs and steps ran, how many of those steps were commands from the pages
+and how many were output checks, how many screenshots and recordings were
+captured, the last line the verify script printed, the Redpanda version the
+run used, and when the run started.
+
+It exists because nothing at build time can see any of that. The Doc Detective
+specs are generated into a transient run directory and never reach the Antora
+catalog, so a page has no way to know what its own suite proved. The manifest
+is an attachment, which the build does see.
+
+Nobody edits this file, ever, and nothing authors it by hand: not a writer, not
+a reviewer, not the model in the nightly's investigation, which is forbidden
+it by prompt, denied it by the allowlist guard, and has manifest writing
+switched off during its own reruns. Every number in it is a count from a run
+that passed, or it is worthless. `tools/check-metadata.sh` treats a malformed
+or incomplete manifest as an error for that reason (a valid one can only come
+from the runner) and warns when a `published` solution has none.
+
+To refresh it, run the suite: `tools/run-doc-detective.sh <slug>`. Commit the
+result like any other capture. It is not checked for freshness, because the
+nightly regenerates it on every passing run and opens a pull request when the
+captures alongside it change.
 
 ## Production checklist
 
