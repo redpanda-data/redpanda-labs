@@ -16,5 +16,5 @@ make describe-topic
 # end::describe[]
 
 # tag::verify[]
-make query-tables
+curl -s http://localhost:8581/v1/namespaces
 # end::verify[]

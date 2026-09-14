@@ -100,7 +100,7 @@ include::example$schemas/order-change.json[]
 
 == Verify
 
-Ask the catalog what tables exist:
+Ask the Iceberg REST catalog what it holds:
 
 [source,bash]
 ----
@@ -115,7 +115,7 @@ Expected output:
 include::example$steps/enable-iceberg-topics/expected/verify.txt[]
 ----
 
-The `redpanda` namespace holds no tables yet, and that is the correct answer at this point: the table is created by the first translated record. If `make topic` fails with a topic already exists error, you have run `make seed` already; move on. If `make schema` fails, check that the file you registered is valid JSON Schema draft-07 with a `$schema` keyword, which is a hard requirement.
+No namespaces, and that is the correct answer at this point. Setting the topic property creates nothing: Redpanda creates the `redpanda` namespace and the `cdc_orders` table in it when it translates the first record, which is what xref:capture-postgres-changes.adoc[] produces. If `make topic` fails with a topic already exists error, you have run `make seed` already; move on. If `make schema` fails, check that the file you registered is valid JSON Schema draft-07 with a `$schema` keyword, which is a hard requirement.
 
 == In production
 

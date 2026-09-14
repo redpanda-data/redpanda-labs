@@ -41,7 +41,7 @@ BUCKET=${MINIO_BUCKET:-redpanda}
 
 psql_q() { compose_exec postgres psql -tAq -U "${POSTGRES_USER:-pandashop}" -d "${POSTGRES_DB:-pandashop}" -c "$1" 2>/dev/null </dev/null; }
 mysql_q() { compose_exec mysql mysql -N -s -u root -p"${MYSQL_ROOT_PASSWORD:-pandashop-root}" "${MYSQL_DATABASE:-pandashop}" -e "$1" 2>/dev/null </dev/null; }
-running() { [ -n "$(docker compose ps -q "$1" 2>/dev/null)" ]; }
+running() { [ -n "$(docker ps -q -f "name=cdc-to-lakehouse-$1" 2>/dev/null)" ]; }
 # summary_field <name>: one count out of the single-pass Spark summary query.
 summary_field() { printf '%s\n' "$SUMMARY" | tr ' ' '\n' | sed -nE "s/^$1=([0-9]+)$/\1/p" | head -1; }
 
