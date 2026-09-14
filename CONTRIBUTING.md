@@ -351,17 +351,17 @@ drift or by a human rerun, not by the nightly. Locally, expect a run to leave
 the recording modified in your working tree; discard it unless you meant to
 refresh it.
 
-Screenshots already behave this way through `overwrite: aboveVariation` with a
-`maxVariation`. Verify both when you change a media step: run the suite twice
-from a clean stack, and the second run must leave
-`docs/modules/<slug>/images/` untouched.
+Verify when you change a media step: run the suite twice from a clean stack,
+and the second run must leave every screenshot under
+`docs/modules/<slug>/images/` byte-identical. The recording will differ on
+both runs, by design.
 
-One rewrite is expected the first time CI records, and is not a bug. A capture
-on a Linux runner is not byte-identical to one from a Mac (a Retina capture is
-2x, so the same page records at twice the pixel dimensions), so the first
-nightly to record a given file replaces it once and opens a drift pull request
-saying so. After that the checkpoint baselines, which the nightly caches
-between runs, keep it stable.
+A recording captured on a Linux runner is also not byte-identical to one
+captured on a Mac, where a Retina capture is 2x and so records the same page
+at twice the pixel dimensions. That difference never reaches you on its own,
+because a changed recording does not open a pull request; it arrives inside
+the first pull request that something else opens, which is where a reviewer
+may notice the dimensions changed. That is expected, not a bug.
 
 ### What the nightly may change by itself
 
