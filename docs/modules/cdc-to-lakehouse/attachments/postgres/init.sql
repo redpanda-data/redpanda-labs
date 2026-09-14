@@ -1,0 +1,1 @@
+../../../../../solutions/cdc-to-lakehouse/postgres/init.sql

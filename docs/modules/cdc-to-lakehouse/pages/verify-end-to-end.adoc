@@ -1,0 +1,98 @@
+= Verify the pipeline end to end
+:page-layout: solution-step
+:description: Check that nothing failed to translate, then run the verification script and confirm that the database, the topic, and the Iceberg table agree change for change.
+:page-solution-step-duration: 5
+
+One script proves the claim the solution opened with. It checks the whole stack, then the three counts that have to agree: the rows the databases hold, the change events in the topic, and the rows in the Iceberg table.
+
+== What you do
+
+. Check that every record translated:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=dlq]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/dlq.txt[]
+----
++
+Redpanda writes a record it cannot deserialize against the schema to a separate `cdc_orders~dlq` table rather than dropping it, so the absence of that table is the proof that nothing failed.
+
+. Run the verification script:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify-all]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify-all.txt[]
+----
+
+== Why
+
+A solution that ends with "and now you can query it" has not proved anything. The interesting failures in this pipeline are quiet ones: a change that never left the database because the replication slot stalled, an event that reached the topic but not the table because the schema did not match, a duplicate from a restart, a delete that arrived without its values. Each of those leaves the stack looking healthy and the counts disagreeing, so the counts are the test.
+
+Three numbers, in three systems, from three different places: `SELECT count(*)` in Postgres, the sum of the partition high watermarks on the topic, and `SELECT count(*)` on the Iceberg table. They only agree if every stage did its job.
+
+== Why Redpanda
+
+The count that would normally be hardest to trust is the lakehouse one, because it usually comes from a sink connector with its own offsets, its own retries, and its own dead-letter queue to reconcile. Here the table is written by the broker that holds the topic, so the only thing between the topic's offsets and the table's rows is the translation task, and its failures land in one place you can query. See xref:streaming:manage:iceberg/iceberg-troubleshooting.adoc[].
+
+== What happens inside
+
+The script reads `.env` the way Compose does, then works outward: the broker's health, Console, MinIO, the catalog, and Postgres all answer; the cluster has Tiered Storage and Iceberg on and is pointed at a REST catalog; the topic is in `value_schema_latest` mode and the subject holds a JSON schema.
+
+Then the data. Postgres holds five orders, because the five seeded rows plus one insert minus one delete is five. The topic holds eight events from Postgres, and ten once the MySQL pipeline has run, and the script works out which to expect by asking whether the `connect-mysql` container is running. The catalog lists the `redpanda` namespace and the `cdc_orders` table in it, and the bucket holds Parquet files under the table's data prefix.
+
+The lakehouse counts all come from one Spark query, because each Spark driver takes a few seconds to start and there are six numbers to check: the total, the split by source, and the count of each operation. The last two checks are the ones that would catch a subtly broken pipeline: the change log has to reconstruct to exactly the five rows Postgres holds now, and there must be no dead-letter table.
+
+[source,bash]
+----
+include::example$scripts/verify.sh[tags=checks]
+----
+
+Complete sources for building along:
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+== Verify
+
+The last line is the verdict:
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+If a count is short by a few, the lakehouse is still catching up: the script waits, but `iceberg_target_lag_ms` plus a commit interval plus a Spark start is a few seconds each time, so run it again. If a count is short by five, the snapshot did not translate, which means the topic filled up before `redpanda.iceberg.mode` was set on it: `make clean` and follow the steps in order. If the dead-letter check fails, query the `cdc_orders~dlq` table in Spark to see which records the schema rejected.
+
+== In production
+
+[.production-note]
+Turn these checks into monitors: the Iceberg translation lag and dead-letter metrics, the replication slot's size on the database, and a periodic reconciliation of the source table's row count against the reconstructed table. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (`chmod +x` them)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

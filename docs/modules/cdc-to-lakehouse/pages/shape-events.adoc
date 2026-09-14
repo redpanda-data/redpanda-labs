@@ -1,0 +1,128 @@
+= Shape the change events
+:page-layout: solution-step
+:description: Read the Bloblang mapping that turns a raw row change into one flat lakehouse row, then apply an insert, an update, and a delete and watch all three arrive.
+:page-solution-step-duration: 7
+
+The events in the topic are already flat, because the pipeline you started shapes them on the way through. This step reads that mapping, then puts it to work: one insert, one update, and one delete against the `orders` table.
+
+== What you do
+
+. Read the mapping the pipeline runs on every change:
++
+[source,yaml]
+----
+include::example$connect/postgres-cdc.yaml[tags=pipeline]
+----
++
+Nine fields, no nesting, and one row per change. `this` is the row the database reported; `meta("operation")` and `meta("lsn")` are what the input attached to it.
+
+. Apply three changes to the database:
++
+[source,bash]
+----
+include::example$steps/shape-events/commands.sh[tag=changes]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/shape-events/expected/changes.txt[]
+----
++
+The three statements are an insert, an update to the row that insert created, and a delete of order 4:
++
+[source,bash]
+----
+include::example$scripts/change-orders.sh[tag=changes]
+----
+
+. Count the operations now in the topic:
++
+[source,bash]
+----
+include::example$steps/shape-events/commands.sh[tag=ops]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/shape-events/expected/ops.txt[]
+----
+
+== Why
+
+A change data capture connector's native output is an envelope: the row before the change, the row after it, the source metadata, and a one-letter operation code. Debezium's is nested three levels deep. That shape is right for a consumer that needs to diff before and after, and wrong for a lakehouse table, where every nested object becomes a struct column and every query starts by unpacking it.
+
+So the mapping flattens. `op` is a word rather than `c`, `u`, `d`, or `r`, because the column is read by people writing SQL. `source` is set to a literal, which is what lets the MySQL pipeline in xref:capture-mysql-changes.adoc[] write to the same table. `position` keeps the database's own ordering marker, which is the tiebreaker when two changes to one row share a capture timestamp. `captured_at` is the pipeline's clock, and it is the column that answers how far behind the lakehouse is.
+
+The `delete` event is the one that usually disappoints. By default Postgres writes only the primary key of a deleted row to the write-ahead log, so the change event has `order_id` and nothing else, and the lakehouse records that order 4 was deleted without recording what it was. The table in this solution sets `REPLICA IDENTITY FULL`, so Postgres logs the whole row:
+
+[source,sql]
+----
+include::example$postgres/init.sql[tags=table]
+----
+
+It is not free: every update and delete writes the full old row to the log. Set it on the tables whose deletes you need to see.
+
+== Why Redpanda
+
+The mapping is part of the pipeline, not a separate stage. Debezium's answer to reshaping is a single message transform, configured in the connector's JSON and limited to what the transforms available in your Kafka Connect deployment can do; anything else is a stream processing job between the capture topic and the sink. Here the transformation is a Bloblang `mapping` processor in the same configuration file as the input and the output, so there is one thing to deploy and one place the event's shape is defined. See xref:connect:components:processors/mapping.adoc[].
+
+== What happens inside
+
+The mapping runs once per message, between the input and the output, and it runs on snapshot rows and change events alike. `meta("operation")` is `read` for the rows the snapshot returned, which the first line rewrites to `snapshot`, because `read` is not a word a SQL reader expects in an `op` column.
+
+`.or(null)` on four of the fields is what makes the delete event work. When Postgres reports only the primary key, `this.customer_id` does not exist, and a mapping that assigns a missing value drops the field from the output document. That would produce a record the schema deserializes with fewer fields than the table has columns. `.or(null)` turns absent into explicit null, which the schema allows on those four properties.
+
+`total` is a Postgres `NUMERIC`, which arrives as a string, so `.number()` casts it to a JSON number and `.catch(null)` keeps a malformed value from failing the whole batch. `created_at` is a timestamp, which arrives as a string and stays one: the schema declares it a plain string rather than a `date-time`, because Postgres's timestamp format is not the RFC 3339 that an Iceberg `timestamptz` column needs. `captured_at` is formatted explicitly to second precision for the same reason.
+
+On the broker side, the three new events append to the partition after the five snapshot rows, and the Iceberg translation task writes them into a new Parquet file and commits a new table snapshot. The table is an append-only log: the update does not modify the row the insert wrote, and the delete does not remove anything. Reconstructing current state is a query, which is what xref:query-with-spark.adoc[] does.
+
+Complete sources for building along:
+
+.Complete source: connect/postgres-cdc.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/postgres-cdc.yaml[]
+----
+====
+
+.Complete source: scripts/change-orders.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/change-orders.sh[]
+----
+====
+
+== Verify
+
+Read the three change events, skipping the five snapshot rows:
+
+[source,bash]
+----
+include::example$steps/shape-events/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/shape-events/expected/verify.txt[]
+----
+
+If the delete event has `null` in `customer_id`, `total`, and `status`, the table does not have `REPLICA IDENTITY FULL`: the setting is in `postgres/init.sql`, which only runs on a fresh volume, so `make clean` and start again. If only two events arrived, give the pipeline another second; the output batches on a one second period.
+
+== In production
+
+[.production-note]
+Decide per table whether you need `REPLICA IDENTITY FULL`, because it doubles what every update writes to the write-ahead log. Keep the key on the output, because the reconstruction query is only correct if changes to one row stay in order. See the Partitions and Idempotency rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/postgres-cdc.yaml[connect/postgres-cdc.yaml]
+* link:{attachmentsdir}/postgres/init.sql[postgres/init.sql]
+* link:{attachmentsdir}/scripts/change-orders.sh[scripts/change-orders.sh] (`chmod +x` it)

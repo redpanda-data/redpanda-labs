@@ -1,0 +1,34 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${CONSOLE_PORT:-8480}/topics",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "a[href*='cdc_orders']",
+      "timeout": 30000
+    }
+  },
+  {
+    "goTo": {
+      "url": "http://localhost:${CONSOLE_PORT:-8480}/topics/cdc_orders",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "wait": 4000
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/cdc-to-lakehouse/images/console-iceberg-topic.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05
+    }
+  }
+]

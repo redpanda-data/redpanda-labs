@@ -1,0 +1,1 @@
+../../../../../solutions/cdc-to-lakehouse/sql/queries.sql

@@ -1,0 +1,129 @@
+= Capture Postgres changes
+:page-layout: solution-step
+:description: Start a Redpanda Connect pipeline that holds a logical replication slot on the Postgres write-ahead log, snapshots the orders table, and writes one event per row into the Iceberg topic.
+:page-solution-step-duration: 8
+
+Now the capture half. One Redpanda Connect pipeline takes a snapshot of the `orders` table and then follows the write-ahead log, writing one event per row change to `cdc_orders`.
+
+== What you do
+
+. Start the pipeline:
++
+[source,bash]
+----
+include::example$steps/capture-postgres-changes/commands.sh[tag=start]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-postgres-changes/expected/start.txt[]
+----
++
+The container carries a compose profile, so `make up` did not start it. `make cdc-postgres` checks that `REDPANDA_LICENSE` is set in `.env` before it does, because `postgres_cdc` is an enterprise component and the failure without a key is otherwise a stack trace in a container log.
+
+. Look at what the pipeline did to Postgres:
++
+[source,bash]
+----
+include::example$steps/capture-postgres-changes/commands.sh[tag=slot]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-postgres-changes/expected/slot.txt[]
+----
+
+. Read one event out of the topic:
++
+[source,bash]
+----
+include::example$steps/capture-postgres-changes/commands.sh[tag=consume]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-postgres-changes/expected/consume.txt[]
+----
++
+`"op":"snapshot"` marks the rows the initial read returned, as opposed to the changes that follow. xref:shape-events.adoc[] walks the mapping that produced this shape.
+
+== Why
+
+The pipeline snapshots before it streams (`stream_snapshot: true`), because a lakehouse table that starts at the moment you deployed the pipeline is not a copy of the table. The snapshot is what makes the first query answer questions about orders placed last year.
+
+The slot is named (`slot_name: cdc_to_lakehouse_orders`) rather than left to a generated name. A named slot is the pipeline's bookmark in the write-ahead log: Postgres keeps it across restarts, so a pipeline that goes down and comes back resumes where it stopped instead of taking a second snapshot. The cost of a named slot is the reason it appears in this solution's Observability row: Postgres cannot reclaim log segments a slot has not acknowledged, so a pipeline that is down for a week takes the database's disk with it.
+
+== Why Redpanda
+
+The capture is a process, not a cluster. Debezium is a Kafka Connect connector, so running it means running Kafka Connect: a JVM cluster, three internal topics for configuration, offsets, and status, a REST API to deploy connectors through, and a second thing to monitor. The `postgres_cdc` input is a Redpanda Connect input, so the pipeline in this step is one container reading one configuration file, and its output is the `redpanda` output writing straight to the broker. See xref:connect:components:inputs/postgres_cdc.adoc[].
+
+== What happens inside
+
+On start, the input connects to Postgres, creates a publication for the `orders` table and the logical replication slot named in the configuration, and takes the snapshot: a set of `SELECT` statements ordered by primary key, in batches of `snapshot_batch_size`, each row arriving with `operation` metadata set to `read`. When the snapshot finishes, the input switches to reading the slot, so every `INSERT`, `UPDATE`, and `DELETE` Postgres commits arrives decoded, with `operation` set accordingly and `lsn` set to the log sequence number.
+
+The `redpanda` output writes them to `cdc_orders` keyed by `order_id`, batching 50 events or one second, whichever comes first. On the broker, each batch appends to the single partition, and the partition leader's Iceberg translation task picks it up within `iceberg_target_lag_ms`, deserializes each record against the registered schema, and writes Parquet.
+
+Acknowledgement runs the other way. The output acknowledges a batch only once the broker has it, and the input advances the slot only once the messages under a log sequence number are all acknowledged. That makes the chain at-least-once: a restart mid-batch replays, so the table can hold a duplicate, which is why the queries in xref:query-with-spark.adoc[] take the newest change per row rather than assuming one row per change.
+
+The input half of the pipeline:
+
+[source,yaml]
+----
+include::example$connect/postgres-cdc.yaml[tags=input]
+----
+
+And the output half:
+
+[source,yaml]
+----
+include::example$connect/postgres-cdc.yaml[tags=output]
+----
+
+The service that runs it, including where the license comes from:
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=connect-postgres]
+----
+
+Complete sources for building along:
+
+.Complete source: connect/postgres-cdc.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/postgres-cdc.yaml[]
+----
+====
+
+== Verify
+
+Check that the topic holds the five snapshot rows:
+
+[source,bash]
+----
+include::example$steps/capture-postgres-changes/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/capture-postgres-changes/expected/verify.txt[]
+----
+
+If the high watermark is 0, read the pipeline's log with `make cdc-logs`. A message about a license means `REDPANDA_LICENSE` is empty or expired in `.env`. A message about `wal_level` means Postgres started without `wal_level=logical`, which happens if you have an older volume from a previous run: `make clean` and start again. If the slot exists but is `active = f`, the pipeline died after creating it; the log says why.
+
+== In production
+
+[.production-note]
+Give the pipeline a database account whose only privileges are replication and `SELECT` on the captured tables, read its credentials from a secrets store rather than an environment variable, and alert on the replication slot's size. See the Security and Observability rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/postgres-cdc.yaml[connect/postgres-cdc.yaml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`, then set `REDPANDA_LICENSE` in your `.env`)

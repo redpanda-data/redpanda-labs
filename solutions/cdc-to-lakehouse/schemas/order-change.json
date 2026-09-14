@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrderChange",
+  "description": "One row change from an operational orders table, shaped for the lakehouse. Redpanda reads this schema from the cdc_orders-value subject and uses it to lay out the Iceberg table.",
+  "type": "object",
+  "properties": {
+    "op": {
+      "type": "string",
+      "description": "snapshot, insert, update, or delete"
+    },
+    "source": {
+      "type": "string",
+      "description": "postgres or mysql"
+    },
+    "order_id": {
+      "type": "integer"
+    },
+    "customer_id": {
+      "type": ["integer", "null"]
+    },
+    "total": {
+      "type": ["number", "null"]
+    },
+    "status": {
+      "type": ["string", "null"]
+    },
+    "created_at": {
+      "type": ["string", "null"]
+    },
+    "position": {
+      "type": "string",
+      "description": "The change log position the event came from: a Postgres LSN or a MySQL binary log coordinate."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["op", "source", "order_id", "position", "captured_at"],
+  "additionalProperties": false
+}

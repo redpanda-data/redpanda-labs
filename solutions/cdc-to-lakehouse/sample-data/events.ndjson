@@ -1,3 +1,0 @@
-{"id":"evt-1","type":"created","value":10,"ts":"2026-01-01T00:00:00Z"}
-{"id":"evt-2","type":"updated","value":25,"ts":"2026-01-01T00:00:01Z"}
-{"id":"evt-3","type":"closed","value":40,"ts":"2026-01-01T00:00:02Z"}

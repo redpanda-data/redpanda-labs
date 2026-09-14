@@ -1,0 +1,57 @@
+# Postgres change data capture to the cdc_orders topic.
+#
+# Run by the connect-postgres service. Every value comes from the
+# environment, which compose fills from .env, so no credential is ever in
+# this file. Lint it without starting anything:
+#   docker compose run --rm --no-deps connect-postgres lint /pipelines/postgres-cdc.yaml
+
+# tag::input[]
+input:
+  label: orders_cdc
+  postgres_cdc:
+    dsn: ${POSTGRES_DSN}
+    schema: public
+    tables:
+      - orders
+    # A named slot means Postgres keeps this pipeline's position in the
+    # write-ahead log across restarts, so a restart resumes instead of
+    # replaying.
+    slot_name: cdc_to_lakehouse_orders
+    # Read the table as it is now before following the change log, so the
+    # lakehouse starts with the rows that already existed.
+    stream_snapshot: true
+    snapshot_batch_size: 100
+# end::input[]
+
+# tag::pipeline[]
+pipeline:
+  processors:
+    - mapping: |
+        # One row change in, one lakehouse row out. `meta("operation")` is
+        # `read` for the rows the snapshot returns and `insert`, `update`, or
+        # `delete` for the rows the write-ahead log reports.
+        root.op = if meta("operation") == "read" { "snapshot" } else { meta("operation") }
+        root.source = "postgres"
+        root.order_id = this.order_id
+        root.customer_id = this.customer_id.or(null)
+        root.total = this.total.or(null).number().catch(null)
+        root.status = this.status.or(null)
+        root.created_at = this.created_at.or(null).string().catch(null)
+        root.position = meta("lsn").or("")
+        root.captured_at = now().ts_format("2006-01-02T15:04:05Z07:00")
+# end::pipeline[]
+
+# tag::output[]
+output:
+  label: cdc_orders
+  redpanda:
+    seed_brokers:
+      - ${REDPANDA_BROKERS}
+    topic: ${CDC_TOPIC}
+    # Keying on the primary key puts every change to one order in one
+    # partition, in the order the database applied them.
+    key: ${! this.order_id }
+    batching:
+      count: 50
+      period: 1s
+# end::output[]

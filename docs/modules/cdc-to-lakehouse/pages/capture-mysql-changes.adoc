@@ -1,0 +1,134 @@
+= Capture MySQL changes
+:page-layout: solution-step
+:description: Point a second Redpanda Connect pipeline at MySQL's binary log and write its changes into the same Iceberg table, so one table answers questions about both databases.
+:page-solution-step-duration: 6
+
+The same pattern works against MySQL, and it does not need a second table. This step starts a second pipeline with the `mysql_cdc` input and the same output, so the rows land in `cdc_orders` beside the Postgres ones.
+
+== What you do
+
+. Start the MySQL pipeline:
++
+[source,bash]
+----
+include::example$steps/capture-mysql-changes/commands.sh[tag=start]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-mysql-changes/expected/start.txt[]
+----
+
+. Check the two MySQL settings the input depends on:
++
+[source,bash]
+----
+include::example$steps/capture-mysql-changes/commands.sh[tag=binlog]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-mysql-changes/expected/binlog.txt[]
+----
++
+`ROW` is what makes the binary log a change log rather than a statement log, and `FULL` is MySQL's equivalent of the `REPLICA IDENTITY FULL` you set on the Postgres table: it writes every column of the row, so a delete event carries the values the row held.
+
+. Wait for the two MySQL rows to reach the lakehouse:
++
+[source,bash]
+----
+include::example$steps/capture-mysql-changes/commands.sh[tag=wait]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/capture-mysql-changes/expected/wait.txt[]
+----
+
+== Why
+
+Two databases, one table, because the question the analysts ask is about orders, not about which database the orders happen to live in. The `source` column is what makes that safe: it is set to a literal in each pipeline's mapping, so a query can separate the two whenever it needs to, and the reconstruction query in xref:query-with-spark.adoc[] partitions by `source` and `order_id` rather than `order_id` alone, because both databases number their orders from 1.
+
+Everything else about this step is the same as xref:capture-postgres-changes.adoc[], which is the point worth taking away: the shape of the pipeline, the topic, the schema, and the table do not change when the source database does.
+
+== Why Redpanda
+
+One output, one topic, one table, two inputs. There is nothing to reconcile: the second pipeline writes to the topic the first one writes to, and the broker's translation task does not care how many producers there are. Adding a third database is a third pipeline file. See xref:connect:components:inputs/mysql_cdc.adoc[].
+
+== What happens inside
+
+`mysql_cdc` works differently from `postgres_cdc` in one way that matters. Postgres holds the pipeline's position for it, in the replication slot, on the database server. MySQL has no server-side cursor for a binary log reader, so the pipeline has to remember its own position, which is why the input requires a `checkpoint_cache`:
+
+[source,yaml]
+----
+include::example$connect/mysql-cdc.yaml[tags=cache]
+----
+
+A `memory` cache is fine on a laptop and wrong in production: the position is lost when the container restarts, so the pipeline takes a fresh snapshot and writes every row again. Point it at a durable cache resource instead.
+
+The snapshot itself is heavier than Postgres's. The input runs `FLUSH TABLES WITH READ LOCK` to get a consistent binary log coordinate, reads the primary keys, then reads the rows in batches. The lock is brief but it is a global lock, so a snapshot of a large production table is a change to schedule, not a thing to do at noon.
+
+The input and the one line of the mapping that differs from the Postgres pipeline:
+
+[source,yaml]
+----
+include::example$connect/mysql-cdc.yaml[tags=input]
+----
+
+[source,yaml]
+----
+include::example$connect/mysql-cdc.yaml[tags=pipeline]
+----
+
+MySQL reports its position as a binary log file and offset, in `binlog_position` metadata, and it sets that only on change events, not on the rows the snapshot returns, so the mapping falls back to the literal `snapshot`.
+
+Complete sources for building along:
+
+.Complete source: connect/mysql-cdc.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/mysql-cdc.yaml[]
+----
+====
+
+.Complete source: mysql/init.sql
+[%collapsible]
+====
+[source,sql]
+----
+include::example$mysql/init.sql[]
+----
+====
+
+== Verify
+
+Ask the lakehouse what each source has contributed:
+
+[source,bash]
+----
+include::example$steps/capture-mysql-changes/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/capture-mysql-changes/expected/verify.txt[]
+----
+
+Eight rows from Postgres and two from MySQL, in one table. If the MySQL rows do not arrive, `make cdc-logs` shows the pipeline's output: an access denied message means the replication grants in `mysql/init.sql` did not run, which happens on a reused volume, so `make clean` and start again. A message about the binary log means MySQL started without `--log-bin`.
+
+== In production
+
+[.production-note]
+Replace the memory cache with a durable cache resource, or the pipeline re-snapshots the whole table on every restart, and schedule the first snapshot around the global read lock it takes. See the Security and Idempotency rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/mysql-cdc.yaml[connect/mysql-cdc.yaml]
+* link:{attachmentsdir}/mysql/init.sql[mysql/init.sql]

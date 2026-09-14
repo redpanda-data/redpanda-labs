@@ -1,156 +1,145 @@
-= Cdc To Lakehouse
-// Overview page of the cdc-to-lakehouse solution. Every attribute below is part of the
-// metadata contract (CONTRIBUTING.md, "Metadata reference"). tools/check-metadata.sh
-// flags placeholder attribute values and bracketed placeholder lines like the ones
-// in this template; replace them all before opening a PR.
+= Query database changes in a lakehouse seconds after they happen
 :page-layout: solution
 :page-topic-type: solution
-// One sentence, 200 characters or fewer. What the reader builds and why it matters.
-:description: [One sentence describing what the reader builds and the problem it solves.]
-// vX.Y.Z. Bump on every user-visible change; the release workflow tags <slug>/<version>
-// and publishes <slug>-<version>.zip when a merged version has no tag yet.
-:page-solution-version: vX.Y.Z
-// beginner | intermediate | advanced. What the reader must BRING, not how deep the
-// material goes: rate assumed knowledge, what the reader must do, and external
-// services, then take the highest. See CONTRIBUTING.md, "Difficulty and assumed
-// knowledge".
-:page-solution-difficulty: intermediate
-// 1 to 4 short phrases naming what the reader should already know, in their words
-// (not ids or xrefs). Renders beside the difficulty chip; with it, this is what
-// readers use to choose a solution.
-:page-solution-assumes: [Docker, two or three things the reader should already know]
-// Whole minutes for the complete build-along path, 5..600, within 10% of the sum of the step durations
-:page-solution-duration: 45
-// draft | published | deprecated. Drafts build only with SOLUTIONS_INCLUDE_DRAFTS=true.
+:description: Stream row changes out of Postgres and MySQL with Redpanda Connect, land them in an Iceberg table that Redpanda writes itself, and query them in Spark seconds later.
+:page-solution-version: v1.0.0
+:page-solution-difficulty: advanced
+:page-solution-assumes: Docker, SQL, table formats
+:page-solution-duration: 52
 :page-solution-status: draft
-// Uncomment to feature this solution on the landing page.
-// :page-solution-featured: true
-// authenticated | public | none
 :page-solution-download: authenticated
-// Subset of: self-managed, cloud (default both)
-:page-solution-platforms: self-managed, cloud
-// Comma list of the technologies the reader touches (Redpanda, Redpanda Connect, Go, Postgres...)
-:page-solution-technologies: [Redpanda, Redpanda Connect, ...]
-// Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
-:page-categories: [Stream Processing, Integration]
-// Optional comma list of business use cases (Real-time analytics, Migration...)
-// :page-solution-use-cases:
-// Optional persona ids from docs/modules/ROOT/partials/personas.yaml
-// :personas: streaming_developer, platform_operator
-// Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec
-// tests/doc-detective/specs/<id>.json. Rename step.adoc to your first step id.
-:page-solution-steps: step
-// Fully qualified resource IDs of the canonical Product Docs pages this solution applies.
-:page-solution-related-docs: [streaming:develop:consume-data/consumer-offsets.adoc, connect:components:outputs/sql_insert.adoc]
-// Optional: ids of solutions that pair well with this one
-// :page-solution-related-solutions:
-// Required when status is deprecated: id of the solution that replaces this one
-// :page-solution-superseded-by:
+:page-solution-platforms: self-managed
+:page-solution-technologies: Redpanda, Redpanda Connect, Apache Iceberg, Tiered Storage, Schema Registry, Redpanda Console, Postgres, MySQL, Apache Spark, MinIO, Docker Compose
+:page-categories: Iceberg, Tiered Storage, Pipelines, Connectors, Topics and Partitions
+:page-solution-use-cases: Real-time analytics, Change data capture, Data lakehouse
+:personas: data_engineer, streaming_developer
+:page-solution-steps: start-environment, enable-iceberg-topics, capture-postgres-changes, shape-events, query-with-spark, capture-mysql-changes, verify-end-to-end
+:page-solution-related-docs: streaming:manage:iceberg/about-iceberg-topics.adoc, streaming:manage:iceberg/specify-iceberg-schema.adoc, streaming:manage:iceberg/use-iceberg-catalogs.adoc, streaming:manage:iceberg/query-iceberg-topics.adoc, streaming:manage:iceberg/iceberg-performance-tuning.adoc, streaming:manage:iceberg/iceberg-troubleshooting.adoc, streaming:manage:tiered-storage.adoc, connect:components:inputs/postgres_cdc.adoc, connect:components:inputs/mysql_cdc.adoc, streaming:get-started:licensing/overview.adoc
 
-// Intro: two short paragraphs, 50-80 words in total. First the business problem,
-// then what the reader builds and has running at the end. No "this page describes".
-[What business problem does this solve, and why is it hard to do well?]
+The orders table in your operational database is the truth about the business, and the analysts cannot see it. The nightly batch job is a day behind, and the usual fix is a pipeline with four moving parts: a change data capture connector, a Kafka Connect cluster to run it on, a sink connector, and a compaction job that rewrites small files in the lakehouse.
 
-[What does the reader build, and what do they have running at the end?]
+You build the short version. Redpanda Connect reads the Postgres write-ahead log directly, shapes each row change into one flat event, and writes it to a Redpanda topic. That topic is Iceberg-enabled, so Redpanda writes the Parquet and metadata files itself and registers the table with an Iceberg REST catalog. Spark queries it seconds later, and the same table takes changes from MySQL too.
 
-// Three to five observable outcomes as literal checkboxes. Solutions do not use
-// :learning-objective-N: attributes.
 After completing this solution, you will be able to:
 
-* [ ] [Outcome 1: an observable, verifiable capability]
-* [ ] [Outcome 2]
-* [ ] [Outcome 3]
+* [ ] Capture inserts, updates, and deletes from Postgres and MySQL with the Redpanda Connect `postgres_cdc` and `mysql_cdc` inputs, without Debezium or a Kafka Connect cluster
+* [ ] Shape a raw change event into a lakehouse row with one Bloblang mapping, and give the Iceberg table its columns by registering a schema
+* [ ] Turn a topic into an Iceberg table with one topic property, and explain which part of the write Redpanda is doing for you
+* [ ] Query the change log in Spark SQL and reconstruct the current state of the source table from it
+* [ ] Prove that the row count in the database, the event count in the topic, and the row count in the Iceberg table agree after an insert, an update, and a delete
 
 == What you build
 
-[Two or three sentences on the running system: the services, the topics that connect them, and what a user of the system sees.]
+Two operational databases, one streaming pipeline each, and one lakehouse table. Redpanda Connect follows each database's change log and writes a flat event per row change to the `cdc_orders` topic. Because that topic has `redpanda.iceberg.mode` set, the brokers write the topic's records into MinIO as an Iceberg table and commit each new snapshot to an Iceberg REST catalog. Spark reads the table through the same catalog, and Redpanda Console shows the topic and its schema.
 
-* [Component 1 and its role]
-* [Component 2 and its role]
-* [Component 3 and its role]
+* *Postgres* with a `pandashop` database and an `orders` table of five rows: the primary source, with `wal_level=logical` so its write-ahead log can be decoded.
+* *MySQL* with the same table: the alternative source, with row based binary logging.
+* *Redpanda Connect*, twice: one pipeline per database, each with a change data capture input, a Bloblang mapping, and a `redpanda` output. Both write to the same topic.
+* *Redpanda* with Tiered Storage, Iceberg topics, and its built-in Schema Registry. It is the broker, the object store writer, and the table maintainer.
+* *MinIO* as the S3-compatible object store, holding both the Tiered Storage segments and the Iceberg table files.
+* *An Iceberg REST catalog* (`apache/iceberg-rest-fixture`), which Redpanda commits table snapshots to and Spark discovers tables through.
+* *Apache Spark* as the query engine, running `spark-sql` against the catalog.
+* *Redpanda Console* on the topic, its configuration, and the registered schema.
+
+.Captured by this solution's test run
+image::console-iceberg-topic.png[The cdc_orders topic in Redpanda Console after the Postgres change events arrived]
 
 == Architecture
 
-image::architecture.svg[Architecture of Cdc To Lakehouse]
+image::architecture.svg[Architecture: Postgres and MySQL on the left, a Redpanda Connect pipeline reading each one's change log, both writing to the cdc_orders topic on a Redpanda broker in the middle, the broker writing Iceberg data and metadata files into MinIO and committing snapshots to an Iceberg REST catalog, and Spark on the right reading the table through that catalog]
 
-[Walk the diagram left to right: where events originate, which topics carry them, which consumers read them, and where results land.]
+Left to right: an application changes a row in Postgres. Postgres writes that change to its write-ahead log. Redpanda Connect holds a logical replication slot on that log, decodes the change, and the pipeline's Bloblang mapping turns it into one flat event with the operation, the row's values, the change log position, and a capture timestamp. The `redpanda` output writes the event to `cdc_orders`, keyed by `order_id`, so every change to one order lands in one partition in the order the database applied them.
+
+From there Redpanda does the work a sink connector would normally do. The topic's `redpanda.iceberg.mode` is `value_schema_latest`, so the brokers read the latest schema registered for the `cdc_orders-value` subject, use it to lay out an Iceberg table, deserialize each record against it, and write Parquet data files into the same MinIO bucket Tiered Storage uses. Every few seconds they commit a new table snapshot to the REST catalog. A record the schema cannot deserialize goes to a separate `cdc_orders~dlq` table rather than being dropped.
+
+Spark asks the catalog for the table, reads the Parquet files straight out of MinIO, and sees the change log as rows. The MySQL pipeline is the same shape with a different input, and it writes to the same topic, so one table answers questions about both databases.
 
 === Why Redpanda
 
-[Name the Redpanda capabilities this design depends on and what each buys the reader. Link the canonical Product Docs page for each; do not re-explain it.]
+* *The broker writes the Iceberg table.* One topic property turns a topic into an Iceberg table. There is no sink connector to deploy, no separate compaction job, and no second copy of the data: the Parquet files and the topic's Tiered Storage segments live in the same bucket. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
+* *The table's columns come from a schema you already keep.* Redpanda reads the latest schema for the topic's subject out of its own Schema Registry and lays the table out from it, so the lakehouse schema and the streaming schema cannot drift apart. xref:streaming:manage:iceberg/specify-iceberg-schema.adoc[]
+* *Change data capture is a pipeline, not a cluster.* The `postgres_cdc` and `mysql_cdc` inputs read the write-ahead log and the binary log directly from a single Redpanda Connect process, with the replication slot and the binary log position handled for you. xref:connect:components:inputs/postgres_cdc.adoc[]
+* *Object storage is already wired up.* Iceberg topics write through the same Tiered Storage configuration the cluster uses for retention, so there is one set of object store credentials and one bucket. xref:streaming:manage:tiered-storage.adoc[]
+* *The catalog is the query engine's entry point.* Redpanda commits snapshots to an Iceberg REST catalog, so Spark, Trino, Snowflake, or Athena find the table by name without being told where its files are. xref:streaming:manage:iceberg/use-iceberg-catalogs.adoc[]
 
-* [Capability, for example independent consumer groups fan out one stream to many services] (xref:streaming:develop:consume-data/consumer-offsets.adoc[])
-* [Capability]
-* [Capability]
+=== If you already run Kafka Connect
+
+The Redpanda Labs labs this solution replaces used Debezium on Kafka Connect for the capture half, and that is still a reasonable choice if you already operate a Kafka Connect cluster and depend on Debezium's envelope format or its single message transforms. Redpanda speaks the Kafka protocol, so a Debezium connector writes to it unchanged: deploy Kafka Connect against the cluster, point the connector at the database, and the Iceberg half of this solution works exactly the same way on the topics Debezium creates. Only the mapping in xref:shape-events.adoc[] changes, because Debezium's envelope nests the row values under `after`. See xref:streaming:deploy:kafka-connect/index.adoc[].
 
 == Prerequisites
 
-* Docker Engine 24 or later with Docker Compose v2
-* [CPU/RAM the compose stack needs, for example 4 CPU and 8 GB RAM]
-* [Any client tooling the reader runs on the host, with version]
-* Approximately {page-solution-duration} minutes
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 8 GB RAM available to Docker. Redpanda is limited to 1 GB and the Spark driver to 1 GB, and the rest is the two databases, MinIO, the catalog, and Console.
+* About 12 GB of free disk: the images total roughly 4 GB and the Spark image builds on top of them.
+* `curl` and `make` on the host. Every `rpk`, `psql`, `mysql`, and `spark-sql` command runs inside a container.
+* Free host ports `3307`, `4041`, `4196`, `5433`, `8480`, `8581`, `9100`, `9101`, `64081`, `64092`, and `64644`, or different ones set with the `*_PORT` variables in `.env`.
+* Redpanda v25.2 or later (`.env.example` pins v26.2.2): `value_schema_latest` with a JSON schema is not available before that.
+* A Redpanda Connect enterprise license key. Iceberg topics and Tiered Storage are covered by the 30-day trial license a new Redpanda cluster starts for itself, and you need no key for those. The `postgres_cdc` and `mysql_cdc` inputs are enterprise components of Redpanda Connect, which reads its license from `REDPANDA_LICENSE` in `.env` and starts no trial of its own. xref:streaming:get-started:licensing/overview.adoc[] explains how to generate a trial key, and xref:connect:get-started:licensing.adoc[] covers how Redpanda Connect loads it.
+* Approximately {page-solution-duration} minutes, of which the first image pull and Spark image build is the largest part.
 
 You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
 
-// Steps are rendered from :page-solution-steps: by the solution layout. Do not list
-// them here.
+// Steps are rendered from :page-solution-steps: by the solution layout.
 
 == Production considerations
 
-This solution runs on a single broker with no authentication so that it starts in seconds. Before you reuse the design in production, work through this table.
+This solution runs one broker, one MinIO container, and two single-node databases with no authentication, so that it starts in a few minutes. Before you build a pipeline like this against production databases, work through this table.
 
 [cols="1,2,2"]
 |===
 | Area | In this solution | In production
 
 | Brokers and replication
-| [One broker, replication factor 1]
-| [Three or more brokers, replication factor 3, rack awareness. Link the deployment docs.]
+| One broker in `dev-container` mode with `--memory 1G`, replication factor 1. Iceberg translation runs on the partition leader, so it is competing with the broker's own work on one core.
+| Three or more brokers with replication factor 3. Iceberg translation adds CPU and object store traffic per partition, so size for it rather than assuming spare capacity. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[], xref:streaming:manage:iceberg/iceberg-performance-tuning.adoc[]
 
 | Security
-| [Plaintext, no authentication]
-| [TLS, SASL/SCRAM or mTLS, ACLs per service. Link the security docs.]
+| Plaintext everywhere. The databases, MinIO, the catalog, and the broker all accept unauthenticated connections, and the credentials are in `.env`.
+| TLS and SASL on the broker, a database account whose only privileges are replication and `SELECT` on the captured tables, IAM roles or scoped keys for the object store, and an authenticated REST catalog (`oauth2`, `bearer`, or `aws_sigv4`). Never put the change data capture credentials in the pipeline file; read them from the environment or a secrets store. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:iceberg/use-iceberg-catalogs.adoc[]
 
 | Partitions
-| [Fixed partition counts sized for the demo]
-| [Size partitions for peak throughput and consumer parallelism. Link the partition guidance.]
+| One partition on `cdc_orders`, keyed by `order_id`. Ordering per order is guaranteed because there is only one partition.
+| Size partitions for the change rate, and keep the key: ordering per row is only guaranteed within a partition, and an update that overtakes its insert produces a table that reconstructs to the wrong state. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
 
 | Schema validation
-| [Schemas registered, no broker-side validation]
-| [Enable schema ID validation on the topics. Link the schema registry docs.]
+| A JSON schema is registered for `cdc_orders-value` and Redpanda uses it to lay out the table, but nothing stops a producer writing a record that does not match it.
+| Enable schema ID validation on the topic so a pipeline that drifts from the registered schema is rejected at produce time instead of filling the dead-letter table. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
 
 | Consumer scaling
-| [One instance per consumer group]
-| [Scale on consumer lag; keep instances at or below partition count.]
+| Nothing consumes `cdc_orders` from Kafka: the lakehouse write is the broker's own work, and Spark reads object storage.
+| Iceberg translation costs no consumer group, which is the point, but the topic is still a normal topic. Applications that need the changes as a stream read it in their own consumer groups without affecting the table. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
 
 | Data retention
-| [Local disk, default retention]
-| [Tiered Storage for long retention and replay. Link the Tiered Storage docs.]
+| Default retention on a one-partition topic, with Tiered Storage writes on.
+| The Iceberg table outlives the topic's retention: data written to Iceberg stays queryable after the records age out of Kafka. Set the topic's retention for the streaming consumers and let the table be the history. xref:streaming:manage:tiered-storage.adoc[], xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
 
 | Idempotency and delivery
-| [At-least-once with idempotent producers]
-| [Transactions or exactly-once where the sink needs it. Link the producer docs.]
+| The pipeline's `redpanda` output batches 50 events or one second. On a restart, `postgres_cdc` resumes from the replication slot's position, so a batch in flight at the restart can be written twice.
+| Change data capture is at-least-once, so the table is an append-only log that can hold duplicates. Deduplicate in the query (the window function in xref:query-with-spark.adoc[] already takes the newest change per row) or on the way in, and make the reader tolerate a repeat. xref:streaming:develop:produce-data/idempotent-producers.adoc[]
 
 | Dead-letter handling
-| [DLQ topic, no alerting]
-| [Alert on DLQ growth, replay tooling, retention policy for the DLQ.]
+| `redpanda.iceberg.invalid.record.action` is `dlq_table`, the default, so a record the schema cannot deserialize goes to a `cdc_orders~dlq` table. `scripts/verify.sh` checks that the table does not exist.
+| Alert on the `redpanda_iceberg_translation_dlq_files_created` metric, query the dead-letter table when it moves, and decide per topic whether an invalid record should be kept for inspection or dropped. xref:streaming:manage:iceberg/iceberg-troubleshooting.adoc[]
 
 | Observability
-| [Console only]
-| [Prometheus metrics, dashboards, alerts on lag and under-replicated partitions. Link the monitoring docs.]
+| `rpk topic describe`, `make dlq`, and a Spark query, all run by hand.
+| Alert on Iceberg translation lag and the dead-letter metric, on the replication slot's size in Postgres (an unconsumed slot fills the disk), and on the Redpanda Connect pipeline's own output. xref:streaming:manage:monitoring.adoc[], xref:streaming:manage:iceberg/iceberg-troubleshooting.adoc[]
 
 | Disaster recovery
-| [None]
-| [Shadowing to a second cluster. Link the Shadowing docs.]
+| None. One broker, one bucket, and the Iceberg files are the only copy of the table.
+| The table's files live in object storage with its own durability, and the topic can be shadowed to a second cluster. Decide which of the two is your recovery point: the topic replays, but the second cluster writes its own Iceberg table. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
 
 | Analytics and lakehouse
-| [Optional Iceberg profile]
-| [Iceberg topics with a catalog. Link the Iceberg docs.]
+| One Spark container reading the table through the REST catalog, and a query that reconstructs current state from the change log.
+| Point your existing engines at the same catalog, and let a downstream job compact the change log into a table of current state on whatever schedule the analysts need. Keep one namespace per cluster if more than one cluster writes to the catalog. xref:streaming:manage:iceberg/query-iceberg-topics.adoc[], xref:streaming:manage:iceberg/use-iceberg-catalogs.adoc[]
+
+| Kubernetes
+| Docker Compose, with MinIO as one container and the catalog as another.
+| Run MinIO through its operator as a tenant rather than a single container, expose its console with a `NodePort` service rather than `kubectl port-forward` (the console needs websockets, which do not survive the tunnel), and give the REST catalog an init container that resolves the object store's address, because it addresses buckets with virtual-host style URLs that cluster DNS does not answer. Deploy Redpanda with the operator. xref:streaming:deploy:redpanda/kubernetes/k-production-deployment.adoc[]
 |===
 
 == Clean up
 
-Stop the stack and delete its volumes:
+Stop everything and delete the volumes, including the two profile-gated pipeline containers:
 
 [source,bash]
 ----
@@ -159,7 +148,10 @@ include::example$steps/overview/commands.sh[tag=clean]
 
 == Related docs
 
-// The solution layout also renders :page-solution-related-docs:. Use this list for
-// anything that needs a sentence of context.
-* xref:streaming:develop:consume-data/consumer-offsets.adoc[] - [why it matters here]
-* [Next canonical page]
+* xref:streaming:manage:iceberg/about-iceberg-topics.adoc[] is the canonical page for Iceberg topics: what Redpanda writes, when it writes it, and what happens to the table when you delete the topic.
+* xref:streaming:manage:iceberg/specify-iceberg-schema.adoc[] explains the Iceberg modes, the JSON Schema requirements the schema in xref:enable-iceberg-topics.adoc[] has to meet, and how each JSON type becomes an Iceberg type.
+* xref:streaming:manage:iceberg/use-iceberg-catalogs.adoc[] covers the catalog types and the authentication modes this solution leaves at `none`.
+* xref:streaming:manage:iceberg/query-iceberg-topics.adoc[] has the query patterns for other engines, including time travel, which the Spark queries in xref:query-with-spark.adoc[] do not use.
+* xref:connect:components:inputs/postgres_cdc.adoc[] and xref:connect:components:inputs/mysql_cdc.adoc[] are the reference pages for the two inputs, including the replication prerequisites and every field the pipelines in this solution leave at its default.
+* xref:connect:cookbooks:postgres_cdc.adoc[] and xref:connect:cookbooks:mysql_cdc.adoc[] hold more patterns for the capture half: filtering by operation, routing one table per topic, and archiving to object storage.
+* xref:streaming:manage:iceberg/iceberg-troubleshooting.adoc[] is where to go when the dead-letter table appears.

@@ -1,0 +1,61 @@
+# MySQL change data capture to the same cdc_orders topic.
+#
+# Run by the connect-mysql service. The input and the position field are all
+# that differ from connect/postgres-cdc.yaml: the shaping and the output are
+# the same, so one Iceberg table holds the changes from both databases.
+
+# tag::cache[]
+# mysql_cdc stores its binary log position in a cache resource rather than in
+# the database, because MySQL keeps no server-side cursor for a reader. A
+# memory cache is enough for a laptop; see the overview's Production
+# considerations for what to use instead.
+cache_resources:
+  - label: binlog_position
+    memory: {}
+# end::cache[]
+
+# tag::input[]
+input:
+  label: orders_cdc
+  mysql_cdc:
+    dsn: ${MYSQL_DSN}
+    flavor: mysql
+    tables:
+      - orders
+    stream_snapshot: true
+    snapshot_max_batch_size: 100
+    checkpoint_cache: binlog_position
+    checkpoint_key: cdc_to_lakehouse_orders
+# end::input[]
+
+# tag::pipeline[]
+pipeline:
+  processors:
+    - mapping: |
+        # The same shape as the Postgres pipeline, so both databases land in
+        # one table. MySQL reports its change log position as a binary log
+        # file and offset, and sets it on change events only, not on the
+        # rows the snapshot returns.
+        root.op = if meta("operation") == "read" { "snapshot" } else { meta("operation") }
+        root.source = "mysql"
+        root.order_id = this.order_id
+        root.customer_id = this.customer_id.or(null)
+        root.total = this.total.or(null).number().catch(null)
+        root.status = this.status.or(null)
+        root.created_at = this.created_at.or(null).string().catch(null)
+        root.position = meta("binlog_position").or("snapshot")
+        root.captured_at = now().ts_format("2006-01-02T15:04:05Z07:00")
+# end::pipeline[]
+
+# tag::output[]
+output:
+  label: cdc_orders
+  redpanda:
+    seed_brokers:
+      - ${REDPANDA_BROKERS}
+    topic: ${CDC_TOPIC}
+    key: ${! this.order_id }
+    batching:
+      count: 50
+      period: 1s
+# end::output[]
