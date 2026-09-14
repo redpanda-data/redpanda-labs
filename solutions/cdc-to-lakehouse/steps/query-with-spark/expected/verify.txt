@@ -1,0 +1,5 @@
+postgres	1	1	50.0	placed	snapshot
+postgres	2	2	100.0	placed	snapshot
+postgres	3	2	50.0	shipped	snapshot
+postgres	5	4	90.0	shipped	snapshot
+postgres	6	9	250.0	shipped	update

@@ -1,0 +1,1 @@
+{"captured_at":"2026-09-14T14:02:05Z","created_at":"2026-09-14T14:01:27.57368Z","customer_id":1,"op":"snapshot","order_id":1,"position":"","source":"postgres","status":"placed","total":50}

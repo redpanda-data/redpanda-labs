@@ -1,0 +1,4 @@
+   1 "op":"delete"
+   1 "op":"insert"
+   5 "op":"snapshot"
+   1 "op":"update"

@@ -1,0 +1,13 @@
+redpanda            	struct<partition:int,offset:bigint,timestamp:timestamp,headers:array<struct<key:string,value:binary>>,key:binary,timestamp_type:int>	                    
+captured_at         	timestamp           	                    
+created_at          	string              	                    
+customer_id         	bigint              	                    
+op                  	string              	                    
+order_id            	bigint              	                    
+position            	string              	                    
+source              	string              	                    
+status              	string              	                    
+total               	double              	                    
+                    	                    	                    
+# Partitioning      	                    	                    
+Part 0              	hours(redpanda.timestamp)	                    
