@@ -13,7 +13,7 @@ make wait-offsets
 
 # tag::compare[]
 paste <(./scripts/group-offsets.sh source) <(./scripts/group-offsets.sh target) \
-  | awk 'BEGIN {printf "%-10s %-14s %s\n", "PARTITION", "SOURCE-OFFSET", "TARGET-OFFSET"} {printf "%-10s %-14s %s\n", $1, $2, $4}'
+  | awk 'BEGIN {print "PARTITION SOURCE-OFFSET TARGET-OFFSET"} {print $1, $2, $4}'
 # end::compare[]
 
 # tag::consumer-target[]
