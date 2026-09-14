@@ -1,0 +1,75 @@
+Schema is not compatible.
+{errorType:"FIELD_SCALAR_KIND_CHANGED", description:"The kind of a SCALAR field at path '#/GameEvent/2' in the new schema does not match its kind in the old schema"}
+{errorType:"MESSAGE_REMOVED", description:"The new schema is missing a field of type MESSAGE at path '#/LeaderboardEntry' in the old schema"}
+{oldSchemaVersion: 2}
+{oldSchema: 'syntax = "proto3";
+package game.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "multiplayer-gaming/services/internal/gamepb;gamepb";
+
+message GameEvent {
+  string event_id = 1;
+  string player_id = 2;
+  string match_id = 3;
+  .google.protobuf.Timestamp occurred_at = 4;
+  optional string region = 5;
+  oneof event {
+    .game.v1.PlayerJoined player_joined = 10;
+    .game.v1.PlayerLeft player_left = 11;
+    .game.v1.MatchStarted match_started = 12;
+    .game.v1.MatchEnded match_ended = 13;
+    .game.v1.ScoreChanged score_changed = 14;
+    .game.v1.ItemAcquired item_acquired = 15;
+    .game.v1.AchievementUnlocked achievement_unlocked = 16;
+  }
+}
+
+message PlayerJoined {
+  string display_name = 1;
+}
+
+message PlayerLeft {
+  bool won = 1;
+  int64 final_score = 2;
+}
+
+message MatchStarted {
+  repeated string player_ids = 1;
+  string mode = 2;
+}
+
+message MatchEnded {
+  repeated string player_ids = 1;
+  string winner_player_id = 2;
+  int64 duration_seconds = 3;
+  .google.protobuf.Timestamp started_at = 4;
+}
+
+message ScoreChanged {
+  int64 delta = 1;
+  int64 new_score = 2;
+  string reason = 3;
+}
+
+message ItemAcquired {
+  string item_id = 1;
+  int32 quantity = 2;
+}
+
+message AchievementUnlocked {
+  string achievement = 1;
+  string detail = 2;
+}
+
+message LeaderboardEntry {
+  string player_id = 1;
+  string display_name = 2;
+  int64 score = 3;
+  .google.protobuf.Timestamp updated_at = 4;
+  int32 source_partition = 5;
+  int64 source_offset = 6;
+}
+'}
+{compatibility: 'BACKWARD'}

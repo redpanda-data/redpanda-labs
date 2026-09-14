@@ -1,0 +1,124 @@
+= Create the topics
+:page-layout: solution-step
+:description: Create the five topics with explicit partition counts, keys, retention, and one compaction policy, and see how the key decides which consumer instance owns a player.
+:page-solution-step-duration: 5
+
+You create five topics with `rpk`. Each has a deliberate partition count and a stated key, because those two choices decide how far each consumer can scale and which guarantees the consumers in the later steps can rely on. One of them, `game.leaderboard`, is compacted: it will hold state, not events.
+
+== What you do
+
+. Create the topics. `make topics` runs these five commands and is safe to repeat:
++
+[source,bash]
+----
+include::example$steps/create-topics/commands.sh[tag=topics]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=topics]
+----
+
+. Look at one of them:
++
+[source,bash]
+----
+include::example$steps/create-topics/commands.sh[tag=describe-player-events]
+----
++
+`retention.ms` is `604800000` (7 days) and `cleanup.policy` is `delete`. Compare with the leaderboard topic:
++
+[source,bash]
+----
+include::example$steps/create-topics/commands.sh[tag=describe-leaderboard]
+----
++
+`cleanup.policy` is `compact` and `segment.ms` is `60000`.
+
+The five topics and the reason for each shape:
+
+[cols="2,1,1,3"]
+|===
+| Topic | Partitions | Key | Why
+
+| `game.player-events`
+| 6
+| `player_id`
+| Everything about one player, in order, on one partition. Six partitions is the ceiling for the leaderboard group; xref:scale-and-replay.adoc[] runs three members.
+
+| `game.match-events`
+| 3
+| `match_id`
+| Match lifecycle. Written by the simulator, read by Redpanda Connect for the history table.
+
+| `game.achievements`
+| 3
+| `player_id`
+| Written by the achievements service. Same key as the source, so a player's achievements are ordered too.
+
+| `game.leaderboard`
+| 3
+| `player_id`
+| Written by the leaderboard service: each player's current total. Compacted, so it converges to one record per player. `segment.ms=60000` makes that visible within minutes in xref:build-leaderboard.adoc[].
+
+| `game.player-events.dlq`
+| 1
+| original key
+| Records the Connect pipeline could not process. One partition is plenty for something that should stay empty.
+|===
+
+== Why
+
+The leaderboard and the achievements service are both correct only because the record key is `player_id`. The achievements service (xref:detect-achievements.adoc[]) keeps a small in-memory state per player and never consults a shared store. That is safe only if every event of one player reaches exactly one instance, in the order it was produced. Keying by `player_id` gives that. Keying by `match_id` on `game.match-events` gives the same guarantee for matches, which is what a history sink wants.
+
+The partition counts are the scaling limits. A consumer group cannot have more active members than partitions, so six partitions means the leaderboard can run six instances, no more. Retention on `game.player-events` is 7 days because xref:scale-and-replay.adoc[] replays it; the default would do for the demo, but in a real game the replay window is a product decision.
+
+`game.leaderboard` is the odd one out. It carries totals, not events, and only the newest total per player matters, so its cleanup policy is `compact` instead of `delete`: the broker keeps the latest record for each key and discards the rest. That turns the topic into a table that streams, which is what xref:build-leaderboard.adoc[] builds the dashboard on. Keying it by `player_id` is what makes compaction keep the right record.
+
+== Why Redpanda
+
+Topic creation is one `rpk topic create` with the partition count, the replication factor, and any topic property inline, and the same command works against Redpanda Cloud. Partition counts can be raised later with `rpk topic add-partitions`, but not lowered, so the key and the count are worth deciding up front. See xref:streaming:develop:manage-topics/index.adoc[] and xref:streaming:reference:rpk/rpk-topic/rpk-topic-create.adoc[].
+
+== What happens inside
+
+`rpk` sends a `CreateTopics` request to the broker. For each topic the controller creates the partitions as Raft groups (one replica each here, three in production), assigns leaders, and writes the topic properties to the controller log. From now on, every record the simulator produces with key `p014` lands on the same partition, because the producer hashes the key to choose one (xref:streaming:develop:produce-data/configure-producers.adoc[]). With 24 players and 6 partitions the spread is uneven (one partition can stay empty), which is normal for a small key space.
+
+The simulator notices the topics within two seconds and moves from `waiting_for_topics` to `waiting_for_schema`. It still produces nothing.
+
+The complete `Makefile`, for building along:
+
+.Complete source: Makefile
+[%collapsible]
+====
+[source,makefile]
+----
+include::example$Makefile[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/create-topics/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/create-topics/expected/verify.txt[]
+----
+
+`_schemas` is Schema Registry's own storage topic. If a topic shows a different partition count, you created it earlier with other settings: `rpk topic delete <name>` and run `make topics` again.
+
+== In production
+
+[.production-note]
+Use replication factor 3 and size partitions for peak throughput and for the parallelism of the largest consumer group, not for a laptop. Give the compacted topic a `segment.ms` suited to its write rate rather than the 60 seconds used here. See the Brokers and replication, Partitions, and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

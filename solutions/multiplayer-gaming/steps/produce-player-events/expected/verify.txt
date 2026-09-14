@@ -1,0 +1,2 @@
+  "state": "capped",
+  "acked_total": 3000,

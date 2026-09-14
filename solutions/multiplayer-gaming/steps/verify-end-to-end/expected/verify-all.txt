@@ -1,0 +1,11 @@
+./scripts/verify.sh
+ok    topics and partitions
+ok    high watermarks match the simulator (SIM_EVENTS_MAX=3000, burst=4798, poison=1)
+ok    consumer groups leaderboard, achievements, connect-history have lag 0
+ok    game.leaderboard has one live entry per scoring player (last record per key)
+ok    top 10 totals on game.leaderboard equal SUM(delta) in Postgres and the dashboard's /api/top
+ok    match_history rows equal match_ended events
+ok    achievements: hot_streak fired (1010) and all 1058 unlocks are on game.achievements
+ok    game.player-events.dlq holds exactly the poison records (1)
+ok    leaderboard dashboard and Connect /ready answer
+PASS (9/9)

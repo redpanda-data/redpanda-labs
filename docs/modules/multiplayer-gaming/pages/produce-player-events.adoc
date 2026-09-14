@@ -1,0 +1,150 @@
+= Produce player events
+:page-layout: solution-step
+:description: Let the deterministic simulator produce exactly 3000 events with an idempotent, acks=all producer, then read them back in Console and with rpk.
+:page-solution-step-duration: 5
+
+The simulator is already producing. In this step you let it run to its cap of exactly 3000 events, read the records back in Console and with `rpk`, and look at the producer settings that make the counts exact and the retries safe.
+
+== What you do
+
+. Wait for the simulator to stop at `SIM_EVENTS_MAX`:
++
+[source,bash]
+----
+include::example$steps/produce-player-events/commands.sh[tag=seed]
+----
++
+`make seed` runs `make topics` and `make schemas` first (both are no-ops now), polls the simulator until its state is `capped` and prints the counters, then waits until the three consumer groups have caught up. At 100 events per second this takes about 30 seconds.
++
+.Expected output
+[source,text]
+----
+include::example$steps/produce-player-events/expected/seed.txt[]
+----
+
+. Open Console at http://localhost:8080/topics/game.player-events and select a record. Console shows the Protobuf payload as JSON, with `scoreChanged`, `itemAcquired`, or `playerJoined` as the populated `oneof` case and the `event_type` header alongside.
+
+. Read one partition with `rpk`, decoding through Schema Registry:
++
+[source,bash]
+----
+include::example$steps/produce-player-events/commands.sh[tag=consume-partition]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/produce-player-events/expected/consume-partition.txt[]
+----
+
+The producer configuration is a few lines of franz-go:
+
+[source,go]
+----
+include::example$services/simulator/main.go[tags=producer]
+----
+
+And the pacing loop, which is what makes `SIM_EVENTS_MAX` exact:
+
+[source,go]
+----
+include::example$services/simulator/main.go[tags=loop]
+----
+
+== Why
+
+Three settings on the producer carry the design. Idempotence gives every partition a producer ID and a sequence number, so a retried batch after a timeout is deduplicated by the broker and a `score_changed` is never applied twice on the log. `acks=all` waits for the full in-sync replica set before the send is acknowledged; with one replica it changes nothing here, with three it is the difference between a durable score and a lost one. The sticky key partitioner hashes the key like the Java client does, so `player_id` maps to the same partition from any client language.
+
+The generator is deterministic on purpose. It seeds a random source from `SIM_SEED`, keeps its own simulated clock (200 simulated milliseconds per event), and returns exactly one event per call, queuing the several events of a match start or match end so a hard stop at 3000 never leaves half a match on the log. Same seed, same 3000 records, same timestamps, which is what lets `scripts/verify.sh` assert exact numbers and lets you compare a replay with the original in xref:scale-and-replay.adoc[].
+
+[source,go]
+----
+include::example$services/simulator/sim/generator.go[tags=next]
+----
+
+== Why Redpanda
+
+Idempotent producers are on by default in Redpanda and in franz-go, and they cost nothing measurable. The `event_type` record header lets Redpanda Connect route without decoding the payload first (xref:persist-match-history.adoc[]), and the Confluent wire format the `sr` serde writes is what Console and Connect decode. See xref:streaming:develop:produce-data/idempotent-producers.adoc[] and xref:streaming:develop:produce-data/configure-producers.adoc[].
+
+== What happens inside
+
+For each event the simulator serializes the Protobuf message, prefixes the schema ID header, hashes the key to pick a partition, and appends the record to a per-partition batch. Batches are sent after 5 ms of lingering, compressed with Snappy, and the broker drops any retried batch it has already appended by checking the producer's sequence number (xref:streaming:develop:produce-data/idempotent-producers.adoc[]). The high watermark of each partition advances by the number of records in the batch; the sum across the six partitions of `game.player-events` plus the three of `game.match-events` is 3000 once the simulator reports `capped`.
+
+The three consumers have been reading since the first record arrived. The next three steps look at each in turn.
+
+
+Complete sources for building along: the generator, the main program, and the shared packages every service compiles against.
+
+.Complete source: services/simulator/sim/generator.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/simulator/sim/generator.go[]
+----
+====
+
+.Complete source: services/simulator/main.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/simulator/main.go[]
+----
+====
+
+.Complete source: services/internal/schema/schema.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/internal/schema/schema.go[]
+----
+====
+
+.Complete source: services/internal/envvar/env.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/internal/envvar/env.go[]
+----
+====
+
+.Complete source: services/Dockerfile
+[%collapsible]
+====
+[source,dockerfile]
+----
+include::example$services/Dockerfile[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/produce-player-events/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/produce-player-events/expected/verify.txt[]
+----
+
+If the state is still `producing`, wait and repeat; if it is `waiting_for_schema`, `make schemas` did not complete. If `acked_total` is lower than `generated_total`, the simulator is still receiving acknowledgements or logged produce errors; `docker compose logs simulator` shows them.
+
+== In production
+
+[.production-note]
+Keep idempotence on and `acks=all`; add TLS and SASL to the client options, and scope its ACLs to `WRITE` on the two topics. See the Idempotency and delivery row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/sample-data/players.json[sample-data/players.json]
+* link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
+* link:{attachmentsdir}/proto/game_events.proto[proto/game_events.proto] (run `make proto` after saving the sources)

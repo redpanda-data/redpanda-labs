@@ -1,0 +1,156 @@
+= Start the environment
+:page-layout: solution-step
+:description: Start Redpanda, Console, Postgres, Redpanda Connect, the three game services, and the leaderboard dashboard with one command, locally or against Redpanda Cloud Serverless, and see why nothing is produced yet.
+:page-solution-step-duration: 5
+
+You bring up the whole stack with one command and watch every service report healthy. Redpanda can be the broker in the compose file or a Redpanda Cloud Serverless cluster; the services do not know which. Nothing flows yet: the producers refuse to write until you create the topics and the schema contract in the next two steps, and that refusal is the first design decision of this solution.
+
+== What you do
+
+Choose one of two paths. Both end with the same running stack.
+
+. *Download the complete example* (sign in required). Unzip it and change into `multiplayer-gaming/`.
++
+*Or build along.* Create a directory `multiplayer-gaming/` and save the files listed under _Files for this step_ into it, keeping the paths shown. Save `env.example` as `.env.example` and `Makefile.mk` as `Makefile`. The Go sources are shown in full in xref:produce-player-events.adoc[], xref:build-leaderboard.adoc[], and xref:detect-achievements.adoc[]; the Postgres schema and the Connect pipeline in xref:persist-match-history.adoc[]. Save each into the path its heading names. Then regenerate the Protobuf code once (only needed when you build along, so this command is not part of the test run):
++
+[.manual]
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=proto]
+----
+
+. Choose where Redpanda runs. Every client in this solution (the Go services, the `rpk` helper, and the Redpanda Connect pipeline) reads one set of connection variables from `.env`, so the choice is a few lines in that file.
++
+[tabs]
+======
+Local broker::
++
+--
+Nothing to change. `.env.example` sets `COMPOSE_PROFILES=local`, which starts the `redpanda` and `console` containers, and the defaults point every client at `redpanda:9092` and `http://redpanda:8081` inside the compose network. Copy `.env.example` to `.env` yourself if you want to look before `make up` does it for you.
+--
+Redpanda Cloud Serverless::
++
+--
+The local `redpanda` and `console` containers are skipped; Postgres, Redpanda Connect, the services, the dashboard, and the `rpk` helper run unchanged and connect over TLS with a SCRAM user.
+
+. Create a Serverless cluster and wait for it to be ready: xref:cloud-data-platform:get-started:cluster-types/serverless.adoc[].
+. Create a user (SCRAM-SHA-256) and give it ACLs: all operations on topics with the prefix `game.`, read on the consumer groups `leaderboard`, `achievements`, and `connect-history`, and describe on the cluster. Users and ACLs are on the cluster's *Security* page, or use xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-user-create.adoc[`rpk security user create`] and xref:cloud-data-platform:reference:rpk/rpk-security/rpk-security-acl-create.adoc[`rpk security acl create`]. See xref:cloud-data-platform:security:authorization/acl.adoc[].
+. On the cluster's *Overview* page, open *How to connect* and copy the bootstrap server URL and the Schema Registry URL. xref:cloud-data-platform:manage:cluster-maintenance/configure-client-connections.adoc[] describes the settings a client needs.
+. Copy `.env.example` to `.env` and replace these lines with your cluster's values (`env.cloud.example` under _Files for this step_ has them ready to paste):
++
+[source,bash]
+----
+include::example$env.cloud.example[]
+----
++
+Schema Registry accepts the same user, so the `REDPANDA_SCHEMA_REGISTRY_USERNAME` and `PASSWORD` lines stay empty. `REDPANDA_TOPIC_REPLICAS=3` is the replication factor `make topics` uses in xref:create-topics.adoc[].
+
+Two things differ afterwards. Redpanda Console is the one in Redpanda Cloud, not http://localhost:8080, so wherever a step opens Console, open your cluster instead. And you cannot lower the cluster's `segment.ms` floor on Serverless (the compose file lowers it to one minute for the local broker), so compaction of `game.leaderboard` in xref:build-leaderboard.adoc[] shows up after the cluster's floor, ten minutes by default, rather than within a minute. `make tiered-up` in xref:index.adoc#_extend_this_solution[Extend this solution] is local only.
+--
+======
+
+. Start everything and wait for the healthchecks:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+The first run builds the four Go program images and pulls Redpanda, Console, Postgres, and Redpanda Connect. It takes one to three minutes. `make up` copies `.env.example` to `.env` if `.env` does not exist; that file pins every image version and every simulator setting.
+
+. Open Redpanda Console at http://localhost:8080. The cluster has one broker and no topics of yours yet.
+
+The compose file declares a healthcheck for every service, and `make up` runs `docker compose up -d --wait`, so the command returns only when all nine containers pass (seven on the Cloud path):
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=redpanda]
+----
+
+== Why
+
+The stack is nine containers, and the interesting ones are the three that read the same topic. All of them read the same eight `REDPANDA_*` variables (the `x-redpanda-env` block in `docker-compose.yml` hands them to every service, `rpk` gets them as `RPK_*`, and the Connect pipeline interpolates them), which is what makes the Cloud tab a `.env` edit and not a fork of the stack. The Go side is one small package:
+
+[source,go]
+----
+include::example$services/internal/conn/conn.go[tags=config]
+----
+Starting them all first, before any topic exists, makes a point that matters in production: a consumer or producer that starts before its topic or schema is ready should wait, not guess. The simulator polls for the topics, then for the schema, and logs what it is waiting for. Redpanda Connect, the two Go consumers, and the dashboard do the same for the subjects they decode with.
+
+== Why Redpanda
+
+Redpanda runs as a single binary with Schema Registry and the HTTP Proxy built in, so the whole broker side of this architecture is one container with `--smp 1 --memory 1G`. `rpk` ships in the same image, which is why the `rpk` helper container can create topics and register schemas without a host install. See xref:streaming:get-started:quick-start.adoc[].
+
+== What happens inside
+
+Redpanda starts in `dev-container` mode, advertises `redpanda:9092` inside the compose network and `localhost:19092` outside it, and reports `Healthy: true` to `rpk cluster health` once its single Raft group has a leader. The one cluster setting the compose file changes, `log_segment_ms_min=60000`, lets xref:build-leaderboard.adoc[] roll a segment every minute so you can watch compaction. Console connects to the broker, the Admin API, and Schema Registry; because `console-config.yaml` enables Schema Registry and sets no manual Protobuf mappings (the complete file is below), Console will decode records by the schema ID in each record as soon as schemas exist.
+
+Redpanda Connect loads `connect/match-history.yaml`, opens its Postgres connections, and joins the consumer group `connect-history` on two topics that do not exist yet. The `redpanda` input keeps retrying metadata until they do. The simulator reaches `waiting_for_topics` and stays there; the leaderboard service and the dashboard wait for `game.leaderboard` the same way.
+
+Complete sources for building along:
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+.Complete source: console-config.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$console-config.yaml[]
+----
+====
+
+.Complete source: services/internal/conn/conn.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/internal/conn/conn.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+If `make up` stops with a container marked `unhealthy`, run `docker compose logs <service>`. The usual causes are Docker having less than 4 GB of memory available (Redpanda fails to allocate `--memory 1G`) and ports `8080`, `3000`, `4195`, `8090`, `15432`, `18081`, or `19092` already in use on the host (move a port with the matching `*_PORT` variable in `.env`, then substitute it in the commands that follow). If the state is `producing` or `capped`, you started from a stack that already had topics and schemas; `make clean` and start again.
+
+== In production
+
+[.production-note]
+In production, the broker cluster, the sinks, and the services are deployed and scaled separately, and the services connect over TLS with SASL credentials scoped to what each one needs. See the Brokers and replication and Security rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env.example`) and link:{attachmentsdir}/env.cloud.example[env.cloud.example] (the lines to change for Redpanda Cloud)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/console-config.yaml[console-config.yaml]
+* link:{attachmentsdir}/buf.yaml[buf.yaml] and link:{attachmentsdir}/buf.gen.yaml[buf.gen.yaml] (for `make proto`)
+* link:{attachmentsdir}/proto/game_events.proto[proto/game_events.proto]
+* link:{attachmentsdir}/proto/history/game_events.v1.proto[proto/history/game_events.v1.proto] and link:{attachmentsdir}/proto/history/game_events.breaking.proto[proto/history/game_events.breaking.proto]
+* link:{attachmentsdir}/connect/match-history.yaml[connect/match-history.yaml]
+* link:{attachmentsdir}/postgres/init.sql[postgres/init.sql]
+* link:{attachmentsdir}/sample-data/players.json[sample-data/players.json] and link:{attachmentsdir}/sample-data/README.md[sample-data/README.md]
+* link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
+* link:{attachmentsdir}/services/dashboard/static/index.html[services/dashboard/static/index.html]
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh], link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh], and link:{attachmentsdir}/scripts/rpk.sh[scripts/rpk.sh] (the `rpk` helper's wrapper; `chmod +x` it)

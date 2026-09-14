@@ -1,0 +1,132 @@
+= Scale and replay
+:page-layout: solution-step
+:description: Burst the producer and watch lag, add two leaderboard instances and watch the group rebalance, then seek the group to the start and watch the compacted topic converge to the same board.
+:page-solution-step-duration: 8
+
+Three experiments that only a log makes cheap. You push the producer past what one consumer keeps up with and watch lag rise and fall, scale the leaderboard to three instances and watch partitions move, then send the group back to the first record and watch it recompute every total and publish them again, to the same values.
+
+== What you do
+
+. Keep the dashboard at http://localhost:3000 open and burst the simulator at 2000 events per second for 5 seconds:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=burst]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/burst.txt[]
+----
++
+The `consumer lag` counter on the dashboard rises for a moment and returns to 0 once the group catches up. `make wait` blocks until it has:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=wait-burst]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/wait-burst.txt[]
+----
++
+The simulator's `/stats` now shows `burst_events` above 0; the seeded 3000 are unchanged. This is what the dashboard does during a burst, recorded by the test run of this step:
++
+.Captured by this solution's test run
+video::leaderboard-burst.mp4[width=800, opts="autoplay,loop,muted"]
+
+. Scale the leaderboard to three instances and wait for the group to settle:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=scale]
+----
++
+Then look at the group:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=members]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/members.txt[]
+----
++
+`MEMBERS 3`, and the partition table shows two partitions per member. The dashboard at http://localhost:3000 now shows `members 3`; it did not move, because it is not a group member. Each instance reports the partitions it owns: `docker compose exec -T --index 2 leaderboard-service wget -qO- http://localhost:8080/healthz` shows the second one's. Its log shows what it did when the partitions arrived: `resumes at offset <n>: loaded <k> player totals from game.leaderboard`.
+
+. Snapshot the board, then send the group back to the start of every partition. Stop the consumers, seek the group, start the consumers again:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=snapshot-seek]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/snapshot-seek.txt[]
+----
++
+`rpk group seek` needs the group to have no active members, which is why the services are stopped first. `rpk group describe leaderboard` now shows a `TOTAL-LAG` equal to every record on `game.player-events`.
+
+. Watch the replay, then compare. On the dashboard the totals drop and climb back as the instances recompute from the first record; `records read` counts every republished entry. Wait for the lag to return to 0 and the dashboard to catch up:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=wait-replay]
+----
++
+Then compare:
++
+[source,bash]
+----
+include::example$steps/scale-and-replay/commands.sh[tag=verify]
+----
+
+== Why
+
+The burst shows what lag is: the distance between the newest record and the last one a group committed. It is the one number to alert on for any consumer, and the dashboard reads it from the same source `rpk group describe` does.
+
+Scaling shows how consumer groups distribute work. Nobody told the new instances which partitions to take; joining the group is enough. The coordinator ran a rebalance and each member got two of six partitions. The ceiling is six instances, which is why xref:create-topics.adoc[] chose six partitions. A new owner does not start from zero: its first record on a partition arrives with a committed offset, so it loads that partition's players from `game.leaderboard`, the totals as of the offsets written into each entry, and continues from there. Three writers publishing totals for disjoint sets of players never contend.
+
+The replay is the reason to build on a log at all. The board on `game.leaderboard` was never the source of truth; `game.player-events` is. Seeking the group to the start makes every instance recompute every total from the first record and publish each one again. The compacted topic absorbs thousands of superseded entries and converges, within a minute or two, back to one record per player, with the same scores it held before. The same move fixes a bug in the leaderboard logic (deploy the fix, seek, replay), bootstraps a new consumer that needs history, or rebuilds a view that was lost.
+
+== Why Redpanda
+
+Consumer group offsets are the consumer's, not the broker's, and `rpk group seek` edits them. Retention on `game.player-events` (7 days here, longer with Tiered Storage) decides how far back a replay can go. Compaction on `game.leaderboard` means the replay costs nothing lasting: the extra records are gone after the next compaction pass. Cooperative rebalancing moves only the partitions that need to move, so two instances keep working while the third joins. See xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[], xref:streaming:develop:consume-data/consumer-offsets.adoc[], and xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[].
+
+== What happens inside
+
+During the burst the simulator's ticker fires 2000 times a second and the producer batches records per partition; the leaderboard applies them as fast as it can publish, so its committed offsets fall behind the high watermarks and the lag the dashboard reads rises. When the burst ends the group drains the difference.
+
+When the second and third instances join, the coordinator triggers a rebalance with the cooperative-sticky protocol. Partitions are revoked from the first instance in a first round and assigned to the newcomers in a second. The first instance blocks the revocation until the batch it holds is published and committed (`BlockRebalanceOnPoll`), then drops the state of the players on the revoked partitions. Each newcomer's first record on a partition has an offset above 0, so `seed` takes a snapshot of `game.leaderboard`, keeps the entries whose `source_partition` is that partition, and resumes with those totals. Any record at or below an entry's `source_offset` is a duplicate and is skipped.
+
+`rpk group seek leaderboard --to start` writes offset 0 for each of the six partitions into `__consumer_offsets` on behalf of the group. When the instances start again their first record on every partition is at offset 0, so `seed` loads nothing and logs `rebuilding its totals from scratch`. They apply every `score_changed` again in the original per-partition order and publish every intermediate total; the dashboard's map is overwritten entry by entry, which is the dip you saw. When the lag reaches 0 the last entry published for each player is the same total as before, because the log has not changed. `before.txt` and `after.txt` are identical. The poison record and the burst are replayed too, and are handled the same way.
+
+Meanwhile `game.leaderboard` has thousands more records than players. Run `docker compose exec -T rpk rpk topic consume game.leaderboard -o :end -f '%k\n' | wc -l` a few times over the next minutes and watch it fall back toward 24: each partition rolls its segment after 60 seconds, and the compaction pass rewrites the closed segments with one record per key.
+
+== Verify
+
+The comparison above is the check:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/scale-and-replay/expected/verify.txt[]
+----
+
+If `diff` prints differences, the group had not finished replaying when `after.txt` was taken, or the dashboard was a second behind the last entries: wait for `TOTAL-LAG 0` and take `after.txt` again. If `rpk group seek` reports `seeking a non-empty group is not allowed`, a leaderboard instance was still in the group; `docker compose stop leaderboard-service` and repeat.
+
+== In production
+
+[.production-note]
+Scale consumer groups on lag, keep instance counts at or below the partition count, and use Tiered Storage so the replay window is a retention setting rather than a disk size. Give `game.leaderboard` a `segment.ms` and dirty ratio suited to its write rate; the 60-second segments here exist so you can watch compaction happen. See the Consumer scaling and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]

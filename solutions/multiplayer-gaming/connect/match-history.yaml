@@ -1,0 +1,131 @@
+# Match history sink: game.player-events and game.match-events -> Postgres.
+#
+# No code. The redpanda input joins its own consumer group, so the pipeline
+# reads the same records the leaderboard and achievements services read
+# without slowing either of them down. Failures land on the dead-letter topic
+# with the error attached; nothing is dropped.
+
+# tag::input[]
+input:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+    # Local broker: TLS off, mechanism none. Redpanda Cloud: TLS on and the
+    # SCRAM user from .env. The same variables drive the Go services and rpk.
+    tls:
+      enabled: ${REDPANDA_TLS_ENABLED:false}
+    sasl:
+      - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+        username: "${REDPANDA_SASL_USERNAME:}"
+        password: "${REDPANDA_SASL_PASSWORD:}"
+    topics:
+      - game.player-events
+      - game.match-events
+    consumer_group: connect-history
+    start_offset: earliest
+# end::input[]
+
+# tag::pipeline[]
+pipeline:
+  processors:
+    - try:
+        # Bytes in, JSON out: the schema ID in the record selects the Protobuf
+        # schema, the registry supplies it, the processor decodes.
+        - schema_registry_decode:
+            url: "${REDPANDA_SCHEMA_REGISTRY_URL:http://redpanda:8081}"
+            basic_auth:
+              enabled: ${REDPANDA_SCHEMA_REGISTRY_BASIC_AUTH:false}
+              username: "${REDPANDA_SCHEMA_REGISTRY_USERNAME:}"
+              password: "${REDPANDA_SCHEMA_REGISTRY_PASSWORD:}"
+        # Flatten the oneof into one row shape per table. event_type comes from
+        # the record header the producer set.
+        - mapping: |
+            # protojson: field names are lowerCamelCase and int64 values are strings.
+            let type = @event_type.or("unknown")
+            root.event_id    = this.eventId
+            root.event_type  = $type
+            root.player_id   = this.playerId
+            root.match_id    = this.matchId
+            root.occurred_at = this.occurredAt
+            root.region      = this.region
+            if $type == "match_started" {
+              root = deleted()
+            } else if $type == "match_ended" {
+              root.started_at       = this.matchEnded.startedAt
+              root.duration_seconds = this.matchEnded.durationSeconds.or(0).number()
+              root.winner_player_id = this.matchEnded.winnerPlayerId
+              root.player_ids       = this.matchEnded.playerIds.or([])
+            } else {
+              root.delta     = this.scoreChanged.delta.or(null).number().catch(null)
+              root.new_score = this.scoreChanged.newScore.or(null).number().catch(null)
+              root.item_id   = this.itemAcquired.itemId.or(null)
+              root.quantity  = this.itemAcquired.quantity.or(null)
+              root.won       = this.playerLeft.won.or(null)
+              root.payload   = this
+            }
+# end::pipeline[]
+
+# tag::output[]
+output:
+  fallback:
+    # First choice: the rows. reject_errored refuses any message that carries a
+    # processing error, which pushes it to the next output in the list.
+    - reject_errored:
+        switch:
+          cases:
+            - check: this.event_type == "match_ended"
+              output:
+                sql_insert:
+                  driver: postgres
+                  dsn: "postgres://${POSTGRES_USER:game}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:postgres}:5432/${POSTGRES_DB:game}?sslmode=disable"
+                  table: match_history
+                  columns: [ match_id, started_at, ended_at, duration_seconds, winner_player_id, player_ids, region ]
+                  args_mapping: |
+                    root = [
+                      this.match_id, this.started_at, this.occurred_at, this.duration_seconds,
+                      this.winner_player_id, this.player_ids.string(), this.region,
+                    ]
+                  suffix: ON CONFLICT (match_id) DO NOTHING
+                  max_in_flight: 4
+            - output:
+                sql_insert:
+                  driver: postgres
+                  dsn: "postgres://${POSTGRES_USER:game}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:postgres}:5432/${POSTGRES_DB:game}?sslmode=disable"
+                  table: player_events
+                  columns: [ event_id, event_type, player_id, match_id, occurred_at, delta, new_score, item_id, quantity, won, region, payload ]
+                  args_mapping: |
+                    root = [
+                      this.event_id, this.event_type, this.player_id, this.match_id, this.occurred_at,
+                      this.delta, this.new_score, this.item_id, this.quantity, this.won, this.region,
+                      this.payload.string(),
+                    ]
+                  suffix: ON CONFLICT (event_id) DO NOTHING
+                  max_in_flight: 4
+                  batching:
+                    count: 100
+                    period: 500ms
+# end::output[]
+# tag::dlq[]
+    # Second choice: the dead-letter topic, with the original bytes, key, and
+    # headers plus the error, so the record can be inspected and replayed.
+    - processors:
+        - mapping: |
+            meta error = @fallback_error
+      redpanda:
+        seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+        tls:
+          enabled: ${REDPANDA_TLS_ENABLED:false}
+        sasl:
+          - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+            username: "${REDPANDA_SASL_USERNAME:}"
+            password: "${REDPANDA_SASL_PASSWORD:}"
+        topic: game.player-events.dlq
+        key: ${! @kafka_key }
+        metadata:
+          include_patterns: [ "^event_type$", "^error$", "^kafka_topic$", "^kafka_partition$", "^kafka_offset$" ]
+# end::dlq[]
+
+http:
+  address: 0.0.0.0:4195
+
+logger:
+  level: INFO

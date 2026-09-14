@@ -1,0 +1,82 @@
+= Verify end to end
+:page-layout: solution-step
+:description: Run the nine assertions that prove the whole system agrees with itself: counts, sums, lags, and the dead-letter topic.
+:page-solution-step-duration: 3
+
+One script asserts everything the previous steps claimed, against the running system, with exact numbers. It is the same script CI runs on every change to this solution.
+
+== What you do
+
+. Run the checks:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify-all]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify-all.txt[]
+----
+
+. Read what each check compares. The script sources a small shared library (`assert_eq`, `assert_ge`, `retry`) and runs nine checks; the complete script is at the end of _What happens inside_. The two that read `game.leaderboard` reduce the topic the way compaction does, last record per key, before comparing:
++
+[source,bash]
+----
+include::example$scripts/verify.sh[tags=board]
+----
+
+== Why
+
+Every step's Verify section checked one component. This step checks that the components agree with each other, which is the claim the architecture actually makes: three consumers of one stream, three views of one truth. The board on `game.leaderboard`, reduced to the last record per key the way compaction reduces it, is compared with a `SUM(delta)` in Postgres that a different consumer wrote through a different path, and with what the dashboard serves; the match history is compared with the simulator's own count; the achievements topic's high watermark is compared with the service's counter; the dead-letter topic must hold exactly the poison records and nothing else.
+
+The checks work because the simulator is deterministic and stops at a cap, so the number of `match_ended` events is a fact, not an estimate. They tolerate the two things you did in xref:scale-and-replay.adoc[]: a burst (the watermark check uses the simulator's acknowledged counts, and the seeded 3000 must still be exact when no burst happened) and a poison record (the dead-letter check expects exactly as many records as were poisoned).
+
+== Why Redpanda
+
+Every number the script needs is observable from outside: high watermarks and group lag from `rpk`, counts from the sinks, counters from the services. That is the property that makes a streaming system testable in CI, and it is the same property you would alert on in production. See xref:streaming:reference:rpk/rpk-group/rpk-group-describe.adoc[].
+
+== What happens inside
+
+The script runs `rpk topic describe -p` to sum high watermarks, `rpk group describe` for the three groups' lag (with a retry, because the groups may be a second behind), `rpk topic consume game.leaderboard -o :end` reduced with `awk` to the last record per key, and `psql` queries, all inside the compose containers. Each check prints `ok` or `FAIL`, and `verify_summary` prints `PASS (9/9)` and exits 0, or lists the failed checks and exits 1. CI gates on that exit code.
+
+The complete script, for building along (it sources `scripts/verify-lib.sh`, an attachment):
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
+
+Expected output (the counts in parentheses in the full output above depend on whether you ran the burst and poison steps):
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+A failed check names what it compared. The most likely one after xref:scale-and-replay.adoc[] is the lag check, if a replay is still running: wait for `rpk group describe leaderboard` to show `TOTAL-LAG 0` and run `make verify` again.
+
+When you are done, `make clean` stops the stack and deletes its volumes.
+
+== In production
+
+[.production-note]
+Turn these assertions into alerts: consumer lag per group, dead-letter topic size, and a periodic reconciliation between the board on `game.leaderboard` and the database. See the Observability row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh] (save both under `scripts/`)

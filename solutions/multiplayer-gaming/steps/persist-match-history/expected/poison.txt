@@ -1,0 +1,6 @@
+{
+  "poison": "produced",
+  "schema_id": 2147483647,
+  "topic": "game.player-events",
+  "total": 1
+}

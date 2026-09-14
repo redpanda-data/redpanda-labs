@@ -1,0 +1,15 @@
+GROUP                  leaderboard
+COORDINATOR-NODE       0
+COORDINATOR-PARTITION  __consumer_offsets/1
+STATE                  Stable
+BALANCER               cooperative-sticky
+MEMBERS                3
+TOTAL-LAG              0
+
+TOPIC               PARTITION  CURRENT-OFFSET  LOG-START-OFFSET  LOG-END-OFFSET  LAG   MEMBER-ID                                                      CLIENT-ID                 HOST
+game.player-events  0          -               0                 0               -     leaderboard-bcbefa2aec11-489214d8-f0a3-4480-a776-34d1ab0f6f0a  leaderboard-bcbefa2aec11  172.19.0.4
+game.player-events  1          1231            0                 1231            0     leaderboard-bcbefa2aec11-489214d8-f0a3-4480-a776-34d1ab0f6f0a  leaderboard-bcbefa2aec11  172.19.0.4
+game.player-events  2          1880            0                 1880            0     leaderboard-c4e1ba563af0-30a30e41-c5d6-4422-b1df-87588c1a3cce  leaderboard-c4e1ba563af0  172.19.0.12
+game.player-events  3          1294            0                 1294            0     leaderboard-d42b06050c3d-33ffce70-b5c5-4073-b1d4-634bc71ba14a  leaderboard-d42b06050c3d  172.19.0.11
+game.player-events  4          1832            0                 1832            0     leaderboard-d42b06050c3d-33ffce70-b5c5-4073-b1d4-634bc71ba14a  leaderboard-d42b06050c3d  172.19.0.11
+game.player-events  5          1298            0                 1298            0     leaderboard-c4e1ba563af0-30a30e41-c5d6-4422-b1df-87588c1a3cce  leaderboard-c4e1ba563af0  172.19.0.12

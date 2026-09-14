@@ -1,0 +1,6 @@
+{
+  "burst": "started",
+  "events": 10000,
+  "rate_per_second": 2000,
+  "seconds": 5
+}

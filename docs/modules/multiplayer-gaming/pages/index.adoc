@@ -1,0 +1,202 @@
+= Multiplayer game events with a live leaderboard
+:page-layout: solution
+:page-topic-type: solution
+:description: Stream game events through Redpanda to a live leaderboard, an achievements engine, and a match history without one consumer ever slowing down another.
+:page-solution-version: v1.0.0
+:page-solution-difficulty: intermediate
+:page-solution-assumes: Docker, topics, reading Go
+:page-solution-duration: 50
+:page-solution-status: draft
+:page-solution-featured: true
+:page-solution-download: authenticated
+:page-solution-platforms: self-managed, cloud
+:page-solution-technologies: Redpanda, Schema Registry, Redpanda Connect, Redpanda Console, Go, Protobuf, Postgres, Docker Compose
+:page-categories: Topics and Partitions, Producers, Consumer Groups, Schema Registry, Retention and Compaction, Pipelines
+:page-solution-use-cases: Real-time analytics, Event-driven microservices, Gaming
+:personas: streaming_developer, platform_operator
+:page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
+:page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:manage:cluster-maintenance/compaction-settings.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc, streaming:console:config/deserialization.adoc, streaming:develop:transactions.adoc, streaming:develop:produce-data/configure-producers.adoc
+
+A multiplayer game emits thousands of events a second: players join, score, and win. The leaderboard must update in real time, achievements must fire the moment a streak completes, and analysts want every match in a database.
+
+You build all three on one Redpanda event stream, each as an independent consumer group, so a slow database never delays the leaderboard. The leaderboard itself lives in a compacted topic, with no extra store. You finish with a live dashboard, an achievements feed, and a match history in Postgres, proven by one script.
+
+After completing this solution, you will be able to:
+
+* [ ] Publish Protobuf events with a Schema Registry contract and evolve that contract without breaking a running consumer
+* [ ] Fan one topic out to three consumer groups that scale, fail, and replay independently
+* [ ] Keep stateful, per-player logic correct across a rebalance by relying on key-based partitioning
+* [ ] Materialize a live view in a compacted topic by publishing state instead of deltas, and rebuild it from the log with a group seek
+* [ ] Land a stream in Postgres with Redpanda Connect and route every bad record to a dead-letter topic
+* [ ] Prove the whole system with exact assertions: counts, sums, lags
+
+== What you build
+
+A game simulator produces `GameEvent` records to two topics. Three consumers read them: a Go leaderboard service that totals each player's score and publishes it to a compacted topic that a small dashboard reads, a Go achievements service that detects streaks and wins and publishes them back to Redpanda, and a Redpanda Connect pipeline that writes match history to Postgres. Redpanda Console shows every record decoded.
+
+* *Game simulator* (Go, franz-go): deterministic event stream, idempotent producer, admin API to burst load or inject a poison record.
+* *`game.player-events`* and *`game.match-events`*: the two source topics, keyed by `player_id` and `match_id`.
+* *Schema Registry*: holds the `GameEvent` Protobuf schema as subjects `<topic>-value` with `BACKWARD` compatibility.
+* *Leaderboard service* (Go): consumer group `leaderboard`, one in-memory total per player, publishes the absolute total to `game.leaderboard` after every score change, scales to three instances.
+* *`game.leaderboard`*: a compacted topic keyed by `player_id`. Compaction keeps the newest total per player, so the topic is the leaderboard.
+* *Leaderboard dashboard* (Go): reads `game.leaderboard` from the start with no consumer group and serves the live top 10 over server-sent events on a fixed port.
+* *Achievements service* (Go): consumer group `achievements`, per-player state kept in memory because every player lives on one partition, produces to `game.achievements`.
+* *Redpanda Connect*: consumer group `connect-history`, decodes with Schema Registry, flattens the `oneof`, inserts into Postgres, routes failures to `game.player-events.dlq`.
+* *Redpanda Console*: decodes Protobuf records with the same schemas.
+
+.Captured by this solution's test run
+image::dashboard.png[The live leaderboard dashboard after the simulator has run]
+
+== Architecture
+
+image::architecture.svg[Architecture: the simulator produces to two Redpanda topics; the leaderboard service, the achievements service, and Redpanda Connect each read game.player-events in their own consumer group; results land in the compacted topic game.leaderboard, which the dashboard reads, in game.achievements, and in Postgres]
+
+Left to right: the simulator looks the `GameEvent` schema up in Schema Registry (it never registers one; the contract is created in xref:register-schemas.adoc[]) and produces every event about a player to `game.player-events`, keyed by `player_id`, and every match lifecycle event to `game.match-events`, keyed by `match_id`. Three consumer groups read `game.player-events`. The leaderboard group adds each `score_changed` delta to the player's total and publishes that total to `game.leaderboard`, a compacted topic keyed by `player_id`; the dashboard reads that topic from the start and serves the top 10. The achievements group folds each player's events into a small in-memory state and produces `achievement_unlocked` events to `game.achievements`. The `connect-history` group, a Redpanda Connect pipeline, decodes each record through Schema Registry, flattens it, and inserts it into Postgres; a record it cannot decode goes to `game.player-events.dlq` with the error attached. Console reads all five topics with the same schemas.
+
+=== Why Redpanda
+
+* *Independent consumer groups fan one stream out.* Each of the three consumers keeps its own offsets, so scaling the leaderboard, redeploying the achievements service, or a slow Postgres never touches the others. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* *Per-key ordering.* A record key selects the partition, so every event of one player is delivered in order to exactly one consumer instance. That is what lets the achievements service keep per-player state locally instead of in a shared store. xref:streaming:develop:produce-data/configure-producers.adoc[]
+* *Compaction as a materialized view.* A compacted topic keeps the newest record per key, so a service that publishes each player's total turns a topic into the leaderboard itself. Any reader loads the whole board by consuming from the start; no database sits between the stream and the dashboard. xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
+* *Replay.* Offsets are the consumer's, not the broker's. The replay in xref:scale-and-replay.adoc[] seeks the group to the start, and the service recomputes every total and publishes it again; the compacted topic converges to the same board. xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
+* *Schema Registry as the contract.* Producers and consumers agree on a Protobuf schema by ID, compatibility rules make evolution safe, and Console and Redpanda Connect decode records with no extra configuration. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* *Redpanda Connect for the sink.* Decode, flatten, insert, dead-letter: fifty lines of YAML, no code. xref:connect:components:outputs/sql_insert.adoc[]
+
+== Prerequisites
+
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
+* `curl` and `make` on the host (every `rpk` and `psql` command runs inside a container)
+* Optional: Go 1.25 or later, only if you want to run the unit tests outside Docker
+* Free host ports `8080`, `3000`, `3010`, `4195`, `8090`, `15432`, `18081`, `18082`, `19092`, and `19644`, or different ones set with the `*_PORT` variables in `.env` (plus `19000` and `19001` for the optional Tiered Storage extension)
+* Optional: a Redpanda Cloud Serverless cluster, if you want to run the same stack against Redpanda Cloud instead of the local broker (xref:start-environment.adoc[] has both paths)
+* Approximately {page-solution-duration} minutes
+
+You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
+
+// Steps are rendered from :page-solution-steps: by the solution layout.
+
+== Production considerations
+
+This solution runs on a single broker with no authentication so that it starts in a minute. Before you reuse the design in production, work through this table.
+
+[cols="1,2,2"]
+|===
+| Area | In this solution | In production
+
+| Brokers and replication
+| One broker in `dev-container` mode, replication factor 1.
+| Three or more brokers, replication factor 3, rack awareness. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
+
+| Security
+| Plaintext listeners, no authentication, every service is a superuser. The Redpanda Cloud path in xref:start-environment.adoc[] is the exception: TLS and one SCRAM user with ACLs on `game.*`.
+| TLS on every listener, SASL/SCRAM or mTLS per service, ACLs that let the simulator write only its two topics and each consumer group read only what it needs. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:security/authentication.adoc[], xref:streaming:manage:security/authorization/acl.adoc[]
+
+| Partitions
+| `game.player-events` has 6 partitions, `game.leaderboard` 3, the others 3 and 1, sized for a laptop.
+| Size for peak throughput and for the parallelism of the largest consumer group; the partition count is the ceiling on consumer instances. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
+
+| Schema validation
+| Schemas are registered and consumers reject unknown IDs, but the broker accepts any bytes (xref:persist-match-history.adoc[] proves it with a poison record).
+| Enable schema ID validation on `game.player-events` and `game.match-events` so the broker rejects a record whose schema ID is not registered under the topic's subject. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
+
+| Consumer scaling
+| One instance per group; xref:scale-and-replay.adoc[] scales the leaderboard to three by hand.
+| Scale on consumer group lag, keep instances at or below the partition count, and use static group membership for stateful services so a restart does not trigger a rebalance. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+
+| Data retention
+| `game.player-events` keeps 7 days on local disk; the other event topics use the cluster default. xref:index.adoc#_extend_this_solution[Extend this solution] switches Tiered Storage on with MinIO.
+| Tiered Storage: long retention and replay from object storage without growing local disks. xref:streaming:manage:tiered-storage.adoc[]
+
+| Compaction of `game.leaderboard`
+| `cleanup.policy=compact` with `segment.ms=60000` (and the cluster floor `log_segment_ms_min` lowered to match) so compaction is visible within minutes. Compaction runs every 10 seconds on closed segments.
+| Keep `compact`, but size `segment.ms` and `min.cleanable.dirty.ratio` for the write rate: rolling a segment a minute is churn, not a requirement. Compaction is best effort, so readers keep the last record per key rather than assuming one per key. xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
+
+| Idempotency and delivery
+| Idempotent producer with `acks=all`; consumers commit after writing, so a crash can replay a batch. Postgres inserts are `ON CONFLICT DO NOTHING`. The leaderboard publishes absolute totals, each stamped with the source offset it includes, so a replayed record is recognized and republishing a total is harmless (xref:build-leaderboard.adoc[]).
+| Publish state, not deltas, wherever a consumer materializes a view, and record the source position in it; use transactions where a consumer also produces and the output must be exactly-once. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:develop:transactions.adoc[]
+
+| Dead-letter handling
+| Redpanda Connect routes undecodable records to `game.player-events.dlq` with the error as a header. The Go services log and skip them.
+| Alert on dead-letter topic growth, keep the original key and headers so records can be replayed after a fix, and give the DLQ its own retention. xref:connect:configuration:error_handling.adoc[]
+
+| Observability
+| Redpanda Console, the dashboard's lag and `records read` counters, and `rpk group describe`.
+| Prometheus metrics from the brokers and from Redpanda Connect, dashboards, alerts on consumer lag and under-replicated partitions. xref:streaming:manage:monitoring.adoc[], xref:connect:guides:monitoring.adoc[]
+
+| Disaster recovery
+| None.
+| Shadowing replicates topics, consumer offsets, and schemas to a second cluster so the leaderboard can fail over. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
+
+| Analytics and lakehouse
+| Postgres holds the match history for queries.
+| Iceberg topics write `game.match-events` and `game.player-events` straight to a lakehouse table for analysts, with no pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
+|===
+
+== Extend this solution
+
+Two directions the steps leave open. Neither is required, and `make verify` does not depend on either.
+
+=== Keep a season of events with Tiered Storage
+
+`game.player-events` keeps seven days on local disk. A season of a live game is months of events, and the replay in xref:scale-and-replay.adoc[] is only as deep as the retention. Tiered Storage moves closed segments to object storage and reads them back on demand, so retention becomes a setting instead of a disk size. The compose file carries a `tiered` profile with MinIO as the object store, and one target turns it on for the local broker:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=tiered-up]
+----
+
+[source,makefile]
+----
+include::example$Makefile[tags=tiered]
+----
+
+[source,yaml]
+----
+include::example$docker-compose.yml[tags=tiered]
+----
+
+Then make the topic write to and read from the bucket, give it a season of retention, and let a segment roll so there is something to upload (one minute here; production values are far larger):
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=tiered-archive]
+----
+
+About two minutes later, Redpanda has uploaded the closed segments:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=tiered-describe]
+----
+
+The summary shows `CLOUD-STORAGE-MODE  full` and `LAST-UPLOAD` as milliseconds since the last upload; the size section shows non-zero `CLOUD-BYTES` and `CLOUD-SEGMENTS` for every partition. The same segments are objects in the bucket:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=tiered-bucket]
+----
+From here on a replay (`rpk group seek leaderboard --to start`) reads anything that has aged off local disk from the bucket, transparently to the consumers, so rebuilding the leaderboard from a whole season costs object storage reads and nothing else.
+
+Tiered Storage is an enterprise feature. A new cluster starts with a 30-day trial license, which is what this local broker runs on; see xref:streaming:get-started:licensing/overview.adoc[] for what happens after that. The setup here is the local shape of xref:streaming:manage:tiered-storage.adoc[], which covers the production settings: the object store credentials source, local retention targets, and the read and write paths. `make tiered-up` works only with the local broker (it changes cluster configuration); Redpanda Cloud clusters have Tiered Storage on already.
+
+=== Next: Cloud Topics and Iceberg
+
+xref:streaming:develop:manage-topics/cloud-topics.adoc[Cloud Topics] go one step further than Tiered Storage and keep the topic's data in object storage from the first write, which is the shape to reach for when a season of game events should cost object storage prices from day one. For the analytics side, the lakehouse path (Iceberg topics feeding a query engine) is its own solution, CDC to lakehouse, and the Analytics and lakehouse row above is where this one hands off to it.
+
+== Clean up
+
+Stop the stack and delete its volumes, including MinIO's if you started the `tiered` profile:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=clean]
+----
+
+== Related docs
+
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[] explains the consumer group mechanics every step of this solution relies on.
+* xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[] covers the cleanup policy and the settings that decide when `game.leaderboard` in xref:build-leaderboard.adoc[] is compacted.
+* xref:streaming:develop:produce-data/idempotent-producers.adoc[] is the producer setting that makes the retry in xref:produce-player-events.adoc[] safe.
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] covers subjects, compatibility levels, and the wire format that xref:register-schemas.adoc[] exercises.
+* xref:connect:components:outputs/sql_insert.adoc[] is the output the pipeline in xref:persist-match-history.adoc[] builds on.
+* xref:streaming:console:config/deserialization.adoc[] describes how Console decodes Protobuf with Schema Registry, which `console-config.yaml` enables.

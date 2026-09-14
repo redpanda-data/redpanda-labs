@@ -1,0 +1,162 @@
+= Persist the match history
+:page-layout: solution-step
+:description: Land both topics in Postgres with a Redpanda Connect pipeline that decodes through Schema Registry, flattens the oneof, inserts idempotently, and dead-letters what it cannot decode.
+:page-solution-step-duration: 6
+
+Redpanda Connect has been writing Postgres since the simulator started in xref:produce-player-events.adoc[]. You query the two tables, then produce one deliberately unreadable record and follow it to the dead-letter topic with the error attached. No code is involved: the pipeline is fifty lines of YAML.
+
+== What you do
+
+. Count the finished matches and look at one:
++
+[source,bash]
+----
+include::example$steps/persist-match-history/commands.sh[tag=history]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/history.txt[]
+----
+
+. Check that the sink agrees with the source. Every `game.player-events` record is a row, grouped by type:
++
+[source,bash]
+----
+include::example$steps/persist-match-history/commands.sh[tag=counts-by-type]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/counts-by-type.txt[]
+----
++
+The counts equal `events_by_type` at http://localhost:8090/stats.
+
+. Produce a poison record. The simulator writes one record to `game.player-events` whose schema ID, `2147483647`, is registered nowhere:
++
+[source,bash]
+----
+include::example$steps/persist-match-history/commands.sh[tag=poison]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/persist-match-history/expected/poison.txt[]
+----
+
+. Find it on the dead-letter topic (`rpk` waits for the record, which arrives once the fallback output flushes its batch):
++
+[source,bash]
+----
+include::example$steps/persist-match-history/commands.sh[tag=dlq]
+----
++
+The record keeps its key `poison`, its `event_type` header, and gains `error`, `kafka_topic`, `kafka_partition`, and `kafka_offset` headers (in no fixed order): everything needed to inspect it and replay it after a fix.
+
+The pipeline, in three parts. The input joins its own consumer group on both topics:
+
+[source,yaml]
+----
+include::example$connect/match-history.yaml[tags=input]
+----
+
+The processors decode and flatten:
+
+[source,yaml]
+----
+include::example$connect/match-history.yaml[tags=pipeline]
+----
+
+The output inserts into one of two tables, refusing any message that carries a processing error:
+
+[source,yaml]
+----
+include::example$connect/match-history.yaml[tags=output]
+----
+
+The refused messages fall through to the second output, the dead-letter topic, with the error attached:
+
+[source,yaml]
+----
+include::example$connect/match-history.yaml[tags=dlq]
+----
+
+== Why
+
+Analysts want match history in a database, and that requirement should cost nothing in code and nothing in latency for the leaderboard. Redpanda Connect meets both: the pipeline is configuration, and its consumer group `connect-history` reads at Postgres speed while the leaderboard group reads at broker speed.
+
+The `mapping` flattens the Protobuf `oneof` into two row shapes, one per table, because a relational table wants columns, not a nested `scoreChanged` object. `match_started` records are dropped (`root = deleted()`): the history table is about finished matches, and the `match_ended` event carries the start time. Both inserts end with `ON CONFLICT DO NOTHING` on the event's natural key, so a redelivered record (Connect is at-least-once, like the Go services) inserts nothing twice. The tables:
+
+[source,sql]
+----
+include::example$postgres/init.sql[tags=match_history]
+----
+
+[source,sql]
+----
+include::example$postgres/init.sql[tags=player_events]
+----
+
+The dead-letter path exists because a stream will, eventually, carry a record the pipeline cannot process, and the pipeline should not stop and should not drop it. `try` marks a failed message instead of aborting the batch, `reject_errored` refuses to send marked messages to the database, and `fallback` hands them to the next output with the reason in `@fallback_error`.
+
+== Why Redpanda
+
+The `redpanda` input, `schema_registry_decode`, `sql_insert`, and `fallback` are built-in components that know the Confluent wire format and Schema Registry, so the pipeline needs no schema file and no code. The record header the producer set in xref:produce-player-events.adoc[], `event_type`, is available to Bloblang as `@event_type`, which is how the mapping knows the shape before it reads the payload. See xref:connect:components:processors/schema_registry_decode.adoc[], xref:connect:components:outputs/sql_insert.adoc[], and xref:connect:configuration:error_handling.adoc[].
+
+== What happens inside
+
+For each record the input fetches, `schema_registry_decode` reads the schema ID from the first five bytes, fetches schema 2 from Schema Registry once and caches it, and decodes the Protobuf into JSON using the Protobuf JSON mapping (field names in lowerCamelCase, 64-bit integers as strings; the mapping converts what the tables need). The `switch` output sends `match_ended` rows to `match_history` and every other row to `player_events`, batching 100 rows or 500 ms at a time. The input commits the group's offset after the output acknowledges the batch.
+
+The poison record fails inside `try`: schema `2147483647` does not exist. `reject_errored` refuses it, `fallback` moves to its second output, the small `mapping` copies the error into a header, and the `redpanda` output writes the original bytes to `game.player-events.dlq` under the original key. The Go consumers meet the same record; they log it, count it as `poison_skipped`, and commit past it. Each consumer chooses its own policy, which is the point of keeping them independent.
+
+Complete sources for building along:
+
+.Complete source: connect/match-history.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/match-history.yaml[]
+----
+====
+
+.Complete source: postgres/init.sql
+[%collapsible]
+====
+[source,sql]
+----
+include::example$postgres/init.sql[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/persist-match-history/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/persist-match-history/expected/verify.txt[]
+----
+
+48 is the number of `match_ended` events in the seeded 3000 (`events_by_type` at http://localhost:8090/stats). If the count is lower, the pipeline is behind: `docker compose exec -T rpk rpk group describe connect-history` shows the lag, and `docker compose logs connect` shows Postgres errors. If the dead-letter topic is empty after the poison request, wait a few seconds; the fallback output batches like the primary one.
+
+== In production
+
+[.production-note]
+Alert on growth of `game.player-events.dlq`, keep its records long enough to replay them after a fix, and run the pipeline with metrics exported so lag and errors are graphed alongside the brokers'. See the Dead-letter handling and Observability rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/match-history.yaml[connect/match-history.yaml]
+* link:{attachmentsdir}/postgres/init.sql[postgres/init.sql]

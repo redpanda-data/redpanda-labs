@@ -1,0 +1,14 @@
+{
+  "instance": "21f35b1db4d7",
+  "partitions": 5,
+  "players_tracked": 24,
+  "poison_skipped": 1,
+  "produced": 396,
+  "ready": true,
+  "status": "ok",
+  "unlocked": {
+    "first_win": 22,
+    "hot_streak": 374
+  },
+  "unlocked_total": 396
+}

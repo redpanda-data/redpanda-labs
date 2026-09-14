@@ -1,0 +1,127 @@
+= Register the schemas
+:page-layout: solution-step
+:description: Register the Protobuf schema for each topic, set BACKWARD compatibility, evolve it to a second version, and watch Schema Registry refuse a breaking change.
+:page-solution-step-duration: 5
+
+You register the `GameEvent` Protobuf schema under one subject per event topic, set the compatibility level, then register a second version that adds a field and a message. The same file, registered under `game.leaderboard-value`, is the contract for the leaderboard topic. Finally you ask Schema Registry to check a change that would break consumers, and it refuses. When this step ends, the simulator starts producing on its own.
+
+== What you do
+
+. Register version 1 for each of the three event subjects, set `BACKWARD` compatibility, then register version 2, and register the current file under `game.leaderboard-value`. `make schemas` does all of it and is safe to repeat:
++
+[source,bash]
+----
+include::example$steps/register-schemas/commands.sh[tag=schemas]
+----
++
+[source,makefile]
+----
+include::example$Makefile[tags=schemas]
+----
+
+. Compare the two versions. Version 2 adds one optional field, `region`, to the envelope, and one new top-level message, `LeaderboardEntry`, that xref:build-leaderboard.adoc[] publishes:
++
+[source,protobuf]
+----
+include::example$proto/game_events.proto[tags=envelope]
+----
+
+. Ask Schema Registry whether a breaking change would be accepted. `proto/history/game_events.breaking.proto` changes `player_id` from `string` to `int64`:
++
+[source,bash]
+----
+include::example$steps/register-schemas/commands.sh[tag=check-compatibility]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/register-schemas/expected/check-compatibility.txt[]
+----
+
+. Watch the simulator wake up:
++
+[source,bash]
+----
+include::example$steps/register-schemas/commands.sh[tag=simulator-logs]
+----
++
+It logs `game.player-events-value -> schema id 2`, the same for `game.match-events-value`, and starts producing.
+
+== Why
+
+The schema is the contract between the game servers and every consumer, and it will change: this step already changes it once. Three things make that safe here. The schema is registered under `<topic>-value`, the default subject naming strategy, so Console, Redpanda Connect, and any client that reads the topic find it without configuration. Compatibility is `BACKWARD`, so a new version is accepted only if a consumer compiled against it can still read every record written under the previous version, which is the direction you need when you upgrade consumers before producers. And the producers look the schema up instead of registering it, so a service built against an unregistered schema waits and logs, rather than pushing a new version into the registry at deploy time.
+
+The payload messages are the rest of the file:
+
+[source,protobuf]
+----
+include::example$proto/game_events.proto[tags=payloads]
+----
+
+== Why Redpanda
+
+Schema Registry is part of the broker, stores its state in the `_schemas` topic you saw in xref:create-topics.adoc[], and speaks the Confluent-compatible API, so franz-go's `sr` package, Redpanda Connect's `schema_registry_decode`, and Console all work against it unchanged. Protobuf compatibility checking understands field kinds, `oneof` moves, and removed fields. See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[] and xref:streaming:reference:rpk/rpk-registry/rpk-registry-schema-create.adoc[].
+
+== What happens inside
+
+`rpk registry schema create` posts the `.proto` text to `/subjects/game.player-events-value/versions`. Schema Registry parses it, checks it against the subject's compatibility rule, assigns a global schema ID (1 for version 1, 2 for version 2), and stores it in `_schemas`. Because the text is identical for the three subjects, they share the IDs, and `game.leaderboard-value` gets ID 2 as its only version for the same reason. A record on `game.leaderboard` carries that ID plus a message index that points at `LeaderboardEntry` inside the file, which is how `rpk` and Console know which message to decode it as. Repeating the command with the same text returns the existing ID, which is why `make schemas` is idempotent.
+
+The simulator has been polling `POST /subjects/game.player-events-value` with the exact text of `proto/game_events.proto`, a lookup that answers only when that schema is registered:
+
+[source,go]
+----
+include::example$services/internal/schema/schema.go[tags=lookup]
+----
+
+From now on every record it writes starts with a magic byte `0`, the schema ID `2` as four bytes, and a Protobuf message index, followed by the serialized `GameEvent`. That header is what every consumer in the next steps reads first.
+
+Complete sources for building along:
+
+.Complete source: proto/game_events.proto
+[%collapsible]
+====
+[source,protobuf]
+----
+include::example$proto/game_events.proto[]
+----
+====
+
+.Complete source: services/internal/schema/schema.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/internal/schema/schema.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/register-schemas/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/register-schemas/expected/verify.txt[]
+----
+
+If version 2 is missing, the compatibility check rejected it. `rpk registry compatibility-level get game.player-events-value` should print `BACKWARD`; `make schemas` sets it before registering version 2. If the IDs differ from `1` and `2`, other schemas were registered first; nothing depends on the exact numbers.
+
+== In production
+
+[.production-note]
+Turn on broker-side schema ID validation so a producer cannot write a record whose schema ID is not registered under the topic's subject, and keep producers looking schemas up rather than auto-registering. See the Schema validation row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/proto/game_events.proto[proto/game_events.proto] (version 2)
+* link:{attachmentsdir}/proto/history/game_events.v1.proto[proto/history/game_events.v1.proto] (version 1)
+* link:{attachmentsdir}/proto/history/game_events.breaking.proto[proto/history/game_events.breaking.proto]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)

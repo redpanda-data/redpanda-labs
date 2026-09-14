@@ -1,0 +1,132 @@
+= Detect achievements
+:page-layout: solution-step
+:description: Run stateful per-player rules in a second consumer group, keep the state partition-local instead of in a shared store, and publish unlocks back to Redpanda.
+:page-solution-step-duration: 6
+
+The achievements service has been reading the same topic as the leaderboard, in its own group, and producing to `game.achievements`. You inspect what it unlocked, read the rules, and see why a stateful consumer can keep its state in memory when the record key is chosen well.
+
+== What you do
+
+. Ask the service what it has tracked:
++
+[source,bash]
+----
+include::example$steps/detect-achievements/commands.sh[tag=healthz]
+----
++
+.Expected output
+[source,text]
+----
+include::example$steps/detect-achievements/expected/healthz.txt[]
+----
++
+24 players tracked, 374 `hot_streak` unlocks and 22 `first_win` unlocks from the seeded 3000 events. `veteran` needs ten finished matches per player, which takes more than 3000 events; it appears after the burst in xref:scale-and-replay.adoc[].
+
+. Read the achievements topic, decoding with Schema Registry:
++
+[source,bash]
+----
+include::example$steps/detect-achievements/commands.sh[tag=consume]
+----
++
+Each record is a `GameEvent` with the `achievementUnlocked` case set, keyed by the same `player_id` as the event that triggered it, with headers `event_type` and `achievement`.
+
+. Open the topic in Console at http://localhost:8080/topics/game.achievements. It decodes with the same schema, because the subject is `game.achievements-value` and `make schemas` registered it there too.
+
+The rules are pure functions over a small per-player state:
+
+[source,go]
+----
+include::example$services/achievements/rules/rules.go[tags=state]
+----
+
+[source,go]
+----
+include::example$services/achievements/rules/rules.go[tags=apply]
+----
+
+== Why
+
+Three rules: `hot_streak` (three positive score changes within 30 seconds), `first_win` (once), and `veteran` (ten matches finished). All three need history for one player: the last few deltas with their times, a win counter, a match counter. The obvious place for that history is a shared store, and the obvious cost is a round trip per event plus a consistency story.
+
+The service keeps the state in memory instead. It can, because xref:create-topics.adoc[] keyed `game.player-events` by `player_id`: every event of one player is on one partition, in order, and a partition is consumed by exactly one member of the group at a time. So the instance that owns the partition sees the player's complete history and nothing another instance needs. When a rebalance moves a partition, the service drops the state of that partition's players; the new owner rebuilds it from its committed offset onward.
+
+The rules judge time by the event's `occurred_at`, not the wall clock. That is what makes the replay in xref:scale-and-replay.adoc[] produce the same unlocks, and it is the right choice for any rule that measures game time rather than wall-clock time.
+
+`veteran` counts `player_left` events, one of which the simulator emits per participant when a match ends. That keeps the rule inside the player's own partition; counting `match_ended` on `game.match-events` would need the participants' state from a different topic and key.
+
+== Why Redpanda
+
+Two consumer groups on one topic cost one extra read of the log and nothing on the producer side. The achievements service also produces, with the same idempotent settings as the simulator, and commits its input offsets only after the output produce is acknowledged, so a crash replays at most one batch. See xref:streaming:develop:consume-data/consumer-offsets.adoc[] and xref:streaming:develop:produce-data/configure-producers.adoc[].
+
+== What happens inside
+
+The consumer is the same shape as the leaderboard's, plus a revocation hook that forgets the players of a partition the instance no longer owns, and producer settings, because this service writes too:
+
+[source,go]
+----
+include::example$services/achievements/main.go[tags=client]
+----
+
+For each record it decodes, finds or creates the player's state, and applies the rules:
+
+[source,go]
+----
+include::example$services/achievements/main.go[tags=handle]
+----
+
+Then it produces one record per unlock and moves on. The unlock's `event_id` is derived from the source event's ID and the achievement name, so a replayed source record produces an achievement with the same ID, which a downstream sink can deduplicate on:
+
+[source,go]
+----
+include::example$services/achievements/main.go[tags=produce]
+----
+
+
+Complete sources for building along. The rules have unit tests in `services/achievements/rules/rules_test.go`; `make test` runs them in a container.
+
+.Complete source: services/achievements/rules/rules.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/achievements/rules/rules.go[]
+----
+====
+
+.Complete source: services/achievements/main.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/achievements/main.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/detect-achievements/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/detect-achievements/expected/verify.txt[]
+----
+
+The numbers follow from `SIM_SEED=42` and `SIM_EVENTS_MAX=3000`. If `players_tracked` is below 24 the service is still catching up (`rpk group describe achievements` shows the lag). If `hot_streak` is 0 while the leaderboard has scores, check `docker compose logs achievements-service` for a schema lookup that is still waiting: the service refuses to produce until `game.achievements-value` is registered.
+
+== In production
+
+[.production-note]
+Give a stateful consumer a static group instance ID so a restart keeps its partitions instead of triggering a rebalance, and size partitions for the parallelism you need. See the Consumer scaling row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/services/go.mod[services/go.mod] and link:{attachmentsdir}/services/go.sum[services/go.sum]
+* link:{attachmentsdir}/proto/game_events.proto[proto/game_events.proto]

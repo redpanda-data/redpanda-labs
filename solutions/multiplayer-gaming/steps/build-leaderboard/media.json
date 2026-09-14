@@ -1,0 +1,30 @@
+[
+  {
+    "goTo": {
+      "url": "http://localhost:${LEADERBOARD_PORT:-3000}/",
+      "waitUntil": {
+        "domIdleTime": 0
+      }
+    }
+  },
+  {
+    "find": {
+      "selector": "#rows tr:nth-child(10)",
+      "timeout": 30000
+    }
+  },
+  {
+    "wait": 1500
+  },
+  {
+    "screenshot": {
+      "path": "../../docs/modules/multiplayer-gaming/images/dashboard.png",
+      "overwrite": "aboveVariation",
+      "maxVariation": 0.05,
+      "crop": {
+        "selector": "main",
+        "padding": 24
+      }
+    }
+  }
+]
