@@ -10,7 +10,7 @@
 :page-solution-platforms: self-managed
 :page-solution-technologies: Redpanda, Redpanda Connect, Apache Iceberg, Tiered Storage, Schema Registry, Redpanda Console, Postgres, MySQL, Apache Spark, MinIO, Docker Compose
 :page-categories: Iceberg, Tiered Storage, Pipelines, Connectors, Topics and Partitions
-:page-solution-use-cases: Real-time analytics, Change data capture, Data lakehouse
+:page-solution-use-cases: Change data capture, Data lakehouse, Real-time analytics
 :personas: data_engineer, streaming_developer
 :page-solution-steps: start-environment, enable-iceberg-topics, capture-postgres-changes, shape-events, query-with-spark, capture-mysql-changes, verify-end-to-end
 :page-solution-related-docs: streaming:manage:iceberg/about-iceberg-topics.adoc, streaming:manage:iceberg/specify-iceberg-schema.adoc, streaming:manage:iceberg/use-iceberg-catalogs.adoc, streaming:manage:iceberg/query-iceberg-topics.adoc, streaming:manage:iceberg/iceberg-performance-tuning.adoc, streaming:manage:iceberg/iceberg-troubleshooting.adoc, streaming:manage:tiered-storage.adoc, connect:components:inputs/postgres_cdc.adoc, connect:components:inputs/mysql_cdc.adoc, streaming:get-started:licensing/overview.adoc
