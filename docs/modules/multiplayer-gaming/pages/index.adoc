@@ -11,7 +11,8 @@
 :page-solution-platforms: self-managed, cloud
 :page-solution-technologies: Redpanda, Schema Registry, Redpanda Connect, Redpanda Console, Go, Protobuf, Postgres, Docker Compose
 :page-categories: Topics and Partitions, Producers, Consumer Groups, Schema Registry, Retention and Compaction, Pipelines
-:page-solution-use-cases: Real-time analytics, Event-driven microservices, Gaming
+:page-solution-use-cases: Real-time analytics, Event-driven microservices
+:page-solution-industries: Gaming
 :personas: streaming_developer, platform_operator
 :page-solution-steps: start-environment, create-topics, register-schemas, produce-player-events, build-leaderboard, persist-match-history, detect-achievements, scale-and-replay, verify-end-to-end
 :page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:manage:cluster-maintenance/compaction-settings.adoc, streaming:develop:produce-data/idempotent-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, connect:components:outputs/sql_insert.adoc, streaming:console:config/deserialization.adoc, streaming:develop:transactions.adoc, streaming:develop:produce-data/configure-producers.adoc
