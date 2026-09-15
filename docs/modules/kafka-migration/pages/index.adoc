@@ -10,7 +10,7 @@
 :page-solution-platforms: self-managed, cloud
 :page-solution-technologies: Redpanda, Redpanda Migrator, Redpanda Connect, Schema Registry, Redpanda Console, rpk, Avro, Docker Compose
 :page-categories: Kafka Migration, Migration, Pipelines, Connectors, Security, Consumer Groups, Schema Registry
-:page-solution-use-cases: Kafka migration, Platform consolidation, Zero-downtime cutover
+:page-solution-use-cases: Kafka migration
 :personas: platform_operator, streaming_developer
 :page-solution-steps: start-environment, seed-source, start-workload, grant-migrator-access, start-migrator, verify-schemas, monitor-lag, finish-cutover, verify-end-to-end
 :page-solution-related-docs: connect:cookbooks:redpanda_migrator.adoc, connect:components:inputs/redpanda_migrator.adoc, connect:components:outputs/redpanda_migrator.adoc, streaming:manage:security/authentication.adoc, streaming:manage:security/authorization/acl.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, streaming:develop:consume-data/consumer-offsets.adoc
