@@ -10,7 +10,7 @@
 :page-solution-platforms: self-managed
 :page-solution-technologies: Redpanda, Shadowing, Schema Registry, Redpanda Console, Confluent Platform, Avro, JSON Schema, Protobuf, Python, Docker Compose
 :page-categories: Schema Registry, Kafka Migration, Data Replication, Disaster Recovery, Topics and Partitions
-:page-solution-use-cases: Kafka migration, Disaster recovery
+:page-solution-use-cases: Kafka migration, Schema management, Disaster recovery
 :personas: platform_operator, streaming_developer
 :page-solution-steps: start-environment, register-source-schemas, create-shadow-link, verify-replication, replicate-complex-schemas, migrate-topic-data, cut-over, verify-end-to-end
 :page-solution-related-docs: streaming:manage:disaster-recovery/shadowing/migrate-schemas-confluent.adoc, streaming:manage:disaster-recovery/shadowing/overview.adoc, streaming:manage:disaster-recovery/shadowing/setup.adoc, streaming:manage:disaster-recovery/shadowing/failover.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, streaming:manage:schema-reg/schema-reg-contexts.adoc
