@@ -1,0 +1,228 @@
+# Reusable job: run one solution against a real Redpanda Cloud Serverless
+# cluster, the way the solution's own "Redpanda Cloud Serverless" tab tells a
+# reader to. Called by nightly.yml. Not called by ci.yml: the cluster is a
+# shared resource and a run takes minutes, so this is a nightly signal, not a
+# per-pull-request gate.
+#
+# A solution opts in by shipping solutions/<slug>/env.cloud.example, which is
+# the file its page includes under "Redpanda Cloud Serverless". There is no
+# list of cloud-capable solutions anywhere: add that file and the next nightly
+# run picks the solution up, and the job skips cleanly for a solution without
+# one rather than failing.
+#
+# What it needs, once, in this repository's settings:
+#   secrets.RP_CLOUD_CLIENT_ID       a Redpanda Cloud service account
+#   secrets.RP_CLOUD_CLIENT_SECRET
+#   vars.RP_CLOUD_SERVERLESS_CLUSTER_ID   the Serverless cluster to run against
+#
+# Serverless is deliberate rather than convenient: the flagship's Cloud tab
+# documents Serverless, including that you cannot lower the cluster's
+# segment.ms floor, so a BYOC cluster would pass a test for prose nobody
+# published.
+#
+# Everything this job creates is named for the run and deleted in the teardown
+# step, which runs on failure and on cancellation. Nothing is left behind and
+# nothing is shared between runs.
+name: test-solution-cloud
+
+on:
+  workflow_call:
+    inputs:
+      slug:
+        description: Solution slug (directory under solutions/)
+        required: true
+        type: string
+    secrets:
+      RP_CLOUD_CLIENT_ID:
+        required: true
+      RP_CLOUD_CLIENT_SECRET:
+        required: true
+
+permissions:
+  contents: read
+
+# One at a time. The cluster is shared, and the solutions create topics under
+# fixed prefixes that their pages name, so two concurrent runs would collide.
+concurrency:
+  group: solutions-cloud-${{ vars.RP_CLOUD_SERVERLESS_CLUSTER_ID }}
+  cancel-in-progress: false
+
+jobs:
+  cloud:
+    name: ${{ inputs.slug }} (cloud)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: solutions/${{ inputs.slug }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Does this solution document a cloud path?
+        id: opt-in
+        run: |
+          if [ ! -f env.cloud.example ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ inputs.slug }} ships no env.cloud.example, so it documents no Redpanda Cloud path. Skipping."
+          elif [ ! -f cloud-acls.conf ]; then
+            # Fail rather than skip: the solution says it has a cloud path, so
+            # a missing declaration is an unfinished solution, not an opt-out.
+            # Never fall back to a broad grant to keep the run going.
+            echo "::error::${{ inputs.slug }} has env.cloud.example but no cloud-acls.conf, so the ACLs it needs are undeclared. Add the file (see templates/solution/code/cloud-acls.conf)."
+            exit 1
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install rpk
+        if: steps.opt-in.outputs.run == 'true'
+        run: |
+          curl -sSLf https://github.com/redpanda-data/redpanda/releases/latest/download/rpk-linux-amd64.zip -o /tmp/rpk.zip
+          sudo unzip -q -o /tmp/rpk.zip -d /usr/local/bin rpk
+          rpk version
+
+      - name: Log in to Redpanda Cloud
+        if: steps.opt-in.outputs.run == 'true'
+        env:
+          RPK_CLOUD_CLIENT_ID: ${{ secrets.RP_CLOUD_CLIENT_ID }}
+          RPK_CLOUD_CLIENT_SECRET: ${{ secrets.RP_CLOUD_CLIENT_SECRET }}
+        run: |
+          # rpk reads these from the environment, so the secrets never appear
+          # in a command line or in the process list.
+          rpk cloud login --no-profile
+          rpk profile create ci-cloud --from-cloud "${{ vars.RP_CLOUD_SERVERLESS_CLUSTER_ID }}"
+
+      - name: Create a run-scoped user and its ACLs
+        if: steps.opt-in.outputs.run == 'true'
+        id: creds
+        run: |
+          set -euo pipefail
+          user="ci-${{ inputs.slug }}-${{ github.run_id }}"
+          pass="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
+          echo "::add-mask::$pass"
+          echo "user=$user" >> "$GITHUB_OUTPUT"
+          echo "pass=$pass" >> "$GITHUB_OUTPUT"
+
+          rpk security user create "$user" --password "$pass" --mechanism scram-sha-256
+
+          # Exactly the grant the solution declares in cloud-acls.conf, which
+          # is also the grant its page tells a reader to create. An empty or
+          # missing prefix is an error, never a wildcard: a broad grant here
+          # would let a solution write outside its own topics on a shared
+          # cluster, and would make the teardown below delete more than it made.
+          prefix="$(grep -E '^topic_prefix=' cloud-acls.conf | cut -d= -f2- | tr -d '[:space:]')"
+          if [ -z "$prefix" ]; then
+            echo "::error::cloud-acls.conf declares no topic_prefix"; exit 1
+          fi
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          rpk security acl create --allow-principal "User:$user" \
+            --operation all --topic "$prefix" --resource-pattern-type prefixed
+
+          groups="$(grep -E '^consumer_groups=' cloud-acls.conf | cut -d= -f2- | tr -d '[:space:]')"
+          for g in $(echo "$groups" | tr ',' ' '); do
+            [ -n "$g" ] || continue
+            rpk security acl create --allow-principal "User:$user" --operation read --group "$g"
+          done
+          rpk security acl create --allow-principal "User:$user" --operation describe --cluster
+          echo "granted: all on topics under '$prefix', read on groups [$groups], describe on the cluster"
+
+      - name: Prepare .env for the cloud path
+        if: steps.opt-in.outputs.run == 'true'
+        env:
+          SASL_USER: ${{ steps.creds.outputs.user }}
+          SASL_PASS: ${{ steps.creds.outputs.pass }}
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          brokers="$(rpk profile print | awk '/brokers:/{f=1;next} f&&/- /{gsub(/^ *- /,"");print;exit}')"
+          sr="$(rpk profile print | awk '/schema_registry:/{f=1} f&&/- http/{gsub(/^ *- /,"");print;exit}')"
+          [ -n "$brokers" ] || { echo "could not read the bootstrap server from the profile"; exit 1; }
+          [ -n "$sr" ] || { echo "could not read the Schema Registry URL from the profile"; exit 1; }
+          # Overwrite exactly the keys env.cloud.example lists, so this stays
+          # in step with what the page tells a reader to change.
+          while IFS= read -r line; do
+            case "$line" in ''|'#'*) continue;; esac
+            key="${line%%=*}"
+            case "$key" in
+              COMPOSE_PROFILES)            val="";;
+              REDPANDA_BROKERS)            val="$brokers";;
+              REDPANDA_TLS_ENABLED)        val="true";;
+              REDPANDA_SASL_MECHANISM)     val="SCRAM-SHA-256";;
+              REDPANDA_SASL_USERNAME)      val="$SASL_USER";;
+              REDPANDA_SASL_PASSWORD)      val="$SASL_PASS";;
+              REDPANDA_SCHEMA_REGISTRY_URL) val="$sr";;
+              REDPANDA_TOPIC_REPLICAS)     val="3";;
+              *) echo "::warning::env.cloud.example key $key is not handled by this workflow; leaving the .env.example value"; continue;;
+            esac
+            if grep -qE "^${key}=" .env; then
+              sed -i "s|^${key}=.*|${key}=${val}|" .env
+            else
+              echo "${key}=${val}" >> .env
+            fi
+          done < env.cloud.example
+          echo "--- keys set (values hidden)"
+          grep -oE '^[A-Z_]+=' .env | sort -u | tr '\n' ' '
+
+      - name: Record the topics that already existed
+        if: steps.opt-in.outputs.run == 'true'
+        # The cluster is shared. Teardown deletes the difference between this
+        # list and the list afterwards, so it can never remove a topic this run
+        # did not create, whoever else is using the cluster.
+        run: rpk topic list --format json | jq -r '(.topics // .)[].name' | sort > "$RUNNER_TEMP/topics-before.txt"
+
+      - name: Start the stack against Cloud
+        if: steps.opt-in.outputs.run == 'true'
+        run: docker compose up -d --wait --wait-timeout 600
+
+      - name: Seed
+        if: steps.opt-in.outputs.run == 'true'
+        run: make seed
+
+      - name: Verify
+        if: steps.opt-in.outputs.run == 'true'
+        run: ./scripts/verify.sh
+
+      - name: Collect logs
+        if: failure() && steps.opt-in.outputs.run == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          docker compose ps -a > "$RUNNER_TEMP/logs/ps.txt" 2>&1 || true
+          docker compose logs --no-color > "$RUNNER_TEMP/logs/compose.log" 2>&1 || true
+          # The resolved compose file carries the SASL password, so it is not
+          # collected here.
+
+      - name: Upload logs
+        if: failure() && steps.opt-in.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-cloud-${{ inputs.slug }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+      - name: Tear down
+        # always(), so a cancelled or failed run still removes what it created.
+        if: always() && steps.opt-in.outputs.run == 'true'
+        run: |
+          docker compose down -v --remove-orphans || true
+          user="${{ steps.creds.outputs.user }}"
+          prefix="${{ steps.creds.outputs.prefix }}"
+          if [ -n "$user" ]; then
+            # Only topics this run created, and only under the declared prefix.
+            # Two independent conditions, because deleting someone else's topic
+            # on a shared cluster is the one unrecoverable mistake here.
+            if [ -f "$RUNNER_TEMP/topics-before.txt" ] && [ -n "$prefix" ]; then
+              rpk topic list --format json 2>/dev/null | jq -r '(.topics // .)[].name' | sort > "$RUNNER_TEMP/topics-after.txt"
+              comm -13 "$RUNNER_TEMP/topics-before.txt" "$RUNNER_TEMP/topics-after.txt" \
+                | grep -E "^$(printf '%s' "$prefix" | sed 's/[.[\*^$()+?{|]/\\&/g')" \
+                | while read -r t; do
+                    [ -n "$t" ] || continue
+                    echo "deleting topic created by this run: $t"
+                    rpk topic delete "$t" || true
+                  done
+            else
+              echo "::warning::no before-list or no prefix, so no topics are deleted. Check the cluster for leftovers under '$prefix'."
+            fi
+            rpk security acl delete --allow-principal "User:$user" --no-confirm || true
+            rpk security user delete "$user" || true
+            echo "removed the run-scoped user and its ACLs"
+          fi

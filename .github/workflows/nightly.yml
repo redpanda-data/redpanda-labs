@@ -865,3 +865,25 @@ jobs:
           echo "investigation ran, both deliberately: a broken workflow step is for a"
           echo "human to fix, not for a model to work around."
           exit 1
+
+  # The same solutions, against a real Redpanda Cloud Serverless cluster. A
+  # separate job because it is a different signal: the local stack proves the
+  # solution, this proves its "Redpanda Cloud Serverless" tab, which nothing
+  # else exercises. Only solutions that ship env.cloud.example run; the rest
+  # skip inside the reusable workflow, so there is no list here either.
+  #
+  # needs: matrix only, so a red local run does not hide a red cloud run. It
+  # does mean both can report the same underlying break on the same night.
+  cloud:
+    needs: matrix
+    if: needs.matrix.outputs.slugs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJSON(needs.matrix.outputs.slugs) }}
+    uses: ./.github/workflows/test-solution-cloud.yml
+    with:
+      slug: ${{ matrix.slug }}
+    secrets:
+      RP_CLOUD_CLIENT_ID: ${{ secrets.RP_CLOUD_CLIENT_ID }}
+      RP_CLOUD_CLIENT_SECRET: ${{ secrets.RP_CLOUD_CLIENT_SECRET }}

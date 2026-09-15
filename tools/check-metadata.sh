@@ -118,7 +118,43 @@ load_categories() {
 }
 valid_category() { printf '%s\n' "$VALID_CATS" | grep -qxF "$1"; }
 
+# Facet vocabulary -----------------------------------------------------------
+# solution-facets.yml lives in this repo, so unlike valid-categories.yml there
+# is nothing to fetch and no token needed: either the check runs, or the file
+# is missing, which is itself an error.
+VALID_INDUSTRIES=""
+VALID_USE_CASES=""
+load_facets() {
+  local file="docs/modules/ROOT/partials/solution-facets.yml"
+  if [ ! -r "$file" ]; then
+    err "solution-facets.yml" "missing or unreadable at docs/modules/ROOT/partials/solution-facets.yml"
+    return
+  fi
+  # Both axes are a flat list of "  - Value" under a top-level key. Track the
+  # key we are inside; any other unindented line ends it.
+  local key="" line value
+  while IFS= read -r line; do
+    case "$line" in
+      '#'*|'') continue ;;
+      industries:*) key=industries; continue ;;
+      use_cases:*) key=use_cases; continue ;;
+      [[:space:]]*-[[:space:]]*)
+        [ -n "$key" ] || continue
+        value=$(printf '%s' "$line" | sed -E "s/^[[:space:]]*-[[:space:]]*'?(.*[^' ])'?[[:space:]]*$/\1/")
+        [ "$key" = industries ] && VALID_INDUSTRIES="$VALID_INDUSTRIES$value
+"
+        [ "$key" = use_cases ] && VALID_USE_CASES="$VALID_USE_CASES$value
+"
+        ;;
+      *) key="" ;;
+    esac
+  done < "$file"
+  [ -n "$VALID_USE_CASES" ] || err "solution-facets.yml" "no use_cases parsed; the file is not in the expected shape"
+}
+valid_facet() { printf '%s\n' "$2" | grep -qxF "$1"; }
+
 load_categories
+load_facets
 if [ "${CI:-}" = "true" ] && [ $CATS_AVAILABLE -eq 0 ]; then
   err "valid-categories.yml" "not available in CI; set REDPANDA_GITHUB_TOKEN (or VALID_CATEGORIES_PATH) so :page-categories: can be validated"
 fi
@@ -232,6 +268,28 @@ for slug in $slugs; do
     for c in "${clist[@]}"; do
       c=$(trim "$c")
       valid_category "$c" || err "$page" ":page-categories: '$c' is not in valid-categories.yml"
+    done
+  fi
+
+  # Use case and industry. Same rule as categories: the vocabulary is a
+  # reviewed file, so an unlisted value is a typo or a decision nobody made.
+  # The Antora build fails on these too; this is the fast copy of that check.
+  use_cases=$(attr "$h" page-solution-use-cases)
+  if [ -z "$use_cases" ]; then
+    [ "$status" = published ] && warn "$page" "no :page-solution-use-cases: (a published solution appears under no use case on the landing page)"
+  else
+    IFS=',' read -ra uclist <<< "$use_cases"
+    for u in "${uclist[@]}"; do
+      u=$(trim "$u")
+      valid_facet "$u" "$VALID_USE_CASES" || err "$page" ":page-solution-use-cases: '$u' is not in solution-facets.yml"
+    done
+  fi
+  industries=$(attr "$h" page-solution-industries)
+  if [ -n "$industries" ]; then
+    IFS=',' read -ra inlist <<< "$industries"
+    for i in "${inlist[@]}"; do
+      i=$(trim "$i")
+      valid_facet "$i" "$VALID_INDUSTRIES" || err "$page" ":page-solution-industries: '$i' is not in solution-facets.yml"
     done
   fi
 
