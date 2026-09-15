@@ -1,0 +1,44 @@
+# The controlled vocabulary for the two facets a reader filters the landing
+# page by. solutions-catalog reads this file and FAILS THE BUILD on a value
+# that is not listed here, for the same reason page-categories is validated:
+# a facet built from free text becomes a list of near-duplicates ("CDC",
+# "Change data capture", "change-data-capture") the moment a second author
+# writes one, and no reader can filter on that.
+#
+# Adding a value is a deliberate act. Open a pull request, and expect to be
+# asked which existing value does not already cover it.
+#
+# ---------------------------------------------------------------------------
+# Why two lists and not one
+#
+# page-solution-use-cases used to carry all of this at once, and held five
+# different kinds of thing: a pattern (Real-time analytics), a task (Kafka
+# migration), an industry (Gaming), a business outcome (Business continuity)
+# and a constraint (Zero-downtime cutover). A reader cannot filter on a mixed
+# axis, and the counts never mean anything.
+#
+# So: the industry is who you are, the use case is what you are building.
+# Everything else is prose and belongs in the solution's description, where it
+# can be a sentence instead of a label.
+
+# Who the reader is. Optional, and empty for the many solutions that are not
+# specific to a vertical. Add one only when the solution genuinely models that
+# industry's problem, not when it merely could be used there: an industry
+# facet that matches everything tells a reader nothing.
+industries:
+  - Gambling
+  - Gaming
+
+# What the reader is building. Required for a published solution, because it
+# is the axis the landing page is organised around. Keep these the shape of a
+# problem, not of a product or a step.
+use_cases:
+  - Change data capture
+  - Data fan-out
+  - Data lakehouse
+  - Disaster recovery
+  - Event-driven microservices
+  - Kafka migration
+  - Real-time analytics
+  - Schema management
+  - Stream processing

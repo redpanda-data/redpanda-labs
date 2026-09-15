@@ -29,8 +29,13 @@
 :page-solution-technologies: [Redpanda, Redpanda Connect, ...]
 // Comma list. Every value must exist in valid-categories.yml (docs repo, shared/modules/ROOT/partials).
 :page-categories: [Stream Processing, Integration]
-// Optional comma list of business use cases (Real-time analytics, Migration...)
-// :page-solution-use-cases:
+// What the reader is BUILDING. Comma list, every value from
+// docs/modules/ROOT/partials/solution-facets.yml; an unknown value fails the build.
+// The landing page is organised around this, so a published solution wants at least one.
+:page-solution-use-cases: [Stream processing]
+// Who the reader IS. Same file, and optional: set it only when the solution genuinely
+// models that industry's problem. Most solutions have no industry.
+// :page-solution-industries: Gaming
 // Optional persona ids from docs/modules/ROOT/partials/personas.yaml
 // :personas: streaming_developer, platform_operator
 // Ordered, comma separated step ids. Each id is a page pages/<id>.adoc and a spec

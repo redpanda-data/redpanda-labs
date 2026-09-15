@@ -126,7 +126,8 @@ checking categories against the shared list).
 | `:page-solution-platforms:` | no | subset of `self-managed`, `cloud` | Default both. Filters recommendations on Cloud vs Self-Managed pages. |
 | `:page-solution-technologies:` | yes | comma list | Chips on the card; search facet |
 | `:page-categories:` | yes | comma list from `valid-categories.yml` | Unknown values fail the build. List the specific subcategories the solution teaches (`Consumer Groups`, `Retention and Compaction`, `Pipelines`): only subcategory overlap creates recommendations between pages and solutions, and the top-level values are added automatically. Avoid catch-all values such as `Clients` or `Development`, which match dozens of pages and turn the card into noise. When one particular page is related, use `:page-solution-related-docs:` instead. |
-| `:page-solution-use-cases:` | no | comma list | |
+| `:page-solution-use-cases:` | recommended | comma list from `solution-facets.yml` | Unknown values fail the build. What the reader is *building*: the axis the landing page is organised around. A published solution with none warns, because it appears under no use case. |
+| `:page-solution-industries:` | no | comma list from `solution-facets.yml` | Unknown values fail the build. Who the reader *is*. Set it only when the solution genuinely models that industry's problem, not when it could be used there. Most solutions have none. |
 | `:personas:` | no | ids from `docs/modules/ROOT/partials/personas.yaml` | |
 | `:page-solution-steps:` | yes | ordered comma list of step ids | The only source of step order. Each id is `pages/<id>.adoc` and `steps/<id>/commands.sh`; the Doc Detective spec is generated from the page. |
 | `:page-solution-related-docs:` | recommended | fully qualified resource IDs | Must resolve. Warn when absent. These are the strongest "Build it in practice" edges on Product Docs, and the right tool for a single related page that a category would over-match. |
@@ -137,6 +138,32 @@ checking categories against the shared list).
 Derived at build time, never authored: `page-solution-id`, `page-solution-repo`,
 `page-solution-asset`, `page-solution-tag`, step navigation, and the
 `page-solution` record the layouts render.
+
+### Use case and industry
+
+These two are the facets a reader filters the landing page by, and both are
+validated against `docs/modules/ROOT/partials/solution-facets.yml`. A value
+that is not in that file fails the build, for the same reason an unknown
+category does: a facet built from free text becomes a list of near-duplicates
+("CDC", "Change data capture", "change-data-capture") the moment a second
+author writes one, and nobody can filter on that.
+
+Keep the two axes apart. The industry is who the reader is; the use case is
+what they are building. Anything else a solution wants to claim (a business
+outcome such as "business continuity", a constraint such as "zero-downtime
+cutover") is prose and belongs in `:description:`, where it can be a
+sentence instead of a label.
+
+To add a value, edit `solution-facets.yml` in the same pull request as the
+solution that needs it, and expect to be asked which existing value does not
+already cover it. Adding one is cheap; removing one means editing every
+solution that used it.
+
+A facet only appears on the landing page while it can narrow the catalogue: a
+value that every solution carries is dropped from the filters, because
+ticking it would return the same list. Nothing needs configuring for that, and
+it is why a brand-new axis stays invisible until a second solution disagrees
+with the first.
 
 ### Difficulty and assumed knowledge
 
