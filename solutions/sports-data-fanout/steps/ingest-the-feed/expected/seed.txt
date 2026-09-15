@@ -1,0 +1,32 @@
+TOPIC        STATUS
+sports.feed  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC        STATUS
+sports.odds  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC                STATUS
+sports.market-state  TOPIC_ALREADY_EXISTS: The topic has already been created
+TOPIC            STATUS
+sports.feed.dlq  TOPIC_ALREADY_EXISTS: The topic has already been created
+NAME                 PARTITIONS  REPLICAS
+_schemas             1           1
+sports.feed          6           1
+sports.feed.dlq      1           1
+sports.market-state  3           1
+sports.odds          6           1
+CONTEXT  SUBJECT
+default  sports.feed-value
+default  sports.market-state-value
+default  sports.odds-value
+CONTEXT  SUBJECT                    VERSION  ID    TYPE  ERROR
+default  sports.feed-value          1        1     AVRO  
+default  sports.market-state-value  1        3     AVRO  
+default  sports.odds-value          1        2     AVRO  
+waiting for the feed to reach its event cap
+{
+  "done": true,
+  "failed": 0,
+  "produced": 1000,
+  "ready": true,
+  "schema_id": 1,
+  "topic": "sports.feed"
+}
+consumer groups odds-engine market-state feed-archive all have lag 0 and are stable

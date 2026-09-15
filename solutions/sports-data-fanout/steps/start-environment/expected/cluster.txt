@@ -1,0 +1,14 @@
+CLUSTER
+=======
+redpanda.f0b196e8-45c0-4fe4-875e-87cb1b816e05
+
+BROKERS
+=======
+ID    HOST      PORT
+0*    redpanda  9092
+
+TOPICS
+======
+NAME                PARTITIONS  REPLICAS
+__consumer_offsets  3           1
+_schemas            1           1

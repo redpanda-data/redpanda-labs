@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "MarketState",
+  "namespace": "com.redpanda.solutions.sports",
+  "doc": "The trading desk's view of one fixture: which markets are open, which are suspended, and why. Written to a compacted topic keyed by fixture, so the latest state per fixture survives retention and a new consumer reads the current book without replaying the feed.",
+  "fields": [
+    {"name": "fixture_id", "type": "string"},
+    {"name": "open_markets", "type": "int"},
+    {"name": "suspended_markets", "type": "int"},
+    {"name": "last_event_type", "type": "string"},
+    {"name": "last_seq", "type": "long"},
+    {"name": "gaps", "type": "int", "doc": "Missing provider sequence numbers seen so far. A non-zero value is a feed problem, not a consumer problem."},
+    {"name": "settled", "type": "boolean"},
+    {"name": "updated_ts", "type": "long"}
+  ]
+}

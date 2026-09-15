@@ -1,0 +1,10 @@
+{
+  "fixture_id": "fx-epl-2026-0412",
+  "open_markets": 0,
+  "suspended_markets": 3,
+  "last_event_type": "MATCH_END",
+  "last_seq": 250,
+  "gaps": 0,
+  "settled": true,
+  "updated_ts": 1789486398423
+}

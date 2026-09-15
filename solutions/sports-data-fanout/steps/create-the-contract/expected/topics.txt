@@ -1,0 +1,12 @@
+TOPIC        STATUS
+sports.feed  OK
+TOPIC        STATUS
+sports.odds  OK
+TOPIC            STATUS
+sports.feed.dlq  OK
+NAME                 PARTITIONS  REPLICAS
+_schemas             1           1
+sports.feed          6           1
+sports.feed.dlq      1           1
+sports.market-state  3           1
+sports.odds          6           1

@@ -1,0 +1,5 @@
+SUBJECT            VERSION  ID    TYPE
+sports.feed-value  2        4     AVRO
+CONTEXT  SUBJECT            VERSION  ID    TYPE  ERROR
+default  sports.feed-value  1        1     AVRO  
+default  sports.feed-value  2        4     AVRO  

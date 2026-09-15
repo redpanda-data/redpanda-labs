@@ -1,0 +1,7 @@
+TOPIC        PARTITION  PRIOR-OFFSET  CURRENT-OFFSET
+sports.feed  0          500           0
+sports.feed  1          -1            0
+sports.feed  2          -1            0
+sports.feed  3          250           0
+sports.feed  4          500           0
+sports.feed  5          250           0

@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "Odds",
+  "namespace": "com.redpanda.solutions.sports",
+  "doc": "A priced selection, ready to fan out to every consumer that shows or settles a price.",
+  "fields": [
+    {"name": "market_id", "type": "string"},
+    {"name": "fixture_id", "type": "string"},
+    {"name": "selection", "type": "string"},
+    {"name": "price", "type": "double", "doc": "Decimal odds, including the overround the book adds to the provider's probability."},
+    {"name": "feed_seq", "type": "long", "doc": "The provider sequence this price was computed from, so a downstream consumer can tell stale from current without a clock."},
+    {"name": "feed_ts", "type": "long"},
+    {"name": "priced_ts", "type": "long", "doc": "When the odds engine published. priced_ts - feed_ts is the end-to-end latency the solution measures."},
+    {"name": "writer_schema_id", "type": "int", "doc": "The schema the source event was written under. Proves which version a price came from while both are in the topic."}
+  ]
+}

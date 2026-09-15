@@ -1,0 +1,3 @@
+{"market_id":"fx-nfl-2026-0412:moneyline","fixture_id":"fx-nfl-2026-0412","selection":"draw","price":3.77,"feed_seq":1,"feed_ts":1789486393443,"priced_ts":1789486393444,"writer_schema_id":1}
+{"market_id":"fx-laliga-2026-0412:total-goals","fixture_id":"fx-laliga-2026-0412","selection":"draw","price":3.77,"feed_seq":2,"feed_ts":1789486393453,"priced_ts":1789486393453,"writer_schema_id":1}
+{"market_id":"fx-laliga-2026-0412:total-goals","fixture_id":"fx-laliga-2026-0412","selection":"draw","price":3.77,"feed_seq":3,"feed_ts":1789486393473,"priced_ts":1789486393474,"writer_schema_id":1}

@@ -1,0 +1,110 @@
+= Start the environment
+:page-layout: solution-step
+:description: Start Redpanda, Console, Postgres, the feed service and the three consumers with one command, and see why every one of them is waiting.
+:page-solution-step-duration: 5
+
+You start the whole stack with `make up`. Eight containers come up and every one of them passes a healthcheck, but nothing is flowing yet: the feed is waiting for a schema that does not exist, and the three consumers are waiting for a topic nobody has created. That is the intended state, and it is worth looking at before you fix it.
+
+== What you do
+
+. Start everything:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=up]
+----
++
+`make up` copies `.env.example` to `.env` on the first run, builds the three Go services, and waits until every healthcheck passes.
+
+. Check the broker:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=cluster]
+----
+
+. Ask the feed service what it is doing:
++
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=feed-waiting]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/feed-waiting.txt[]
+----
++
+`"ready": false` and `"produced": 0`. The feed is looking for the `FeedEvent` schema under the subject `sports.feed-value`, every two seconds, and it will not write a byte until it finds it.
+
+Open Console at http://localhost:8080 and keep it open. It is the easiest way to watch the three consumer groups move apart in xref:replay-one-consumer.adoc[].
+
+== Why
+
+`make up` is one command because a reader who has to start six services by hand will get the order wrong once and blame the solution. Compose waits on healthchecks rather than on a sleep, so the stack is either ready or the command failed.
+
+The more interesting choice is that the services come up before the contract exists and wait, instead of failing. A feed gateway is started by an operator and configured by a schema that somebody else owns, and those two things happen in whatever order they happen. A service that exits because a subject is missing turns a five-second race into a restart loop, and a service that invents the schema itself becomes the source of truth for a shape nobody reviewed. Waiting, loudly, is the behaviour that survives both.
+
+Every container reports health on an HTTP endpoint that answers as soon as the process is serving, and reports readiness for work as a field in the body. That distinction is why `make up` can finish before `make topics` has run.
+
+== Why Redpanda
+
+The broker is one container with no ZooKeeper, no Kafka Connect cluster, and no separate Schema Registry to run: the registry is part of the broker and answers on port 8081. That is what makes the local stack a fair rehearsal rather than a toy. The same `rpk` commands, the same client configuration, and the same Connect pipeline work against Redpanda Cloud, which is the "Redpanda Cloud Serverless" path below. See xref:streaming:get-started:intro-to-events.adoc[] and xref:streaming:manage:schema-reg/schema-reg-overview.adoc[].
+
+== What happens inside
+
+Compose starts the broker first and waits for `rpk cluster health` to report `Healthy: true`. Postgres runs `postgres/init.sql`, which creates the `feed_archive` table the pipeline will write to in xref:archive-for-settlement.adoc[]. The `rpk` container is a helper that sleeps forever and carries the schema files, so every `rpk` command in this solution runs inside the network with no host install.
+
+The three consumers connect, discover that `sports.feed` does not exist, and log that they are waiting for it. They have not joined their consumer groups yet: joining a group for a topic that does not exist would make the first fetch a guess rather than a read.
+
+.Complete source: docker-compose.yml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+====
+
+[[cloud]]
+=== Redpanda Cloud Serverless
+
+To run the same stack against Redpanda Cloud instead of the local broker, edit `.env`:
+
+. Set `COMPOSE_PROFILES=` (empty), so the local `redpanda` and `console` containers are skipped.
+. Paste the bootstrap server URL and the Schema Registry URL from the cluster's *Overview* page into `REDPANDA_BROKERS` and `REDPANDA_SCHEMA_REGISTRY_URL`, and set `REDPANDA_TLS_ENABLED=true`.
+. Create a user with `SCRAM-SHA-256` and put it in `REDPANDA_SASL_USERNAME` and `REDPANDA_SASL_PASSWORD`. Grant it all operations on topics prefixed `sports.`, read on the consumer groups `odds-engine`, `market-state` and `feed-archive`, and describe on the cluster. Those grants are also declared in `cloud-acls.conf`, which is what the nightly cloud run uses, so the two cannot drift apart silently.
+. Set `REDPANDA_TOPIC_REPLICAS=3` and raise `LATENCY_BUDGET_MS`: the consumers are the same, but the round trip is not.
+
+Everything else in this solution is identical. The services, `rpk`, and the Connect pipeline all read the same variables.
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/start-environment/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/start-environment/expected/verify.txt[]
+----
+
+On the Redpanda Cloud path, `redpanda` and `console` are absent: that is the empty `COMPOSE_PROFILES` working. If a service is missing on the local path, `docker compose logs <service>` says why; the usual cause is a host port already in use, which you change with the `*_PORT` variables in `.env`.
+
+== In production
+
+[.production-note]
+A single broker in `dev-container` mode with no authentication is a development stack. See the Brokers and replication and Security rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/docker-compose.yml[docker-compose.yml]
+* link:{attachmentsdir}/env.example[env.example] (save it as `.env`)
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/console-config.yaml[console-config.yaml]

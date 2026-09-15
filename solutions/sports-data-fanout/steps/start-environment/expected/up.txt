@@ -1,0 +1,100 @@
+docker compose up -d --build --wait
+#1 [internal] load local bake definitions
+#1 reading from stdin 2.27kB done
+#1 DONE 0.0s
+
+#2 [market-state internal] load build definition from Dockerfile
+#2 transferring dockerfile: 487B done
+#2 DONE 0.0s
+
+#3 [feed internal] load metadata for docker.io/library/golang:1.26-alpine
+#3 DONE 0.0s
+
+#4 [feed internal] load metadata for docker.io/library/alpine:3.22
+#4 DONE 0.2s
+
+#5 [market-state internal] load .dockerignore
+#5 transferring context: 2B done
+#5 DONE 0.0s
+
+#6 [market-state stage-1 1/3] FROM docker.io/library/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+#6 DONE 0.0s
+
+#7 [odds-engine build 1/6] FROM docker.io/library/golang:1.26-alpine
+#7 DONE 0.0s
+
+#8 [odds-engine internal] load build context
+#8 transferring context: 1.10kB done
+#8 DONE 0.0s
+
+#9 [odds-engine build 6/6] RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service ./odds
+#9 CACHED
+
+#10 [odds-engine build 4/6] RUN go mod download
+#10 CACHED
+
+#11 [odds-engine build 5/6] COPY . .
+#11 CACHED
+
+#12 [feed build 6/6] RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service ./feed
+#12 CACHED
+
+#13 [feed build 4/6] RUN go mod download
+#13 CACHED
+
+#14 [feed build 5/6] COPY . .
+#14 CACHED
+
+#15 [odds-engine stage-1 3/3] COPY --from=build /out/service /service
+#15 CACHED
+
+#16 [feed stage-1 3/3] COPY --from=build /out/service /service
+#16 CACHED
+
+#17 [odds-engine build 2/6] WORKDIR /src
+#17 CACHED
+
+#18 [odds-engine stage-1 2/3] RUN apk add --no-cache ca-certificates
+#18 CACHED
+
+#19 [odds-engine build 3/6] COPY go.mod go.sum ./
+#19 CACHED
+
+#20 [market-state build 6/6] RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service ./risk
+#20 CACHED
+
+#21 [market-state build 4/6] RUN go mod download
+#21 CACHED
+
+#22 [market-state build 5/6] COPY . .
+#22 CACHED
+
+#23 [market-state stage-1 3/3] COPY --from=build /out/service /service
+#23 CACHED
+
+#24 [feed] exporting to image
+#24 exporting layers done
+#24 writing image sha256:7b2af408f6664d024e9eae255cbe37430a4d306ed1652c8069f85e4a4b57e8a0 done
+#24 naming to docker.io/library/sports-data-fanout-feed done
+#24 DONE 0.0s
+
+#25 [market-state] exporting to image
+#25 exporting layers done
+#25 writing image sha256:ffa7fc2a590e2b02ee3112915a1bf17ae3070951fecd9611b96f61a386d9dfb3 done
+#25 naming to docker.io/library/sports-data-fanout-market-state done
+#25 DONE 0.0s
+
+#26 [odds-engine] exporting to image
+#26 exporting layers done
+#26 writing image sha256:e1fce1fcc7713d9cf4087550ffeb60a84e21e4a03f147928d75767064bcab919 done
+#26 naming to docker.io/library/sports-data-fanout-odds-engine done
+#26 DONE 0.0s
+
+#27 [feed] resolving provenance for metadata file
+#27 DONE 0.0s
+
+#28 [market-state] resolving provenance for metadata file
+#28 DONE 0.0s
+
+#29 [odds-engine] resolving provenance for metadata file
+#29 DONE 0.0s

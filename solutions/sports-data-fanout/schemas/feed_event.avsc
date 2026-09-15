@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "FeedEvent",
+  "namespace": "com.redpanda.solutions.sports",
+  "doc": "One event from a sports data provider's push feed. The provider decides the shape, which is why this schema is registered and versioned rather than assumed: the fields below are the ones every consumer may rely on, and everything else arrives in extra.",
+  "fields": [
+    {"name": "feed_ts", "type": "long", "doc": "Provider emit time, epoch milliseconds. End-to-end latency is measured from here, not from the time Redpanda accepted the record."},
+    {"name": "seq", "type": "long", "doc": "Provider sequence number within the fixture. Gaps mean the feed dropped events; they are counted, never filled in."},
+    {"name": "fixture_id", "type": "string", "doc": "The match. Also the record key, which is what keeps one fixture's events in order."},
+    {"name": "event_type", "type": {"type": "enum", "name": "EventType", "symbols": ["SCORE", "MARKET_UPDATE", "MARKET_SUSPEND", "MARKET_RESUME", "INJURY", "MATCH_END"]}},
+    {"name": "market_id", "type": "string", "default": "", "doc": "Empty for events that are not about one market."},
+    {"name": "selection", "type": "string", "default": "", "doc": "home, away or draw for a market update."},
+    {"name": "probability", "type": "double", "default": 0.0, "doc": "The provider's implied probability for the selection, 0 when not applicable."},
+    {"name": "extra", "type": {"type": "map", "values": "string"}, "default": {}, "doc": "Provider fields no consumer has agreed on yet. This is where a feed's variation lands without a schema change."}
+  ]
+}

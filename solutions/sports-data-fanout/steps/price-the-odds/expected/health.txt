@@ -1,0 +1,20 @@
+{
+  "by_writer_schema": {
+    "1": 1000
+  },
+  "group": "odds-engine",
+  "held_suspended": 361,
+  "latency": {
+    "samples": 427,
+    "p50_ms": 0,
+    "p95_ms": 1,
+    "p99_ms": 2,
+    "max_ms": 337
+  },
+  "poison": 0,
+  "priced": 427,
+  "read": 1000,
+  "ready": true,
+  "rejected": 0,
+  "skipped": 212
+}

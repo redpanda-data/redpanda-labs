@@ -1,0 +1,9 @@
+GROUP                  feed-archive
+STATE                  Stable
+TOTAL-LAG              0
+GROUP                  market-state
+STATE                  Stable
+TOTAL-LAG              0
+GROUP                  odds-engine
+STATE                  Stable
+TOTAL-LAG              0

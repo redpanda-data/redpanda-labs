@@ -1,0 +1,4 @@
+{
+  "beforeAny": "tests/doc-detective/specs/_setup.json",
+  "afterAll": "tests/doc-detective/specs/_teardown.json"
+}

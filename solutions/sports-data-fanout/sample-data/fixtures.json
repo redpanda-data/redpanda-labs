@@ -1,0 +1,30 @@
+[
+  {
+    "id": "fx-epl-2026-0412",
+    "home": "Northgate United",
+    "away": "Riverside Albion",
+    "league": "Premier League",
+    "markets": ["match-odds", "total-goals", "both-teams-to-score"]
+  },
+  {
+    "id": "fx-laliga-2026-0412",
+    "home": "Real Cantera",
+    "away": "Atletico Costa",
+    "league": "La Liga",
+    "markets": ["match-odds", "total-goals"]
+  },
+  {
+    "id": "fx-nba-2026-0412",
+    "home": "Harbor City Tide",
+    "away": "Summit Peaks",
+    "league": "NBA",
+    "markets": ["moneyline", "total-points"]
+  },
+  {
+    "id": "fx-nfl-2026-0412",
+    "home": "Ironside Rail",
+    "away": "Capital Sentinels",
+    "league": "NFL",
+    "markets": ["moneyline", "spread", "total-points"]
+  }
+]

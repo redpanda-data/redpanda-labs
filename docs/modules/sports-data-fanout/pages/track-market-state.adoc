@@ -1,0 +1,118 @@
+= Track the desk's view
+:page-layout: solution-step
+:description: Fold the feed into each fixture's current state in a second independent consumer group, publish it to a compacted topic, and count the gaps the provider leaves in its own sequence.
+:page-solution-step-duration: 6
+
+The market-state service is the second consumer, in the group `market-state`. It reads the same records the odds engine read, in its own time, and keeps one thing: the trading desk's current view of each fixture. It publishes that view to a compacted topic, so the book survives retention and a new consumer can read it without replaying the feed.
+
+== What you do
+
+. Ask for the totals:
++
+[source,bash]
+----
+include::example$steps/track-market-state/commands.sh[tag=totals]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/track-market-state/expected/totals.txt[]
+----
++
+Four fixtures, all settled, no market left open, and `feed_gaps` at 0.
+
+. Look at one fixture:
++
+[source,bash]
+----
+include::example$steps/track-market-state/commands.sh[tag=one-fixture]
+----
+
+. Read the compacted topic the way a new consumer would, keeping the last record per key:
++
+[source,bash]
+----
+include::example$steps/track-market-state/commands.sh[tag=compacted]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/track-market-state/expected/compacted.txt[]
+----
++
+One line per fixture, each holding that fixture's final state. That is the desk's book, and it is a topic rather than a database.
+
+== Why
+
+The service publishes state, never deltas. "Two markets open, one suspended" written twice is the same fact twice; "one more market suspended" written twice is a different and wrong fact. That single choice is what makes a replay harmless, makes compaction correct, and makes the topic readable by anyone who joins later:
+
+[source,go]
+----
+include::example$services/risk/state/state.go[tag=apply]
+----
+
+Settling a fixture closes every market on it, because an open market on a finished match is exactly how a book takes a bet it cannot price.
+
+The gap counter is the part worth stealing. When the provider's sequence jumps, the service counts the missing events and never fills them in. It does not retry, it does not interpolate, and it does not treat the gap as an error that stops the group: a gap means a price may be stale, which is a trading decision, not a monitoring curiosity. Set `FEED_DROP_EVERY=5` in `.env` and run `make seed` again to watch `feed_gaps` climb; the feed drops every fifth event on the provider's side, and this is the only consumer that notices.
+
+== Why Redpanda
+
+A compacted topic keeps the newest record per key and discards the rest, so a topic keyed by fixture converges to one record per fixture: a table that streams. There is no database between the feed and the desk, and no cache to invalidate. A consumer that needs the current book reads the topic from the start and stops; a consumer that needs to follow it keeps reading. Compaction is best effort, which is why the command above keeps the last record per key rather than assuming the broker has already reduced it. See xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[].
+
+== What happens inside
+
+Each record is folded into memory and the fixture's new state is published, keyed by fixture:
+
+[source,go]
+----
+include::example$services/risk/main.go[tag=apply]
+----
+
+Because the key is the fixture and the value is the whole state, the broker can throw away every earlier record for that key without losing anything. `segment.ms=60000` on this topic makes that visible within a couple of minutes on a local broker: compaction runs on closed segments, so a segment has to roll first.
+
+The state is a fold over the log, which means it is reproducible. Nothing is stored anywhere else, and a replay of the group rebuilds exactly the same book. That property is tested rather than asserted:
+
+[source,go]
+----
+include::example$services/risk/state/state_test.go[]
+----
+
+.Complete source: services/risk/state/state.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/risk/state/state.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/track-market-state/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/track-market-state/expected/verify.txt[]
+----
+
+The high watermarks sum to the number of events the service applied, because it publishes one state record per event it reads. After compaction has run, the sum stays the same but the topic holds fewer live records: the watermark counts what was written, not what survives.
+
+== In production
+
+[.production-note]
+Alert on `feed_gaps`. A gap is the provider's failure, and the only person who can hold them to it is the one with their own count of it. See the Feed quality and Compaction rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/services/risk/main.go[services/risk/main.go]
+* link:{attachmentsdir}/services/risk/state/state.go[services/risk/state/state.go]
+* link:{attachmentsdir}/schemas/market_state.avsc[schemas/market_state.avsc]

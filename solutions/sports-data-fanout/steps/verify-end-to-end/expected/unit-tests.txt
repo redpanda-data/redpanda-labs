@@ -1,0 +1,12 @@
+docker run --rm -v "/private/tmp/claude-502/-Users-jakecahill/df58e790-8a8a-47ab-9bc1-bffd4bbf8676/scratchpad/wt-sol-all/solutions/sports-data-fanout/services":/src -v "/private/tmp/claude-502/-Users-jakecahill/df58e790-8a8a-47ab-9bc1-bffd4bbf8676/scratchpad/wt-sol-all/solutions/sports-data-fanout/schemas":/schemas:ro -v sports-data-fanout-gomod:/go/pkg/mod -w /src golang:1.26-alpine sh -c 'go vet ./... && go test ./...'
+?   	sports-data-fanout/services/feed	[no test files]
+ok  	sports-data-fanout/services/feed/sim	0.012s
+?   	sports-data-fanout/services/internal/conn	[no test files]
+?   	sports-data-fanout/services/internal/envvar	[no test files]
+ok  	sports-data-fanout/services/internal/feed	0.027s
+?   	sports-data-fanout/services/internal/topics	[no test files]
+ok  	sports-data-fanout/services/internal/wire	0.004s
+?   	sports-data-fanout/services/odds	[no test files]
+ok  	sports-data-fanout/services/odds/pricing	0.007s
+?   	sports-data-fanout/services/risk	[no test files]
+ok  	sports-data-fanout/services/risk/state	0.005s

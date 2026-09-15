@@ -1,0 +1,8 @@
+ seq |  event_type   |              market_id               | selection | probability 
+-----+---------------+--------------------------------------+-----------+-------------
+   1 | MARKET_UPDATE | fx-epl-2026-0412:both-teams-to-score | draw      |        0.25
+   2 | MARKET_UPDATE | fx-epl-2026-0412:both-teams-to-score | away      |         0.3
+   3 | MARKET_UPDATE | fx-epl-2026-0412:both-teams-to-score | draw      |        0.25
+   4 | MARKET_UPDATE | fx-epl-2026-0412:total-goals         | draw      |        0.25
+   5 | MARKET_UPDATE | fx-epl-2026-0412:total-goals         | home      |        0.45
+(5 rows)

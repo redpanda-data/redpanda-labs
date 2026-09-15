@@ -1,0 +1,14 @@
+{
+  "applied": 1000,
+  "group": "market-state",
+  "poison": 0,
+  "published": 1000,
+  "ready": true,
+  "totals": {
+    "fixtures": 4,
+    "open_markets": 0,
+    "suspended_markets": 10,
+    "settled_fixtures": 4,
+    "feed_gaps": 0
+  }
+}

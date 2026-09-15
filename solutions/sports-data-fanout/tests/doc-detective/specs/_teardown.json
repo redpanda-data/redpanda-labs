@@ -1,0 +1,17 @@
+{
+  "specId": "_teardown",
+  "description": "Tear the stack down after every step spec has run (afterAll in .doc-detective.json).",
+  "tests": [
+    {
+      "testId": "_teardown",
+      "steps": [
+        {
+          "runShell": {
+            "command": "make clean",
+            "timeout": 120000
+          }
+        }
+      ]
+    }
+  ]
+}
