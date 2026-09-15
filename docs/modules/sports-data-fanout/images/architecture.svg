@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" role="img" aria-labelledby="t d">
+  <title id="t">Architecture of the sports data fan-out solution</title>
+  <desc id="d">A feed service produces Avro events to the Redpanda topic sports.feed, keyed by fixture. Three independent consumer groups read that one topic: the odds engine prices market updates and publishes to sports.odds; the market-state service publishes each fixture's current state to the compacted topic sports.market-state; a Redpanda Connect pipeline archives every event to Postgres, with failures routed to a dead-letter topic. Schema Registry holds the contract, and Redpanda Console decodes records with it.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1a1a1a; --muted: #5f6368; --box: #f5f5f5; --line: #8a8a8a; --rp: #e2401b; --rpbg: #fff3ef; --topic: #fde8e2; --store: #eef2ff; --storeline: #4f5bd5; --svc: #eefbf3; --svcline: #2e8b57; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --fg: #e8e8e8; --muted: #a0a4ab; --box: #181b22; --line: #6b7079; --rp: #ff6a45; --rpbg: #2a1712; --topic: #3a1f17; --store: #1a2140; --storeline: #8b93ff; --svc: #14281c; --svcline: #5fd38d; }
+    }
+    text { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); font-size: 13px; }
+    .muted { fill: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .h { font-weight: 600; font-size: 14px; }
+    .box { fill: var(--box); stroke: var(--line); stroke-width: 1.2; rx: 8; }
+    .rp { fill: var(--rpbg); stroke: var(--rp); stroke-width: 1.5; rx: 10; }
+    .topic { fill: var(--topic); stroke: var(--rp); stroke-width: 1.2; rx: 6; }
+    .svc { fill: var(--svc); stroke: var(--svcline); stroke-width: 1.2; rx: 8; }
+    .store { fill: var(--store); stroke: var(--storeline); stroke-width: 1.2; rx: 8; }
+    .flow { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .flow.dash { stroke-dasharray: 5 4; }
+    #arrow path { fill: var(--line); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect width="980" height="560" fill="var(--bg)"/>
+
+  <!-- Schema Registry, above everything: the contract both sides look up -->
+  <rect class="rp" x="330" y="24" width="320" height="52"/>
+  <text class="h" x="490" y="46" text-anchor="middle">Schema Registry</text>
+  <text class="mono" x="490" y="64" text-anchor="middle">sports.feed-value v1, v2 &#183; BACKWARD</text>
+
+  <!-- The provider feed -->
+  <rect class="svc" x="24" y="230" width="150" height="86"/>
+  <text class="h" x="99" y="256" text-anchor="middle">Feed service</text>
+  <text class="muted" x="99" y="274" text-anchor="middle">Go, franz-go</text>
+  <text class="muted" x="99" y="290" text-anchor="middle">acks=all</text>
+  <text class="mono" x="99" y="308" text-anchor="middle">key: fixture_id</text>
+
+  <!-- The ingest topic -->
+  <rect class="topic" x="216" y="150" width="140" height="246"/>
+  <text class="h" x="286" y="176" text-anchor="middle">Redpanda</text>
+  <text class="mono" x="286" y="196" text-anchor="middle">sports.feed</text>
+  <text class="muted" x="286" y="214" text-anchor="middle">6 partitions</text>
+  <text class="muted" x="286" y="244" text-anchor="middle">one fixture,</text>
+  <text class="muted" x="286" y="260" text-anchor="middle">one partition,</text>
+  <text class="muted" x="286" y="276" text-anchor="middle">in order</text>
+  <text class="muted" x="286" y="306" text-anchor="middle">7 day retention</text>
+  <text class="muted" x="286" y="336" text-anchor="middle">read three times,</text>
+  <text class="muted" x="286" y="352" text-anchor="middle">stored once</text>
+
+  <!-- The three consumer groups -->
+  <rect class="svc" x="410" y="108" width="176" height="76"/>
+  <text class="h" x="498" y="132" text-anchor="middle">Odds engine</text>
+  <text class="mono" x="498" y="150" text-anchor="middle">group: odds-engine</text>
+  <text class="muted" x="498" y="170" text-anchor="middle">prices market updates</text>
+
+  <rect class="svc" x="410" y="234" width="176" height="76"/>
+  <text class="h" x="498" y="258" text-anchor="middle">Market state</text>
+  <text class="mono" x="498" y="276" text-anchor="middle">group: market-state</text>
+  <text class="muted" x="498" y="296" text-anchor="middle">folds the feed per fixture</text>
+
+  <rect class="svc" x="410" y="360" width="176" height="76"/>
+  <text class="h" x="498" y="384" text-anchor="middle">Redpanda Connect</text>
+  <text class="mono" x="498" y="402" text-anchor="middle">group: feed-archive</text>
+  <text class="muted" x="498" y="422" text-anchor="middle">no code, one YAML file</text>
+
+  <!-- What each one produces -->
+  <rect class="topic" x="644" y="108" width="176" height="76"/>
+  <text class="mono" x="732" y="136" text-anchor="middle">sports.odds</text>
+  <text class="muted" x="732" y="156" text-anchor="middle">key: market_id</text>
+  <text class="muted" x="732" y="172" text-anchor="middle">carries feed_ts, feed_seq</text>
+
+  <rect class="topic" x="644" y="234" width="176" height="76"/>
+  <text class="mono" x="732" y="262" text-anchor="middle">sports.market-state</text>
+  <text class="muted" x="732" y="282" text-anchor="middle">compacted, key: fixture_id</text>
+  <text class="muted" x="732" y="298" text-anchor="middle">the desk's current book</text>
+
+  <rect class="store" x="644" y="360" width="176" height="76"/>
+  <text class="h" x="732" y="384" text-anchor="middle">Postgres</text>
+  <text class="mono" x="732" y="402" text-anchor="middle">feed_archive</text>
+  <text class="muted" x="732" y="422" text-anchor="middle">PK (fixture_id, seq)</text>
+
+  <!-- The dead letter path -->
+  <rect class="topic" x="644" y="464" width="176" height="52"/>
+  <text class="mono" x="732" y="490" text-anchor="middle">sports.feed.dlq</text>
+  <text class="muted" x="732" y="506" text-anchor="middle">should stay empty</text>
+
+  <!-- Console -->
+  <rect class="box" x="216" y="464" width="370" height="52"/>
+  <text class="h" x="401" y="488" text-anchor="middle">Redpanda Console</text>
+  <text class="muted" x="401" y="506" text-anchor="middle">every topic decoded, both schema versions at once</text>
+
+  <!-- Flows -->
+  <path class="flow" d="M174,273 L212,273"/>
+  <path class="flow" d="M356,200 L380,200 L380,146 L406,146"/>
+  <path class="flow" d="M356,273 L406,273"/>
+  <path class="flow" d="M356,346 L380,346 L380,398 L406,398"/>
+  <path class="flow" d="M586,146 L640,146"/>
+  <path class="flow" d="M586,273 L640,273"/>
+  <path class="flow" d="M586,398 L640,398"/>
+  <path class="flow dash" d="M586,424 L614,424 L614,486 L640,486"/>
+
+  <!-- Both sides look the contract up; neither registers it -->
+  <path class="flow dash" d="M99,230 L99,50 L326,50"/>
+  <path class="flow dash" d="M498,104 L498,86 L560,86 L560,76"/>
+
+  <text class="muted" x="196" y="128" text-anchor="middle">produce</text>
+  <text class="muted" x="616" y="264" text-anchor="middle">publish</text>
+  <text class="muted" x="618" y="452" text-anchor="middle">errors</text>
+</svg>

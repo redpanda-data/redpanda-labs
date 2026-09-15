@@ -1,0 +1,181 @@
+= Sports data feed ingestion and fan-out
+:page-layout: solution
+:page-topic-type: solution
+:description: Ingest a high-frequency sports data feed and fan it out to an odds engine, a trading desk view, and a settlement archive, with no consumer able to slow another down.
+:page-solution-version: v1.0.0
+:page-solution-difficulty: intermediate
+:page-solution-duration: 50
+:page-solution-status: draft
+:page-solution-download: authenticated
+:page-solution-platforms: self-managed, cloud
+:page-solution-technologies: Redpanda, Schema Registry, Redpanda Connect, Redpanda Console, Go, Avro, Postgres, Docker Compose
+:page-categories: Topics and Partitions, Producers, Consumer Groups, Schema Registry, Retention and Compaction, Pipelines
+:page-solution-use-cases: Data fan-out, Schema management
+:page-solution-industries: Gambling
+:personas: streaming_developer, platform_operator
+:page-solution-steps: start-environment, create-the-contract, ingest-the-feed, price-the-odds, track-market-state, archive-for-settlement, evolve-the-schema, replay-one-consumer, verify-end-to-end
+:page-solution-related-docs: streaming:develop:consume-data/consumer-offsets.adoc, streaming:develop:produce-data/configure-producers.adoc, streaming:manage:schema-reg/schema-reg-overview.adoc, streaming:manage:cluster-maintenance/compaction-settings.adoc, connect:components:outputs/sql_insert.adoc, streaming:reference:rpk/rpk-group/rpk-group-seek.adoc, streaming:manage:schema-reg/schema-id-validation.adoc
+
+A sportsbook buys its live data from a provider, and that one feed has to reach everything at once: the engine that prices markets, the desk that watches which markets are open, the settlement system, the front end, and every partner who resells the prices. The feed is high frequency, it changes shape when the provider adds a field, and the moments that matter most are the moments it spikes hardest.
+
+You put a log in front of it. The feed is ingested once, keyed by fixture, and three consumers read the same records at their own pace: none of them can slow another down, any of them can be replayed alone, and the provider can change the schema without a redeploy. You finish with priced odds, a live view of every market, a complete settlement archive, and a measured end-to-end latency, proven by one script.
+
+After completing this solution, you will be able to:
+
+* [ ] Ingest a provider feed under a Schema Registry contract, keyed so that one fixture's events can never overtake each other
+* [ ] Fan one topic out to three consumer groups that scale, fail, and replay independently
+* [ ] Measure end-to-end latency from the provider's emit time to the published price, from the records themselves
+* [ ] Accept a provider's schema change on a live feed, with both versions in the topic and no consumer redeployed
+* [ ] Materialize the trading desk's current view in a compacted topic by publishing state instead of deltas
+* [ ] Replay one consumer over the whole feed without the others noticing, and without double-counting a single event
+* [ ] Prove the whole system with exact assertions: counts, sets, lag, percentiles
+
+== What you build
+
+A feed service stands in for a provider's push feed and produces `FeedEvent` records to one topic. Three consumers read it: a Go odds engine that prices every market update and publishes the price, a Go market-state service that folds the feed into the desk's current view of each fixture, and a Redpanda Connect pipeline that archives every event to Postgres for settlement and audit. Redpanda Console shows every record decoded, including the ones written under the older schema version.
+
+* *Feed service* (Go, franz-go): a deterministic, bursty provider feed, keyed by fixture, with `acks=all` and a schema it looks up but never registers.
+* *`sports.feed`*: the ingest topic, six partitions, keyed by `fixture_id`.
+* *Schema Registry*: holds the `FeedEvent` Avro schema as `sports.feed-value` with `BACKWARD` compatibility, which is what makes xref:evolve-the-schema.adoc[] safe.
+* *Odds engine* (Go): consumer group `odds-engine`, prices market updates, holds the price of a suspended market, publishes to `sports.odds`, and stamps every price with the provider sequence and emit time it came from.
+* *Market-state service* (Go): consumer group `market-state`, publishes each fixture's current state to the compacted topic `sports.market-state`, and counts the gaps the provider leaves in its own sequence.
+* *Settlement archive* (Redpanda Connect): consumer group `feed-archive`, decodes through Schema Registry and inserts into Postgres, keyed on the provider's `(fixture, seq)` so a replay cannot double-count.
+* *`sports.feed.dlq`*: where a record the pipeline cannot handle goes, with the error attached. It should stay empty, and xref:verify-end-to-end.adoc[] checks that it did.
+
+== Architecture
+
+image::architecture.svg[Architecture: the feed service produces to the Redpanda topic sports.feed; the odds engine, the market-state service, and a Redpanda Connect pipeline each read it in their own consumer group; results land in sports.odds, in the compacted topic sports.market-state, and in Postgres]
+
+Left to right: the feed service looks the `FeedEvent` schema up in Schema Registry (it never registers one, the contract is created in xref:create-the-contract.adoc[]) and produces every event about a match to `sports.feed`, keyed by `fixture_id`. Three consumer groups read that one topic. The `odds-engine` group turns each market update into a price and publishes it to `sports.odds`, keyed by market. The `market-state` group folds each fixture's events into a small in-memory state and publishes that state to `sports.market-state`, a compacted topic keyed by `fixture_id`, so the desk's current book is one record per fixture. The `feed-archive` group, a Redpanda Connect pipeline, decodes each record through Schema Registry and inserts it into Postgres; anything it cannot handle goes to `sports.feed.dlq` with the error attached. Console reads every topic with the same schemas.
+
+=== Why Redpanda
+
+* *Independent consumer groups fan one feed out.* Each consumer keeps its own offsets, so a slow database, a redeployed odds engine, or a partner integration that falls behind cannot affect the others. This is the difference from the provider's own HTTP endpoint, where every consumer shares one delivery path and a slow reader is everyone's problem. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* *Per-key ordering.* The record key selects the partition, so every event of one fixture is delivered in order to exactly one consumer instance. A market suspension can never overtake the price it suspends, and the market-state service can keep per-fixture state in memory instead of in a shared store. xref:streaming:develop:produce-data/configure-producers.adoc[]
+* *Replay belongs to the consumer.* Offsets are the consumer's, not the broker's. xref:replay-one-consumer.adoc[] seeks one group back over the entire feed while the other two carry on, which is how a settlement bug is fixed after the fact. xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
+* *Schema Registry as the contract.* A provider adding a field is the normal case, not an incident. Compatibility rules decide in advance which changes are allowed, records carry the ID of the schema they were written under, and consumers decode with that one. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* *Compaction as the desk's current view.* A compacted topic keeps the newest record per key, so a service that publishes each fixture's state turns a topic into the book itself. A new consumer reads the current state without replaying the feed. xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
+* *Redpanda Connect for the archive.* Decode, map, insert, dead-letter: one YAML file, no code. xref:connect:components:outputs/sql_insert.adoc[]
+
+== Prerequisites
+
+* Docker Engine 24 or later with Docker Compose v2, 4 CPUs and 6 GB RAM available to Docker
+* `curl` and `make` on the host (every `rpk` and `psql` command runs inside a container)
+* Optional: Go 1.25 or later, only if you want to run the unit tests outside Docker
+* Free host ports `3010`, `4195`, `8080`, `8090`, `15432`, `18081`, `18082`, `19092`, and `19644`, or different ones set with the `*_PORT` variables in `.env`
+* Optional: a Redpanda Cloud Serverless cluster, if you want to run the same stack against Redpanda Cloud instead of the local broker (xref:start-environment.adoc[] has both paths)
+* Approximately {page-solution-duration} minutes
+
+You can build along with the files published with each step, or sign in and download the complete example. Every step is completable without the download.
+
+If you would rather see the outcome before the explanation:
+
+[source,bash]
+----
+include::example$steps/overview/commands.sh[tag=quickstart]
+----
+
+// Steps are rendered from :page-solution-steps: by the solution layout.
+
+== Production considerations
+
+This solution runs on a single broker with no authentication so that it starts in a minute. Before you reuse the design in production, work through this table.
+
+[cols="1,2,2"]
+|===
+| Area | In this solution | In production
+
+| Brokers and replication
+| One broker in `dev-container` mode, replication factor 1.
+| Three or more brokers, replication factor 3, rack awareness. A feed nobody can afford to lose needs more than one copy of it. xref:streaming:deploy:redpanda/manual/production/production-deployment.adoc[]
+
+| Security
+| Plaintext listeners, no authentication, every service is a superuser. The Redpanda Cloud path in xref:start-environment.adoc[] is the exception: TLS and one SCRAM user with ACLs on `sports.*`.
+| TLS on every listener, SASL/SCRAM or mTLS per service, and ACLs that let the feed write only `sports.feed` and each consumer read only what it needs. A partner who resells your prices gets read on `sports.odds` and nothing else. xref:streaming:manage:security/encryption.adoc[], xref:streaming:manage:security/authorization/acl.adoc[]
+
+| Partitions
+| `sports.feed` and `sports.odds` have 6 partitions, `sports.market-state` 3, sized for a laptop with four fixtures.
+| Size for the busiest day of the year, not the average one, and remember the partition count is the ceiling on consumer instances. A fixture-keyed feed spreads by fixture, so a single huge match is still one partition's worth of work. xref:streaming:deploy:redpanda/manual/sizing.adoc[]
+
+| Latency budget
+| End-to-end latency is measured from the provider's emit time to the published price and asserted at the 99th percentile against a budget in `.env`.
+| Set the budget from the commercial commitment, alert on the percentile rather than the mean, and measure from the provider's timestamp: the part of the path you do not own is the part that surprises you.
+
+| Schema validation
+| Schemas are registered and consumers reject unknown IDs, but the broker accepts any bytes.
+| Enable schema ID validation on `sports.feed` so the broker refuses a record whose schema ID is not registered under the topic's subject. A feed gateway is exactly where an unvalidated write does the most damage. xref:streaming:manage:schema-reg/schema-id-validation.adoc[]
+
+| Schema evolution
+| `BACKWARD` compatibility, with the incompatible change shown being refused in xref:evolve-the-schema.adoc[].
+| Keep a compatibility level that matches how you deploy: `BACKWARD` when consumers are upgraded after producers. Treat a provider's change as a pull request against the vocabulary, not a surprise. xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+
+| Consumer scaling
+| One instance per group.
+| Scale on consumer group lag, keep instances at or below the partition count, and use static group membership for stateful services so a rolling restart does not trigger a rebalance. xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+
+| Data retention
+| `sports.feed` keeps 7 days on local disk.
+| Settlement disputes and regulators work in months, not days. Tiered Storage gives long retention and replay from object storage without growing local disks. xref:streaming:manage:tiered-storage.adoc[]
+
+| Compaction of `sports.market-state`
+| `cleanup.policy=compact` with `segment.ms=60000` (and the cluster floor lowered to match) so compaction is visible within minutes.
+| Keep `compact`, but size `segment.ms` for the write rate: rolling a segment a minute is churn, not a requirement. Compaction is best effort, so readers keep the last record per key rather than assuming there is only one. xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
+
+| Idempotency and delivery
+| `acks=all` on every producer; consumers commit offsets after their output is acknowledged, so a crash replays a batch. The archive inserts `ON CONFLICT DO NOTHING` on the provider's `(fixture, seq)`, and the market-state service publishes state rather than deltas.
+| Publish state, not deltas, wherever a consumer materializes a view, and make every sink idempotent on a key the upstream system owns. Use transactions where a consumer also produces and the output must be exactly-once. xref:streaming:develop:produce-data/idempotent-producers.adoc[], xref:streaming:develop:transactions.adoc[]
+
+| Feed quality
+| The market-state service counts gaps in the provider's sequence numbers and never fills them in. `FEED_DROP_EVERY` in `.env` makes the feed lose events on purpose.
+| Alert on sequence gaps: a gap means a price may be stale, and that is a trading decision rather than a monitoring curiosity. Hold the provider to it, with your own numbers.
+
+| Dead-letter handling
+| Redpanda Connect routes anything it cannot handle to `sports.feed.dlq` with the error as a header. The Go services log and skip it.
+| Alert on dead-letter growth, keep the original key and headers so records can be replayed after a fix, and give the DLQ its own retention. xref:connect:configuration:error_handling.adoc[]
+
+| Observability
+| Redpanda Console, each service's `/healthz` counters, Connect's `/metrics`, and `rpk group describe`.
+| Prometheus metrics from the brokers and from Redpanda Connect, dashboards, and alerts on consumer lag per group: the fan-out is only healthy if every group is current. xref:streaming:manage:monitoring.adoc[], xref:connect:guides:monitoring.adoc[]
+
+| Disaster recovery
+| None.
+| Shadowing replicates topics, consumer offsets, and schemas to a second cluster, so pricing can fail over without replaying the day. xref:streaming:manage:disaster-recovery/shadowing/overview.adoc[]
+
+| Analytics and lakehouse
+| Postgres holds the archive for queries.
+| Iceberg topics write `sports.feed` straight to a lakehouse table for the trading and pricing analysts, with no pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
+|===
+
+== Extend this solution
+
+=== Add a second provider
+
+Most books buy more than one feed, and the second one never has the same shape as the first. The `provider` field added in xref:evolve-the-schema.adoc[] is where that starts: set `FEED_PROVIDER` in `.env`, run a second feed container against the same topic, and the odds engine prices both without a change. What comes next is a product decision the log makes cheap to defer, because both providers' events are on one ordered stream: prefer one provider per market, cross-check the two and suspend on disagreement, or keep both and let the desk choose.
+
+=== Keep the season with Tiered Storage
+
+A settlement dispute can arrive months after the match. Tiered Storage keeps `sports.feed` in object storage and replays it from there, so retention stops being a disk-size decision. xref:streaming:manage:tiered-storage.adoc[]
+
+=== Next: Iceberg for the trading analysts
+
+The archive in this solution exists to answer "what did the provider send, and when". The other question, "how do our prices compare with where the market settled", is an analytics one, and Iceberg topics put `sports.feed` and `sports.odds` in the lakehouse without a pipeline to run. xref:streaming:manage:iceberg/about-iceberg-topics.adoc[]
+
+== Clean up
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=clean]
+----
+
+That stops every container and deletes the volumes, including the Redpanda data and the Postgres archive.
+
+== Related docs
+
+The pages this solution applies, for when you want the reference rather than the walkthrough:
+
+* xref:streaming:develop:consume-data/consumer-offsets.adoc[]
+* xref:streaming:develop:produce-data/configure-producers.adoc[]
+* xref:streaming:manage:schema-reg/schema-reg-overview.adoc[]
+* xref:streaming:manage:cluster-maintenance/compaction-settings.adoc[]
+* xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[]
+* xref:connect:components:outputs/sql_insert.adoc[]

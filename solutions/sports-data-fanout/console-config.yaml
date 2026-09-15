@@ -1,0 +1,16 @@
+# Redpanda Console for the local stack. The reader uses it to watch the three
+# consumer groups move independently, which is the one thing a terminal makes
+# hard to see.
+#
+# With schemaRegistry enabled and no serde section, Console fetches the Avro
+# schema for each record by the schema ID in its first five bytes and renders
+# sports.feed as JSON, including records written under the older version.
+kafka:
+  brokers: ["redpanda:9092"]
+schemaRegistry:
+  enabled: true
+  urls: ["http://redpanda:8081"]
+redpanda:
+  adminApi:
+    enabled: true
+    urls: ["http://redpanda:9644"]

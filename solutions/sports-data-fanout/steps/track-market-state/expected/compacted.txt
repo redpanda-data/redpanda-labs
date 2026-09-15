@@ -1,0 +1,4 @@
+fx-epl-2026-0412 {"fixture_id":"fx-epl-2026-0412","open_markets":0,"suspended_markets":3,"last_event_type":"MATCH_END","last_seq":250,"gaps":0,"settled":true,"updated_ts":1789486398423}
+fx-laliga-2026-0412 {"fixture_id":"fx-laliga-2026-0412","open_markets":0,"suspended_markets":2,"last_event_type":"MATCH_END","last_seq":250,"gaps":0,"settled":true,"updated_ts":1789486398428}
+fx-nba-2026-0412 {"fixture_id":"fx-nba-2026-0412","open_markets":0,"suspended_markets":2,"last_event_type":"MATCH_END","last_seq":250,"gaps":0,"settled":true,"updated_ts":1789486398433}
+fx-nfl-2026-0412 {"fixture_id":"fx-nfl-2026-0412","open_markets":0,"suspended_markets":3,"last_event_type":"MATCH_END","last_seq":250,"gaps":0,"settled":true,"updated_ts":1789486398438}

@@ -1,0 +1,147 @@
+= Accept the provider's schema change
+:page-layout: solution-step
+:description: Watch the registry refuse a breaking change, accept a compatible one, and let both versions live in the topic while every consumer keeps running untouched.
+:page-solution-step-duration: 6
+
+A provider adding a field is the normal case, not an incident. In this step the registry refuses a change that would break your consumers, accepts one that will not, and the feed starts writing the new version while the topic still holds the old one. Nothing is rebuilt, redeployed, or restarted except the feed itself.
+
+== What you do
+
+. Try the change that must be refused:
++
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=breaking]
+----
++
+The registry names the field and the path:
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/evolve-the-schema/expected/breaking.txt[]
+----
++
+Note the exit code is 0. `check-compatibility` answers a question; it does not fail a build. If you gate CI on this, gate on the output.
+
+. Try the change that is safe:
++
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=compatible]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/evolve-the-schema/expected/compatible.txt[]
+----
+
+. Register it and restart the feed against it:
++
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=evolve]
+----
++
+.What `make evolve` runs
+[source,makefile]
+----
+include::example$Makefile[tags=evolve]
+----
++
+The restarted feed reports on two matches that kick off later in the day, so the events it writes are events the topic has never seen. Re-sending the same four matches would be a redelivery rather than new data, and the archive would correctly ignore all of it.
+
+. Count what is now in the topic:
++
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=mixed]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/evolve-the-schema/expected/mixed.txt[]
+----
+
+. Check the consumers:
++
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=consumers-unchanged]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/evolve-the-schema/expected/consumers-unchanged.txt[]
+----
+
+== Why
+
+The difference between the two candidate schemas is the whole lesson. The safe one adds a field with a default:
+
+[source,json]
+----
+include::example$schemas/history/feed_event.v2.avsc[]
+----
+
+A consumer that has never heard of `provider` decodes a v2 record and simply does not see it. A consumer that expects `provider` decodes a v1 record and gets the default. Both directions work, which is what `BACKWARD` compatibility buys and why it was set in xref:create-the-contract.adoc[] before anything was written.
+
+The refused one removes `probability`, which consumers read, and adds `price` with no default. Either half would be enough to break a reader that has not been updated. The registry refuses it at registration time, which is hours or days before it would have broken anything, and that is the only moment at which refusing is cheap.
+
+What makes the mixed topic work is that each record carries the ID of the schema it was written under, and consumers decode with that one rather than with whatever they were compiled against:
+
+[source,go]
+----
+include::example$services/internal/feed/feed.go[tag=registry]
+----
+
+A consumer that instead decoded everything with "the latest schema" would break on the old records, which are the majority of the topic for as long as retention lasts.
+
+== Why Redpanda
+
+Compatibility is checked by the registry, not by convention, so the rule applies to every producer including the one written in a hurry. `rpk registry schema check-compatibility` asks the question without registering anything, which makes "is this change safe" a command a provider integration can run in its own pipeline. Console renders both versions in the same topic view with no configuration, and Redpanda Connect decodes them the same way. See xref:streaming:manage:schema-reg/schema-reg-overview.adoc[].
+
+== What happens inside
+
+Registering the new schema adds a version to the subject `sports.feed-value` and returns a new ID. The restarted feed looks the v2 file up, gets that ID, and prefixes its records with it. Every consumer sees an ID it has not seen before, fetches that schema once, caches the parsed codec, and carries on: one registry call, then nothing.
+
+The feed decides what to write by reading the schema file rather than being told by a flag, so the file and the records cannot disagree:
+
+[source,go]
+----
+include::example$services/feed/main.go[tag=publish]
+----
+
+Open Console and look at `sports.feed`: the older records have no `provider` field and the newer ones do, in one list, decoded.
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/evolve-the-schema/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/evolve-the-schema/expected/verify.txt[]
+----
+
+Two versions of one subject, both in use. If the second registration was refused, the compatibility level is not `BACKWARD`: `rpk registry compatibility-level get sports.feed-value`.
+
+== In production
+
+[.production-note]
+Pick the compatibility level that matches your deployment order, and treat a provider's schema change as a reviewed change rather than a surprise. See the Schema evolution and Schema validation rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/schemas/history/feed_event.v2.avsc[schemas/history/feed_event.v2.avsc]
+* link:{attachmentsdir}/schemas/history/feed_event.breaking.avsc[schemas/history/feed_event.breaking.avsc]
+* link:{attachmentsdir}/services/internal/feed/feed.go[services/internal/feed/feed.go]

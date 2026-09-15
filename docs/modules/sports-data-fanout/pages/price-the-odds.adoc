@@ -1,0 +1,125 @@
+= Price the odds
+:page-layout: solution-step
+:description: Turn provider probabilities into prices in the first of three independent consumer groups, and measure the end-to-end latency from the records themselves.
+:page-solution-step-duration: 6
+
+The odds engine is the first of the three consumers. It reads `sports.feed` in the group `odds-engine`, prices every market update, and publishes the result to `sports.odds`. It also refuses to publish three kinds of price, and the reason it counts each refusal separately is the point of this step.
+
+== What you do
+
+. Ask the odds engine what it has done:
++
+[source,bash]
+----
+include::example$steps/price-the-odds/commands.sh[tag=health]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/price-the-odds/expected/health.txt[]
+----
++
+`priced` plus `skipped` plus `held_suspended` plus `rejected` plus `poison` equals `read`. Every record is in exactly one of those buckets, which is what makes a silently dropped event impossible to hide.
+
+. Read some prices:
++
+[source,bash]
+----
+include::example$steps/price-the-odds/commands.sh[tag=prices]
+----
++
+Each price carries the `feed_seq` and `feed_ts` it was computed from, so a consumer can tell a current price from a stale one without trusting a clock.
+
+. Measure the latency from the records:
++
+[source,bash]
+----
+include::example$steps/price-the-odds/commands.sh[tag=latency]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/price-the-odds/expected/latency.txt[]
+----
+
+== Why
+
+The engine publishes a price only for a market update with a selection, and it publishes nothing at all for a market it believes is suspended. Those are different outcomes with different meanings, so they are different counters: `skipped` is "that event was never about a price", and `held_suspended` is "the market is closed, the last price stands". A single "ignored" counter would hide the second one, and a suspended market quietly publishing prices is how a book takes a bet it cannot honour.
+
+The third refusal is the interesting one. A probability of zero, or one, or something that implies a price below the book's floor, is a provider error, and the engine counts it as `rejected` and publishes nothing. A wrong price on every screen is worse than no new price, and the feed's own bounds are checked by a unit test so that a rejection means the provider misbehaved rather than the generator drifting:
+
+[source,go]
+----
+include::example$services/odds/pricing/pricing.go[tag=price]
+----
+
+Offsets are committed by hand, after the prices of a batch have been acknowledged by the broker. A crash between publishing and committing replays the batch, and a replayed price is the same price: the record is keyed by market and carries the sequence it came from, so a duplicate changes nothing.
+
+== Why Redpanda
+
+The engine is a member of a consumer group, so Redpanda assigns it partitions, tracks its offsets, and rebalances when instances come and go. Run three copies with `docker compose up -d --scale odds-engine=3` and the six partitions split between them; each instance then owns the fixtures on its partitions and nobody else's, which is why per-market suspension state can live in memory. Committing offsets manually is what turns "at least once" into something a consumer can reason about. See xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+
+== What happens inside
+
+The loop is poll, apply, flush, commit, and only then allow a pending rebalance:
+
+[source,go]
+----
+include::example$services/odds/main.go[tag=loop]
+----
+
+Each record is decoded with the schema it was written under, not the one the engine was built against:
+
+[source,go]
+----
+include::example$services/odds/main.go[tag=apply]
+----
+
+The latency the service reports is measured from the provider's emit time to the moment the price was published, across the whole path, and it includes the consumer's own batching. It is not the broker's write latency, which would be a much prettier and much less useful number:
+
+[source,go]
+----
+include::example$services/odds/main.go[tag=percentiles]
+----
+
+The same numbers are in the `sports.odds` records, which is why xref:verify-end-to-end.adoc[] computes the percentile from the topic rather than asking the service. A restarted service forgets its counters; the log does not.
+
+.Complete source: services/odds/main.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/odds/main.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/price-the-odds/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/price-the-odds/expected/verify.txt[]
+----
+
+The high watermarks add up to the `priced` count from the service. If they are lower, the group has not caught up: `make wait`.
+
+== In production
+
+[.production-note]
+Pricing is a trading decision, not a formula, and the overround here is a placeholder for one. What is not a placeholder is the accounting: every event in exactly one bucket, and no price published for a market you believe is closed. See the Latency budget row in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/services/odds/main.go[services/odds/main.go]
+* link:{attachmentsdir}/services/odds/pricing/pricing.go[services/odds/pricing/pricing.go]
+* link:{attachmentsdir}/schemas/odds.avsc[schemas/odds.avsc]

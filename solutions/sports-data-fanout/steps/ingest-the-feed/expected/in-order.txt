@@ -1,0 +1,5 @@
+{"feed_ts":1789486393102,"seq":1,"fixture_id":"fx-epl-2026-0412","event_type":"MARKET_UPDATE","market_id":"fx-epl-2026-0412:both-teams-to-score","selection":"draw","probability":0.25,"extra":{"league":"Premier League"}}
+{"feed_ts":1789486393448,"seq":2,"fixture_id":"fx-epl-2026-0412","event_type":"MARKET_UPDATE","market_id":"fx-epl-2026-0412:both-teams-to-score","selection":"away","probability":0.3,"extra":{"league":"Premier League"}}
+{"feed_ts":1789486393467,"seq":3,"fixture_id":"fx-epl-2026-0412","event_type":"MARKET_UPDATE","market_id":"fx-epl-2026-0412:both-teams-to-score","selection":"draw","probability":0.25,"extra":{"league":"Premier League"}}
+{"feed_ts":1789486393488,"seq":4,"fixture_id":"fx-epl-2026-0412","event_type":"MARKET_UPDATE","market_id":"fx-epl-2026-0412:total-goals","selection":"draw","probability":0.25,"extra":{"league":"Premier League"}}
+{"feed_ts":1789486393508,"seq":5,"fixture_id":"fx-epl-2026-0412","event_type":"MARKET_UPDATE","market_id":"fx-epl-2026-0412:total-goals","selection":"home","probability":0.45,"extra":{"league":"Premier League"}}

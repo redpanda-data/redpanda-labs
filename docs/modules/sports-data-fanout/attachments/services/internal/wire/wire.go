@@ -1,0 +1,1 @@
+../../../../../../../solutions/sports-data-fanout/services/internal/wire/wire.go

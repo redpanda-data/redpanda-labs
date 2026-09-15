@@ -1,0 +1,8 @@
+connect
+console
+feed
+market-state
+odds-engine
+postgres
+redpanda
+rpk

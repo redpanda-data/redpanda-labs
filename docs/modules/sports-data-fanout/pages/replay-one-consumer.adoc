@@ -1,0 +1,120 @@
+= Replay one consumer
+:page-layout: solution-step
+:description: Seek the archive group back over the entire feed while the odds engine and the desk carry on untouched, and see why re-reading everything does not double-count anything.
+:page-solution-step-duration: 5
+
+This is the step the rest of the solution exists to make possible. You send one consumer back to the beginning of the feed, over every event of every match, while the other two keep working and never notice. Then you check that the archive did not grow, because re-reading an event is not the same as receiving a new one.
+
+== What you do
+
+. Stop the pipeline so the group is empty:
++
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=stop]
+----
+
+. Send its offsets back to the start:
++
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=seek]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/replay-one-consumer/expected/seek.txt[]
+----
++
+`PRIOR-OFFSET` and `CURRENT-OFFSET`, per partition. Partitions with no data were already at 0.
+
+. Look at all three groups:
++
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=lag]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/replay-one-consumer/expected/lag.txt[]
+----
++
+That is the fan-out, in one command. One group has the whole topic to re-read; the other two have nothing to do, because their offsets are theirs.
+
+. Start it again and wait:
++
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=restart]
+----
+
+. Check the archive:
++
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=unchanged]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/replay-one-consumer/expected/unchanged.txt[]
+----
++
+The pipeline re-read every event, and the table has the same number of rows it had before, every one of them a distinct provider event.
+
+== Why
+
+A settlement bug found on Monday is a Sunday problem. The events are still on the log, so the fix is to correct the pipeline and send its group back, and the only thing that has to be true is that reprocessing does not corrupt what is already there. In this solution that is true by construction rather than by care: the row's key is the provider's `(fixture, seq)`, so the insert is idempotent, and the market-state service publishes state rather than deltas, so a replay of that group would converge to the same book.
+
+The reason the other two consumers are unaffected is that a consumer group's offsets belong to the group. There is no shared cursor, no broker-side delivery state, and nothing to coordinate. Compare it with reading the provider's HTTP endpoint directly, where every consumer shares one delivery path: replaying a day for settlement means asking the provider to re-send, and a consumer that falls behind becomes everyone's problem.
+
+Stopping the pipeline before seeking is not optional. `rpk group seek` moves the committed offsets of a group, and a live member would commit its own position straight over the top.
+
+== Why Redpanda
+
+`rpk group seek` moves a group to the start, to the end, or to a timestamp, per partition, with one command and no client code. Retention on `sports.feed` is what decides how far back "the start" is, which is why xref:index.adoc#_production_considerations[Production considerations] treats retention as a settlement question rather than a disk question. See xref:streaming:reference:rpk/rpk-group/rpk-group-seek.adoc[] and xref:streaming:develop:consume-data/consumer-offsets.adoc[].
+
+== What happens inside
+
+`seek --to start` writes new committed offsets for the group into the consumer offsets topic. When the pipeline starts again it joins the group, is assigned its partitions, reads those committed offsets, and fetches from there: the broker has no idea anything unusual happened, because nothing did.
+
+Every insert then conflicts on the primary key and does nothing, which is visible in Connect's own metrics: `input_received` climbs by the full size of the topic while the row count stays where it was. The odds engine and the market-state service poll, get nothing, and commit nothing.
+
+`make replay` does all of it in one target, for when you want the outcome rather than the mechanics:
+
+[source,makefile]
+----
+include::example$Makefile[tags=replay]
+----
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/replay-one-consumer/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/replay-one-consumer/expected/verify.txt[]
+----
+
+All three groups `Stable` with lag 0. If `feed-archive` still has lag, it is still catching up: that is the replay working, and `make wait` blocks until it finishes.
+
+== In production
+
+[.production-note]
+A replay is a routine operation, so make it one: a documented target, an idempotent sink, and enough retention to reach the day in question. See the Idempotency and delivery and Data retention rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
+* link:{attachmentsdir}/connect/feed-archive.yaml[connect/feed-archive.yaml]

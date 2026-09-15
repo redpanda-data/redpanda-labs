@@ -1,0 +1,110 @@
+# Settlement and audit archive: sports.feed -> Postgres.
+#
+# The third consumer of the feed, and the one with no code in it. The redpanda
+# input joins its own consumer group, so this pipeline reads the same records
+# the odds engine and the market-state service read, at its own pace, and
+# neither of them slows down or speeds up because of it.
+#
+# The archive's job is to be complete, not fast: a regulator's question about
+# what a provider sent, and when, is answered from here. So the insert is
+# idempotent on the provider's own key and nothing is dropped: a record that
+# cannot be decoded or inserted goes to the dead-letter topic with the error
+# attached.
+
+# tag::input[]
+input:
+  redpanda:
+    seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+    # Local broker: TLS off, mechanism none. Redpanda Cloud: TLS on and the
+    # SCRAM user from .env. The same variables drive the Go services and rpk.
+    tls:
+      enabled: ${REDPANDA_TLS_ENABLED:false}
+    sasl:
+      - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+        username: "${REDPANDA_SASL_USERNAME:}"
+        password: "${REDPANDA_SASL_PASSWORD:}"
+    topics:
+      - sports.feed
+    consumer_group: feed-archive
+    start_offset: earliest
+# end::input[]
+
+# tag::pipeline[]
+pipeline:
+  processors:
+    - try:
+        # Bytes in, JSON out. The schema ID in the record's first five bytes
+        # selects the Avro schema; the registry supplies it. Which version the
+        # record was written under does not matter here, and that is the point:
+        # the archive keeps working while a provider's change rolls out.
+        - schema_registry_decode:
+            url: "${REDPANDA_SCHEMA_REGISTRY_URL:http://redpanda:8081}"
+            avro:
+              raw_unions: false
+            basic_auth:
+              enabled: ${REDPANDA_SCHEMA_REGISTRY_BASIC_AUTH:false}
+              username: "${REDPANDA_SCHEMA_REGISTRY_USERNAME:}"
+              password: "${REDPANDA_SCHEMA_REGISTRY_PASSWORD:}"
+        - mapping: |
+            root.fixture_id  = this.fixture_id
+            root.seq         = this.seq
+            root.event_type  = this.event_type
+            root.market_id   = this.market_id.or("")
+            root.selection   = this.selection.or("")
+            root.probability = this.probability.or(0)
+            root.feed_ts     = this.feed_ts
+            # provider only exists in v2 of the schema. A v1 record archives
+            # with an empty provider rather than failing, which is what lets
+            # the two versions sit in the topic together.
+            root.provider    = this.provider.or("")
+# end::pipeline[]
+
+# tag::output[]
+output:
+  fallback:
+    # First choice: the row. ON CONFLICT DO NOTHING is what makes a replay of
+    # this pipeline safe, because the provider's (fixture, seq) pair is the
+    # identity of the event, not the offset it happened to land on.
+    - reject_errored:
+        sql_insert:
+          driver: postgres
+          dsn: "postgres://${POSTGRES_USER:sports}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:postgres}:5432/${POSTGRES_DB:sports}?sslmode=disable"
+          table: feed_archive
+          columns: [ fixture_id, seq, event_type, market_id, selection, probability, feed_ts, provider ]
+          args_mapping: |
+            root = [
+              this.fixture_id, this.seq, this.event_type, this.market_id,
+              this.selection, this.probability, this.feed_ts, this.provider,
+            ]
+          suffix: ON CONFLICT (fixture_id, seq) DO NOTHING
+          max_in_flight: 4
+          batching:
+            count: 100
+            period: 500ms
+# end::output[]
+# tag::dlq[]
+    # Second choice: the dead-letter topic, with the original bytes, key and
+    # headers plus the error, so the event can be inspected and replayed. An
+    # archive that silently drops an event is worse than no archive.
+    - processors:
+        - mapping: |
+            meta error = @fallback_error
+      redpanda:
+        seed_brokers: [ "${REDPANDA_BROKERS:redpanda:9092}" ]
+        tls:
+          enabled: ${REDPANDA_TLS_ENABLED:false}
+        sasl:
+          - mechanism: ${REDPANDA_SASL_MECHANISM:none}
+            username: "${REDPANDA_SASL_USERNAME:}"
+            password: "${REDPANDA_SASL_PASSWORD:}"
+        topic: sports.feed.dlq
+        key: ${! @kafka_key }
+        metadata:
+          include_patterns: [ "^event_type$", "^error$", "^kafka_topic$", "^kafka_partition$", "^kafka_offset$" ]
+# end::dlq[]
+
+http:
+  address: 0.0.0.0:4195
+
+logger:
+  level: INFO

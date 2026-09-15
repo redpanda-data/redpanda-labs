@@ -1,0 +1,3 @@
+input_received{label="",path="root.input"} 1000
+output_sent{label="",path="root.output.fallback.0.reject_errored"} 1000
+output_sent{label="",path="root.output.fallback.1"} 0

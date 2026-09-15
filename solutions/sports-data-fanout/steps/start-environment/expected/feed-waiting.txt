@@ -1,0 +1,8 @@
+{
+  "done": false,
+  "failed": 0,
+  "produced": 0,
+  "ready": false,
+  "schema_id": 0,
+  "topic": "sports.feed"
+}

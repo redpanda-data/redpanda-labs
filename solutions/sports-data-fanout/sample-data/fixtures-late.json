@@ -1,0 +1,16 @@
+[
+  {
+    "id": "fx-bundesliga-2026-0412",
+    "home": "Rheinstadt Eagles",
+    "away": "Bergwald SV",
+    "league": "Bundesliga",
+    "markets": ["match-odds", "total-goals"]
+  },
+  {
+    "id": "fx-mlb-2026-0412",
+    "home": "Lakeshore Herons",
+    "away": "Desert Vipers",
+    "league": "MLB",
+    "markets": ["moneyline", "total-runs"]
+  }
+]

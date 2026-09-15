@@ -1,0 +1,126 @@
+= Ingest the feed
+:page-layout: solution-step
+:description: Run the provider feed and see why keying by fixture is what gives every downstream consumer one ordered stream per match.
+:page-solution-step-duration: 6
+
+You run the feed. It produces a thousand events across four fixtures, keyed by fixture, and waits for the broker to acknowledge each one. Then you look at where those records landed, because the partition a record goes to is the only reason the three consumers in the next steps can be as simple as they are.
+
+== What you do
+
+. Run the feed to its event cap and wait for the consumers to catch up:
++
+[source,bash]
+----
+include::example$steps/ingest-the-feed/commands.sh[tag=seed]
+----
++
+`make seed` creates the topics and schemas if they do not exist, waits until the feed reports `"done": true`, and then waits until all three consumer groups report lag 0.
+
+. See where each fixture's events went:
++
+[source,bash]
+----
+include::example$steps/ingest-the-feed/commands.sh[tag=one-partition-per-fixture]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/ingest-the-feed/expected/one-partition-per-fixture.txt[]
+----
++
+One line per partition and key pair. Each fixture appears exactly once, so every event of that match is on one partition. Some partitions hold two fixtures and some hold none: four keys over six partitions is a small key space, and the hash does not spread it evenly.
+
+. Read one fixture's first five events:
++
+[source,bash]
+----
+include::example$steps/ingest-the-feed/commands.sh[tag=in-order]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/ingest-the-feed/expected/in-order.txt[]
+----
++
+`seq` counts up without gaps. That is the provider's own sequence number, and the market-state service in xref:track-market-state.adoc[] watches it for holes.
+
+== Why
+
+The producer sets three things that are not defaults, and each one is the answer to a way feeds go wrong.
+
+The key is the fixture. A sportsbook does not need a global order across every match in the world, and asking for one would mean one partition and no parallelism. It does need a strict order within a match, because a suspension that arrives after the price it was meant to suspend is a market open at a price the book did not intend. Keying by fixture buys exactly that guarantee, and nothing more.
+
+The producer waits for `acks=all` on every event, one at a time. A feed that reports success before the cluster has durably stored the event is a feed that loses events in precisely the conditions that matter, when a spike is in progress and something is restarting. Throughput here comes from the partition count, not from cutting the acknowledgement.
+
+The provider's sequence number is carried in the event rather than derived from the offset. The offset is Redpanda's count of what it received; the sequence is the provider's count of what it sent. Keeping both is how you tell "we dropped it" from "they never sent it", and that difference ends up in a commercial conversation.
+
+The `event_type` also goes in a record header, so a consumer can route on it without decoding the body.
+
+== Why Redpanda
+
+The record key selects the partition, and the partition is the unit of ordering and of consumer parallelism: one partition is read by exactly one member of a group at a time. That is what makes per-key ordering and horizontal scaling the same mechanism rather than a trade-off. With `acks=all` the producer waits for every in-sync replica, which on a three-broker cluster means the event survives a broker loss. See xref:streaming:develop:produce-data/configure-producers.adoc[] and xref:streaming:develop:produce-data/idempotent-producers.adoc[].
+
+== What happens inside
+
+The feed service builds each event, encodes it as Avro, and prefixes it with five bytes: a magic `0x00` and the schema ID, big-endian. Those five bytes are the whole reason a topic can hold two schema versions at once, and xref:evolve-the-schema.adoc[] uses them.
+
+[source,go]
+----
+include::example$services/internal/wire/wire.go[tag=encode]
+----
+
+It then produces synchronously and counts the acknowledgement:
+
+[source,go]
+----
+include::example$services/feed/main.go[tag=publish]
+----
+
+The generator behind it is seeded, so two runs of this walkthrough produce the same thousand events. It rotates through the fixtures rather than picking at random, which is what makes a per-fixture sequence number meaningful:
+
+[source,go]
+----
+include::example$services/feed/sim/generator.go[tag=next]
+----
+
+.Complete source: services/feed/main.go
+[%collapsible]
+====
+[source,go]
+----
+include::example$services/feed/main.go[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/ingest-the-feed/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/ingest-the-feed/expected/verify.txt[]
+----
+
+The high watermarks add up to 1000, the number the feed reported producing. If they add up to less, the feed is still running: `curl -s http://localhost:8090/healthz` and wait for `"done": true`.
+
+== In production
+
+[.production-note]
+A real provider feed arrives over the provider's own transport, and the gateway's job is to get it onto the log unchanged, with the provider's timestamps and sequence numbers intact. See the Partitions and Feed quality rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/services/feed/main.go[services/feed/main.go]
+* link:{attachmentsdir}/services/feed/sim/generator.go[services/feed/sim/generator.go]
+* link:{attachmentsdir}/services/internal/wire/wire.go[services/internal/wire/wire.go]
+* link:{attachmentsdir}/sample-data/fixtures.json[sample-data/fixtures.json]
+* link:{attachmentsdir}/services/go.mod[services/go.mod], link:{attachmentsdir}/services/go.sum[services/go.sum] and link:{attachmentsdir}/services/Dockerfile.txt[Dockerfile.txt] (save it as `services/Dockerfile`), which build all three services

@@ -1,0 +1,121 @@
+= Archive for settlement
+:page-layout: solution-step
+:description: Land every provider event in Postgres with Redpanda Connect, keyed so a replay cannot double-count, with a dead-letter topic for anything it cannot handle.
+:page-solution-step-duration: 5
+
+The third consumer has no code in it. A Redpanda Connect pipeline reads `sports.feed` in the group `feed-archive`, decodes each record through Schema Registry, and inserts it into Postgres. Its job is not to be fast. Its job is to be complete, because a settlement dispute or a regulator's question is answered from this table, months later.
+
+== What you do
+
+. Count what has been archived:
++
+[source,bash]
+----
+include::example$steps/archive-for-settlement/commands.sh[tag=rows]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/archive-for-settlement/expected/rows.txt[]
+----
+
+. Read one match back in the provider's order:
++
+[source,bash]
+----
+include::example$steps/archive-for-settlement/commands.sh[tag=one-match]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/archive-for-settlement/expected/one-match.txt[]
+----
++
+That is the query the settlement team runs, and the reason `(fixture_id, seq)` is both the primary key and an index.
+
+. Ask the pipeline what it has moved:
++
+[source,bash]
+----
+include::example$steps/archive-for-settlement/commands.sh[tag=connect-metrics]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/archive-for-settlement/expected/connect-metrics.txt[]
+----
++
+`input_received` and `output_sent` on the first output agree, and the fallback output, the dead-letter path, is at 0.
+
+== Why
+
+The insert is `ON CONFLICT (fixture_id, seq) DO NOTHING`, and the key is the provider's, not ours. That is the whole reason the replay in xref:replay-one-consumer.adoc[] is safe: an event's identity is what the provider said it was, so redelivering it inserts nothing, and no offset arithmetic or exactly-once machinery is needed to get there.
+
+The `provider` field is read with a default, which is what lets the same pipeline keep working across the schema change in xref:evolve-the-schema.adoc[]:
+
+[source,yaml]
+----
+include::example$connect/feed-archive.yaml[tag=pipeline]
+----
+
+Nothing is dropped. A record the pipeline cannot decode or insert goes to `sports.feed.dlq` with the original key, the headers, and the error attached, so it can be inspected and replayed after a fix. An archive that silently loses an event is worse than no archive, because it is trusted.
+
+== Why Redpanda
+
+Redpanda Connect is one YAML file and one container: no Kafka Connect cluster, no plugin JARs, no code. The `redpanda` input joins its own consumer group, which is what makes this a third independent reader rather than a tap on someone else's; `schema_registry_decode` turns bytes into JSON by reading the schema ID in each record; and `fallback` with `reject_errored` is the dead-letter pattern without a line of Go. See xref:connect:components:inputs/redpanda.adoc[], xref:connect:components:processors/schema_registry_decode.adoc[] and xref:connect:components:outputs/sql_insert.adoc[].
+
+== What happens inside
+
+The input reads from the earliest offset in the group `feed-archive`, so the pipeline sees the whole feed from the start the first time it runs. Records are batched, 100 at a time or every 500 milliseconds, because an archive wants throughput and does not care about a half second. The odds engine, which does care, is unaffected: it has its own group and its own offsets.
+
+[source,yaml]
+----
+include::example$connect/feed-archive.yaml[tag=output]
+----
+
+Postgres holds the rows in a table whose shape is a settlement question rather than a copy of the event:
+
+[source,sql]
+----
+include::example$postgres/init.sql[]
+----
+
+.Complete source: connect/feed-archive.yaml
+[%collapsible]
+====
+[source,yaml]
+----
+include::example$connect/feed-archive.yaml[]
+----
+====
+
+== Verify
+
+Run:
+
+[source,bash]
+----
+include::example$steps/archive-for-settlement/commands.sh[tag=verify]
+----
+
+Expected output:
+
+[.solution-verify]
+[source,text]
+----
+include::example$steps/archive-for-settlement/expected/verify.txt[]
+----
+
+`t` means every row is a distinct provider event: no duplicates. If the count is lower than the number of events on the topic, the group has not caught up yet: `make wait`.
+
+== In production
+
+[.production-note]
+Give the archive retention that matches the dispute window rather than the disk, and alert on dead-letter growth. See the Data retention and Dead-letter handling rows in xref:index.adoc#_production_considerations[Production considerations].
+
+.Files for this step
+* link:{attachmentsdir}/connect/feed-archive.yaml[connect/feed-archive.yaml]
+* link:{attachmentsdir}/postgres/init.sql[postgres/init.sql]

@@ -1,0 +1,9 @@
+ok    topics and partitions
+ok    the feed lost nothing (produced=500, failed=0, on the log=1500)
+ok    all three consumer groups (odds-engine, market-state, feed-archive) have lag 0
+ok    every one of the 14 markets that got an update has a price on sports.odds, and no others do
+ok    all 653 prices are within 1.01 and 1000, and none predates its event
+ok    p99 feed-to-price latency 3ms is within the 1000ms budget (653 priced events)
+ok    the compacted desk view holds 6 fixtures, all 6 finished ones settled with 0 markets open
+ok    feed_archive holds one row for every record on sports.feed (1500) and the dead-letter topic is empty
+PASS (8/8)

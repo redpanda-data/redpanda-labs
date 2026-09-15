@@ -1,0 +1,1 @@
+../../../../../solutions/sports-data-fanout/services/go.mod

@@ -1,0 +1,93 @@
+= Verify end to end
+:page-layout: solution-step
+:description: Run the script that proves the whole fan-out from the log itself: counts, market coverage, latency percentiles, the desk's view, and a complete archive.
+:page-solution-step-duration: 5
+
+One script makes eight claims about the running system and prints `PASS (8/8)` or lists what failed. Every number it checks comes from the log, from the registry, or from Postgres, never from a service's in-memory counters, so it is the same script on a laptop and against Redpanda Cloud.
+
+== What you do
+
+. Run it:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=verify]
+----
++
+Expected output:
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/verify.txt[]
+----
+
+. Run the unit tests, which cover the parts a running stack cannot show you: the pricing rules, the state fold, the wire format, and the feed's own bounds:
++
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=unit-tests]
+----
++
+[.solution-verify]
+[source,text]
+----
+include::example$steps/verify-end-to-end/expected/unit-tests.txt[]
+----
+
+== Why
+
+The eight checks are the eight things this solution claims:
+
+. The topics have the partition counts the design depends on, and the desk's view is compacted.
+. The feed lost nothing: it failed no publish, and everything it acknowledged is on the log.
+. All three consumer groups have caught up. A fan-out that is current for two of three has not caught up.
+. Every market that received an update has a price, and `sports.odds` invented none. Set equality, so a missing market is named.
+. No impossible price reached a screen: every price is inside the book's range, and none was published before the event that caused it.
+. End-to-end latency, from the provider's emit time to the published price, is inside the budget at the 99th percentile.
+. The desk's compacted view settles every finished fixture with no market left open.
+. The archive mirrors the log exactly, and the dead-letter topic is empty.
+
+Each one is a statement about state rather than about text, which is what makes them portable. A check that asserted "1000 events" would be true on a laptop with this seed and false everywhere else; "the archive holds one row for every record on the topic" is true wherever it runs.
+
+The two checks that changed the most while this solution was being built are worth calling out, because they were both wrong in the same way. They asked the odds engine for its counters. Restarting that container resets them, and a verify script that reports `FAIL` on a healthy system after a restart is worse than no verify script. They now compute the same numbers from `sports.odds`, which is durable, and which you can compute yourself with the command in xref:price-the-odds.adoc[].
+
+[source,bash]
+----
+include::example$scripts/verify.sh[tag=checks]
+----
+
+== Why Redpanda
+
+Everything the script needs is queryable with `rpk` against the running cluster: partition counts and topic configuration, high watermarks, consumer group lag per group, and the decoded contents of a topic through Schema Registry. That is why the assertions can be about the system rather than about a log line, and why the same script is the gate in CI, the last step of this page, and the thing the nightly run executes against Redpanda Cloud. See xref:streaming:reference:rpk/rpk-group/rpk-group-describe.adoc[] and xref:streaming:reference:rpk/rpk-topic/rpk-topic-describe.adoc[].
+
+== What happens inside
+
+`verify.sh` reads `.env` the way Compose does, runs every `rpk` and `psql` command inside the containers, and consumes each topic once with `--use-schema-registry=value` so the records arrive as JSON. The percentile is computed with `sort` and `awk` over the `feed_ts` and `priced_ts` in the odds records. `verify-lib.sh`, shared by every solution in this repository, keeps the pass and fail counters and prints the summary; the exit code is what CI gates on.
+
+.Complete source: scripts/verify.sh
+[%collapsible]
+====
+[source,bash]
+----
+include::example$scripts/verify.sh[]
+----
+====
+
+== Clean up
+
+[source,bash]
+----
+include::example$steps/verify-end-to-end/commands.sh[tag=clean]
+----
+
+That stops every container and deletes the volumes, including the Redpanda data and the Postgres archive.
+
+== In production
+
+[.production-note]
+Keep a script like this and run it after every deploy. The value is not in the checks passing; it is in a failure naming which claim stopped being true. See xref:index.adoc#_production_considerations[Production considerations] for the rest.
+
+.Files for this step
+* link:{attachmentsdir}/scripts/verify.sh[scripts/verify.sh] and link:{attachmentsdir}/scripts/verify-lib.sh[scripts/verify-lib.sh]
+* link:{attachmentsdir}/Makefile.mk[Makefile.mk] (save it as `Makefile`)
