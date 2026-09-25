@@ -5,9 +5,9 @@
 #    - Secrets referenced for sensitive credentials (S3 keys, catalog auth)
 #    - Separation of concerns between public config and private secrets
 #
-# 2. Cloud Storage Integration (S3/MinIO):
+# 2. Cloud Storage Integration (S3/RustFS):
 #    - cloud_storage_* settings configure S3-compatible object storage
-#    - path-style URLs required for MinIO compatibility in Kubernetes
+#    - path-style URLs, since rustfs.yaml sets no server domain
 #    - Tiered Storage enables efficient long-term data retention
 #
 # 3. Iceberg Sink Configuration:
@@ -16,7 +16,7 @@
 #    - Automatic table commits at configurable intervals for real-time analytics
 #
 # 4. Authentication Flow:
-#    - S3 credentials for MinIO bucket access and object storage
+#    - S3 credentials for RustFS bucket access and object storage
 #    - Iceberg catalog credentials for secure metadata operations
 #    - All credentials externalized to Kubernetes secrets
 #

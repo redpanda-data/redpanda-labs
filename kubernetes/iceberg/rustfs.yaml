@@ -1,0 +1,94 @@
+# RustFS: S3-compatible object storage for Redpanda Tiered Storage and the
+# Iceberg warehouse. For development and evaluation only; not supported for
+# production deployments of Redpanda.
+#
+# One pod with one volume, pinned to kind-worker, which the lab reserves for Spark and
+# storage with a dedicated=spark taint.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-data
+  namespace: iceberg-lab
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: iceberg-lab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: kind-worker
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: spark
+          effect: NoSchedule
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:1.0.0
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_access_key
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_secret_key
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "true"
+            - name: RUSTFS_REGION
+              value: local
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: iceberg-lab
+spec:
+  selector:
+    app: rustfs
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console

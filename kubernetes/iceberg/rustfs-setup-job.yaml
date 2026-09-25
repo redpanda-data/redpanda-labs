@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-setup
+  namespace: iceberg-lab
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: rustfs-setup
+          image: amazon/aws-cli:2.37.1
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_access_key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redpanda-secret
+                  key: cloud_storage_secret_key
+            - name: AWS_REGION
+              value: "local"
+            - name: S3
+              value: http://rustfs.iceberg-lab.svc.cluster.local:9000
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Setting up RustFS bucket..."
+              until aws --endpoint-url "$S3" s3 ls >/dev/null 2>&1; do
+                echo '...waiting for RustFS...'
+                sleep 1
+              done
+              echo "RustFS is ready, creating bucket..."
+              aws --endpoint-url "$S3" s3api head-bucket --bucket redpanda 2>/dev/null \
+                || aws --endpoint-url "$S3" s3 mb s3://redpanda
+              # Public read and write, as the lab's earlier object store setup granted.
+              aws --endpoint-url "$S3" s3api put-bucket-policy --bucket redpanda --policy \
+                '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:*"],"Resource":["arn:aws:s3:::redpanda","arn:aws:s3:::redpanda/*"]}]}'
+              echo "Bucket setup completed successfully!"
