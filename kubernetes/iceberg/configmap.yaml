@@ -8,16 +8,16 @@ data:
   # =============================================================================
 
   # Enable Tiered Storage for efficient long-term data retention
-  # This allows older segments to be moved to object storage (MinIO)
+  # This allows older segments to be moved to object storage (RustFS)
   cloud_storage_enabled: "true"
 
   # Set region for S3 API compatibility
-  # MinIO uses 'local' as a default region in standalone mode
+  # RustFS uses 'local' as a default region in standalone mode
   cloud_storage_region: "local"
 
-  # MinIO endpoint using Kubernetes service DNS
+  # RustFS endpoint using Kubernetes service DNS
   # Using headless service for direct pod communication
-  cloud_storage_api_endpoint: "iceberg-minio-hl.iceberg-lab.svc.cluster.local"
+  cloud_storage_api_endpoint: "rustfs.iceberg-lab.svc.cluster.local"
   cloud_storage_api_endpoint_port: "9000"
 
   # Disable TLS for simplicity in lab environment
@@ -25,7 +25,7 @@ data:
   cloud_storage_disable_tls: "true"
 
   # S3 bucket name for storing Redpanda segments and Iceberg data
-  # This bucket is created by the minio-setup-job
+  # This bucket is created by the rustfs-setup-job
   cloud_storage_bucket: "redpanda"
 
   # Upload segments to object storage every 30 seconds
@@ -41,9 +41,9 @@ data:
   # Allows querying older data that has been tiered
   cloud_storage_enable_remote_read: "true"
 
-  # Use path-style URLs for S3 operations (required for MinIO)
+  # Use path-style URLs for S3 operations (rustfs.yaml sets no RUSTFS_SERVER_DOMAINS)
   # Path-style: http://endpoint/bucket/key
-  # Virtual-hosted-style: http://bucket.endpoint/key (not supported by MinIO)
+  # Virtual-hosted-style: http://bucket.endpoint/key (RustFS serves it only with RUSTFS_SERVER_DOMAINS set)
   cloud_storage_url_style: "path"
 
   # =============================================================================
