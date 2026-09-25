@@ -4,3 +4,6 @@
 {description}
 
 - link:./gitops-helm/README.adoc[Set Up GitOps for the Redpanda Helm Chart]
+- link:./iceberg/README.adoc[Iceberg Streaming on Kubernetes with Redpanda, MinIO, and Spark]
+- link:./shadow-linking/README.adoc[Explore Shadow Linking for Disaster Recovery]
+- link:./kroxylicious-shadow-linking/README.adoc[Rename Topics in Transit with Kroxylicious and Shadow Linking]

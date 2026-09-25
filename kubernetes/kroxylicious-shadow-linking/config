@@ -1,0 +1,8 @@
+export KIND_CLUSTER_NAME=redpanda-kroxy
+export CERT_MANAGER_NAMESPACE=cert-manager
+export OPERATOR_NAMESPACE=rp-operator
+export SOURCE_REDPANDA_NAMESPACE=source
+export SHADOW_REDPANDA_NAMESPACE=shadow
+export KROXYLICIOUS_OPERATOR_NAMESPACE=kroxylicious-operator
+export KROXYLICIOUS_NAMESPACE=kroxylicious
+export KROXYLICIOUS_PROXY_IMAGE=kroxylicious-shadow-demo-proxy:0.24.0

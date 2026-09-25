@@ -1,0 +1,298 @@
+= Rename Topics in Transit with Kroxylicious and Shadow Linking
+:env-kubernetes: true
+:page-categories: Disaster Recovery, Data Replication, Integration
+:description: Route a Redpanda shadow link through a Kroxylicious Kafka protocol proxy, so that shadowed topics and consumer groups arrive on the shadow cluster under a different name.
+:page-layout: lab
+// Set the path to content in this lab for both the docs site and the local GitHub README
+:content-url: ./
+ifdef::env-site[]
+:content-url: https://github.com/redpanda-data/redpanda-labs/blob/main/kubernetes/kroxylicious-shadow-linking/
+endif::[]
+
+Shadow linking is a built-in disaster recovery mechanism that continuously replicates topics, consumer group offsets, and Schema Registry data from a source cluster to a shadow cluster. Normally a shadow link reads straight from the source cluster's Kafka listener. This lab points it at a https://kroxylicious.io/[Kroxylicious^] virtual cluster instead, so every Kafka request the shadow link makes passes through a proxy on its way to the source cluster.
+
+A proxy in that position can rewrite the protocol in flight. The lab uses a small custom Kroxylicious filter that presents every topic and consumer group under a `p_` prefix, without renaming anything on the source cluster itself. A topic created as `basic` on the source cluster therefore arrives on the shadow cluster as `p_basic`, and a consumer group created as `consumer-group-foo` arrives as `p_consumer-group-foo`. Because the shadow cluster ends up healthy and consistent, with the renamed topics and groups intact, the lab doubles as proof that shadowing keeps working end to end through a Kafka protocol proxy.
+
+This lab shows you how to:
+
+* Deploy a Kroxylicious proxy in front of a Redpanda cluster on Kubernetes.
+* Configure a shadow link to read its source cluster through that proxy.
+* Verify that topics, Schema Registry data, and consumer group offsets replicate correctly, and fail over, while their names are being rewritten in transit.
+
+== Prerequisites
+
+You must have the following:
+
+* https://kubernetes.io/docs/tasks/tools/[kubectl^] CLI installed
+* https://helm.sh/docs/intro/install/[Helm 3+^] installed
+* xref:streaming:get-started:rpk-install.adoc[rpk] CLI installed
+* https://kind.sigs.k8s.io/docs/user/quick-start/#installation[kind^] installed (for local testing)
+* https://docs.docker.com/get-docker/[Docker^] installed and running
+* https://stedolan.github.io/jq/download/[jq^] installed
+
+== What gets deployed
+
+The setup script installs the following components:
+
+* *cert-manager* (namespace: `cert-manager`): Manages TLS certificates
+* *Redpanda Operator* (namespace: `rp-operator`): Manages Redpanda cluster lifecycle
+* *Kroxylicious Operator* (namespace: `kroxylicious-operator`): Manages Kroxylicious proxies
+* *Source cluster* (namespace: `source`): Primary cluster where you write data
+* *Shadow cluster* (namespace: `shadow`): Replication target cluster
+* *Kroxylicious proxy* (namespace: `kroxylicious`): Virtual cluster fronting the source cluster, which presents every topic and consumer group with a `p_` prefix
+* *ShadowLink resource* (namespace: `shadow`): Defines the replication relationship between clusters, and reads the source cluster through the Kroxylicious proxy
+
+The shadow link configuration mirrors all topics using wildcard filtering, replicates consumer group offsets, and synchronizes the Schema Registry, all at 5-second intervals.
+
+The script also creates port forwards so that you can reach both clusters from localhost, and two rpk profiles, `source` and `shadow`, so that you can address each cluster independently:
+
+|===
+| Cluster | Kafka | Admin API | Schema Registry
+
+| Source
+| `localhost:19094`
+| `localhost:19644`
+| `localhost:18081`
+
+| Shadow
+| `localhost:29094`
+| `localhost:29644`
+| `localhost:28081`
+|===
+
+== How the rename works
+
+The shadow link's `sourceCluster` Kafka brokers point at the Kroxylicious virtual cluster rather than at the source cluster (see link:{content-url}resources/shadow-link.yaml[`resources/shadow-link.yaml`]). The virtual cluster attaches the `topic-prefixer` filter, which renames names on responses flowing from the source cluster towards a client, and un-renames them on requests flowing the other way. The source cluster never sees a renamed name, and every client of the proxy, including the shadow link, only ever sees the renamed one.
+
+Two consequences are worth knowing before you run the lab:
+
+* Kroxylicious proxies only the Kafka protocol. The shadow link's Admin API and Schema Registry endpoints still point directly at the source cluster, so nothing renames those.
+* Topics whose names start with `_`, such as the `_schemas` topic that backs the Schema Registry, are left alone. Schema Registry replication therefore works unmodified.
+
+Kroxylicious ships a built-in `MultiTenant` filter that also prefixes topic names, but it is built for multi-tenancy: it hides the prefix from clients and hides any topic that is not already prefixed. For a complete account of why that is the wrong shape for this lab, what the custom filter implements instead, and how to configure it, see link:{content-url}kroxylicious/topic-prefixer/README.adoc[`kroxylicious/topic-prefixer/README.adoc`].
+
+== Limitations
+
+The `topic-prefixer` filter is demo-quality code, not a general-purpose replacement for `MultiTenant`. It implements the requests that shadow linking needs to discover and replicate topics and consumer group offsets, and no more:
+
+* Producing through the proxy is not implemented. Produce to the source cluster directly, as this lab does.
+* Transactional producers are not covered, so a transactional ID is never renamed.
+* `DeleteGroups` is not implemented. Kroxylicious's own `MultiTenant` filter does not implement it either.
+* The KIP-848 consumer group protocol is not covered. Shadow linking's own client uses the classic protocol, so this does not affect the lab, but a client that prefers KIP-848 for its own group membership would see its group ID go unrenamed.
+
+Both Redpanda clusters run as single-node clusters with TLS and SASL disabled. This keeps the lab simple to run locally, and is not a production configuration.
+
+== Run the lab
+
+. Clone this repository:
++
+[,bash]
+----
+git clone https://github.com/redpanda-data/redpanda-labs.git
+cd redpanda-labs/kubernetes/kroxylicious-shadow-linking
+----
+
+. Create a local Kubernetes cluster using kind:
++
+[,bash]
+----
+kind create cluster --config resources/kind.yaml
+----
++
+This creates a five-node cluster named `redpanda-kroxy`, which gives the two Redpanda clusters, the two operators, and the proxy somewhere to land.
+
+. Run the setup script to build the proxy image, deploy both clusters, and configure shadow linking:
++
+[,bash]
+----
+./setup.sh
+----
++
+The script installs cert-manager and the Redpanda Operator, builds the custom Kroxylicious proxy image and loads it into the kind cluster, deploys the Kroxylicious Operator, creates the source and shadow clusters, deploys the proxy virtual cluster, configures the shadow link, sets up port forwarding for local access, and creates rpk profiles for both clusters.
+
+. Verify both clusters are healthy:
++
+[,bash]
+----
+rpk --profile source cluster health
+rpk --profile shadow cluster health
+----
+
+== Explore basic topic shadowing
+
+This section shows how topics and messages automatically replicate from the source to the shadow cluster, arriving under a prefixed name.
+
+. Create a topic on the source cluster:
++
+[,bash]
+----
+rpk --profile source topic create basic -p1 -r1
+----
+
+. Produce a message to the source cluster:
++
+[,bash]
+----
+echo "Hello, world" | rpk --profile source topic produce basic
+----
+
+. Confirm that the source cluster still knows the topic by its real name:
++
+[,bash]
+----
+rpk --profile source topic list
+----
++
+The topic is `basic`. This command talks to the source cluster directly and bypasses the proxy.
+
+. Wait a few seconds for replication, then list topics on the shadow cluster:
++
+[,bash]
+----
+rpk --profile shadow topic list
+----
++
+The topic is `p_basic`. The shadow link discovered it through the proxy, which added the prefix.
+
+. Consume messages from both clusters to verify data replication:
++
+[,bash]
+----
+rpk --profile source topic consume basic -n1
+rpk --profile shadow topic consume p_basic -n1
+----
++
+The same message appears on both clusters, under each cluster's own name for the topic.
+
+== Explore Schema Registry shadowing
+
+This section shows how Avro schemas registered on the source cluster replicate to the shadow cluster, allowing shadow-side message deserialization even though the topic has been renamed.
+
+. Register an Avro schema on the source cluster:
++
+[,bash]
+----
+rpk --profile source registry schema create syslog-value --schema resources/syslog.avsc --type avro
+----
+
+. Create a topic for schema-encoded messages:
++
+[,bash]
+----
+rpk --profile source topic create syslog -p1 -r1
+----
+
+. Produce Avro-encoded syslog records to the source cluster:
++
+[,bash]
+----
+cat resources/syslogs.json | rpk --profile source topic produce syslog --schema-id=topic
+----
+
+. Wait a few seconds, then list schemas on both clusters:
++
+[,bash]
+----
+rpk --profile source registry subject list
+rpk --profile shadow registry subject list
+----
++
+The `syslog-value` subject appears on both clusters. Subject names are not prefixed: the Schema Registry endpoints are not proxied, and the `_schemas` topic that carries them is exempt from the rename.
+
+. Consume the raw bytes from the shadow cluster:
++
+[,bash]
+----
+rpk --profile shadow topic consume p_syslog -o0 -n1
+----
++
+Each record is Avro-encoded and carries a schema ID.
+
+. Consume decoded messages from the shadow cluster using the replicated schema:
++
+[,bash]
+----
+rpk --profile shadow topic consume p_syslog -o0 -n1 --use-schema-registry -f'%v\n' | jq
+----
++
+The shadow cluster deserializes the messages using the replicated schema. Decoding is driven by the schema ID embedded in each record, so renaming the topic does not break it.
+
+== Explore consumer group failover
+
+This section shows how consumer group offsets replicate to the shadow cluster, allowing consumers to resume from their exact position after a failover. The proxy renames consumer groups in the same way it renames topics.
+
+. Create a topic on the source cluster:
++
+[,bash]
+----
+rpk --profile source topic create foo -p1 -r1
+----
+
+. Produce records and consume them on the source cluster:
++
+[,bash]
+----
+seq 0 2 | rpk --profile source topic produce foo
+rpk --profile source topic consume foo -n3 -g consumer-group-foo
+----
++
+This creates a consumer group and processes the messages.
+
+. Wait a few seconds, then view consumer group offsets on both clusters:
++
+[,bash]
+----
+rpk --profile source group describe consumer-group-foo
+rpk --profile shadow group describe p_consumer-group-foo
+----
++
+The group and its offsets are replicated to the shadow cluster, where the group is named `p_consumer-group-foo` and tracks the `p_foo` topic.
+
+. Trigger a failover to the shadow cluster:
++
+[,bash]
+----
+rpk --profile shadow shadow failover shadow-link --all --no-confirm
+rpk --profile shadow shadow status shadow-link
+----
++
+This command promotes the shadow cluster to become writable.
+
+. Produce more records and consume on the shadow cluster:
++
+[,bash]
+----
+seq 3 5 | rpk --profile shadow topic produce p_foo
+rpk --profile shadow topic consume p_foo -n3 -g p_consumer-group-foo
+----
++
+The consumer resumes from the last committed offset (3) and consumes the new messages. The prefixed names are now the real names on the promoted cluster.
+
+. Confirm the group's offsets are current:
++
+[,bash]
+----
+rpk --profile shadow group describe p_consumer-group-foo
+----
+
+== Clean up
+
+To stop port forwarding, terminate the background processes:
+
+[,bash]
+----
+kill $(cat local-port-forward.pid)
+----
+
+To delete the kind cluster and all resources:
+
+[,bash]
+----
+kind delete cluster --name redpanda-kroxy
+----
+
+== Suggested reading
+
+* xref:streaming:manage:disaster-recovery/shadowing/index.adoc[Shadowing for Disaster Recovery]
+* xref:streaming:deploy:deployment-option/self-hosted/kubernetes/index.adoc[Redpanda on Kubernetes]
+* https://kroxylicious.io/docs/[Kroxylicious documentation^]
