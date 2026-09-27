@@ -27,6 +27,11 @@ content:
     start_path: shared
   - url: https://github.com/redpanda-data/rp-connect-docs
     branches: [main]
+  # Generated reference partials. modify-connect-tag-playbook pins this to the
+  # latest Connect release and keeps only the generated partials and examples.
+  - url: https://github.com/redpanda-data/connect
+    tags: latest
+    start_path: docs
   - url: https://github.com/redpanda-data/docs-site
     branches: 'main'
     start_paths: [home, data-platform, self-managed]
@@ -57,6 +62,7 @@ antora:
   # Components with page-navigation attribute use that config
   # Components without page-navigation use standard Antora navigation
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unified-navigation'
+  - require: '@redpanda-data/docs-extensions-and-macros/extensions/modify-connect-tag-playbook'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/generate-rp-connect-info'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/unpublish-pages'
   - require: '@redpanda-data/docs-extensions-and-macros/extensions/add-global-attributes'
