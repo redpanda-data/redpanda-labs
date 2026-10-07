@@ -27,11 +27,6 @@ content:
     start_path: shared
   - url: https://github.com/redpanda-data/rp-connect-docs
     branches: [main]
-  # Generated reference partials. modify-connect-tag-playbook pins this to the
-  # latest Connect release and keeps only the generated partials and examples.
-  - url: https://github.com/redpanda-data/connect
-    tags: latest
-    start_path: docs
   - url: https://github.com/redpanda-data/docs-site
     branches: 'main'
     start_paths: [home, data-platform, self-managed]
