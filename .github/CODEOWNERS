@@ -1,0 +1,3 @@
+# DOC-2496: docs-team merge gate — inert until branch protection
+# enables "require review from Code Owners".
+*   @redpanda-data/documentation
