@@ -1,0 +1,50 @@
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: ShadowLink
+metadata:
+  name: shadow-link
+  namespace: shadow
+spec:
+
+  # What cluster are we writing to?
+  shadowCluster:
+    staticConfiguration:
+      kafka:
+        brokers: ["redpanda.shadow.svc.cluster.local:9093"]
+      admin:
+        urls: ["http://redpanda.shadow.svc.cluster.local:9644/"]
+      schemaRegistry:
+        urls: ["http://redpanda.shadow.svc.cluster.local:8081/"]
+
+  # What cluster are we reading from? Routed through the Kroxylicious proxy virtual cluster
+  # (resources/kroxylicious-proxy.yaml) instead of talking to the source cluster directly, so
+  # topics discovered here already carry the "p_" prefix added by the topic-prefixer filter.
+  # Kroxylicious only proxies the Kafka protocol, so the admin API and Schema Registry endpoints
+  # below still point directly at the source cluster - those aren't proxied.
+  sourceCluster:
+    staticConfiguration:
+      kafka:
+        brokers: ["source-proxy-cluster-ip-bootstrap.kroxylicious.svc.cluster.local:9292"]
+      admin:
+        urls: ["http://redpanda.source.svc.cluster.local:9644/"]
+      schemaRegistry:
+        urls: ["http://redpanda.source.svc.cluster.local:8081/"]
+
+  # Replicate all topics (except for any that are pre-filtered)
+  topicMetadataSyncOptions:
+    interval: 5s
+    autoCreateShadowTopicFilters:
+      - name: '*'
+        filterType: include
+        patternType: literal
+
+  # Replicate all consumer groups
+  consumerOffsetSyncOptions:
+    interval: 5s
+    groupFilters:
+      - patternType: literal
+        filterType: include
+        name: '*'
+
+  # Replicate schema registry (using _schemas topic replication)
+  schemaRegistrySyncOptions:
+    schema_registry_shadowing_mode: "topic"
