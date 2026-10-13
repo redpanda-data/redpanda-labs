@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "namespace": "com.redpanda.labs.fanout",
+  "name": "Inventory",
+  "fields": [
+    {"name": "product_id", "type": "string"},
+    {"name": "quantity", "type": "int"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
