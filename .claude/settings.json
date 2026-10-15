@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh api *pulls/*/merge*)",
+      "Bash(gh api graphql *mergePullRequest*)",
+      "Bash(gh api graphql *enablePullRequestAutoMerge*)",
+      "mcp__github__merge_pull_request"
+    ]
+  }
+}

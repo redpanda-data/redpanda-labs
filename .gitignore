@@ -30,3 +30,6 @@ venv/
 
 # Redaction docker .env exception
 !data-transforms/go/redaction/demo/.env
+
+# Shared Claude Code settings
+!.claude/settings.json
