@@ -1,15 +1,15 @@
-= Iceberg Streaming on Kubernetes with Redpanda, MinIO, and Spark
+= Iceberg Streaming on Kubernetes with Redpanda, RustFS, and Spark
 :env-kubernetes: true
-:description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
+:description: Pair Redpanda with RustFS for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
 :page-layout: lab
 :page-categories: Iceberg, Tiered Storage, Management, High Availability, Data Replication, Integration
 
-This lab provides a local Kubernetes environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like MinIO, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
+This lab provides a local Kubernetes environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like RustFS, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
 
 In this setup, you will:
 
 - Produce data to Redpanda topics that are Iceberg-enabled.
-- Observe how Redpanda writes this data in Iceberg format to MinIO as the Tiered Storage backend.
+- Observe how Redpanda writes this data in Iceberg format to RustFS as the Tiered Storage backend.
 - Use Spark to query the Iceberg tables, demonstrating a complete pipeline from data production to querying.
 
 This environment is ideal for experimenting with Redpanda's Iceberg and Tiered Storage capabilities, enabling you to test end-to-end workflows for analytics and data lake architectures.
@@ -66,54 +66,35 @@ kubectl apply -f configmap.yaml --namespace iceberg-lab
 kubectl apply -f secret.yaml --namespace iceberg-lab
 ----
 
-=== Deploy MinIO
+=== Deploy RustFS
 
-. Deploy the MinIO Operator:
+This lab uses https://rustfs.com/[RustFS^], an S3-compatible object store, for Tiered Storage and the Iceberg warehouse. RustFS is for development and evaluation only and is not supported for production deployments of Redpanda.
+
+. Deploy RustFS:
 +
 [source,bash]
 ----
-kubectl apply -k "github.com/minio/operator?ref=v5.0.18"
+kubectl apply -f rustfs.yaml --namespace iceberg-lab
 ----
 
-. Wait for the MinIO Operator to be ready:
+. Wait for RustFS to be ready:
 +
 [source,bash]
 ----
-kubectl wait --for=condition=available deployment --all --namespace minio-operator --timeout=120s
+kubectl rollout status deployment/rustfs --namespace iceberg-lab --timeout=300s
 ----
 
-. Create a MinIO instance:
-+
-[source,bash]
-----
-helm repo add minio-operator https://operator.min.io
-helm repo update
-helm upgrade --install iceberg-minio minio-operator/tenant \
-  --namespace iceberg-lab \
-  --version 7.1.1 \
-  --values minio-tenant-values.yaml
-----
+=== Set up the RustFS bucket and permissions
 
-. Wait for the MinIO instance to be ready:
-+
-[source,bash]
-----
-sleep 10 && kubectl wait --for=condition=ready pod -l v1.min.io/tenant=iceberg-minio --namespace iceberg-lab --timeout=300s
-----
-+
-If you see `error: no matching resources found`, it means the MinIO Operator has not yet created the Pods. Wait a few moments and try the command again.
-
-=== Set up MinIO bucket and permissions
-
-This step creates a job that sets up the MinIO bucket and permissions required for Redpanda to access the object store.
+This step creates a job that sets up the bucket and permissions required for Redpanda to access the object store.
 
 [source,bash]
 ----
-kubectl apply -f minio-setup-job.yaml --namespace iceberg-lab
-kubectl wait --for=condition=complete job/minio-setup --namespace iceberg-lab --timeout=60s
+kubectl apply -f rustfs-setup-job.yaml --namespace iceberg-lab
+kubectl wait --for=condition=complete job/rustfs-setup --namespace iceberg-lab --timeout=60s
 ----
 
-If the job times out, check the logs with `kubectl logs job/minio-setup --namespace iceberg-lab iceberg-lab`. If you see `400 Bad Request` errors, MinIO might have reverted to TLS mode. See the <<troubleshoot, troubleshooting section>>.
+If the job times out, check the logs with `kubectl logs job/rustfs-setup --namespace iceberg-lab`.
 
 === Deploy the Iceberg REST catalog
 
@@ -135,31 +116,16 @@ kubectl label node kind-worker node-role.kubernetes.io/spark-node=true
 kubectl taint nodes kind-worker dedicated=spark:NoSchedule
 ----
 
-. Build and load the Spark Docker image:
+. Create a ConfigMap with the Spark configuration and the notebook:
 +
 [source,bash]
 ----
-docker build -t spark-iceberg-jupyter:latest ./spark
-kind load docker-image spark-iceberg-jupyter:latest --name kind --nodes kind-worker
+kubectl create configmap spark-files --namespace iceberg-lab \
+  --from-file=spark-defaults.conf=spark/spark-defaults.conf \
+  --from-file=query-redpanda-table.ipynb="spark/notebooks/Iceberg - Query Redpanda Table.ipynb"
 ----
 +
-This step builds the Spark image with Kubernetes-specific configurations for Iceberg and uploads it to the kind cluster. The Dockerfile automatically detects your system architecture (ARM64 or x86_64) and downloads the appropriate dependencies.
-+
-Wait for the build to complete and the image to be loaded into the kind cluster.
-
-. Verify the image is loaded:
-+
-[source,bash]
-----
-docker exec -it kind-worker crictl images | grep spark-iceberg-jupyter
-----
-+
-You should see output similar to the following:
-+
-[role="no-copy no-wrap"]
-----
-docker.io/library/spark-iceberg-jupyter    latest      86f20b1213dd3    3.83GB
-----
+Spark runs from the prebuilt `quay.io/jupyter/pyspark-notebook` image, so there is nothing to build. The first Spark session you start downloads the Iceberg libraries, so your first query can take a minute.
 
 . Deploy Spark:
 +
@@ -232,20 +198,20 @@ redpanda   True    Redpanda reconciliation succeeded
 
 === Expose services
 
-In this step, you set up access to the MinIO UI, Spark Jupyter Notebook, and Redpanda Console.
+In this step, you set up access to the RustFS console, Spark Jupyter Notebook, and Redpanda Console.
 
-==== Set up MinIO console access
+==== Set up RustFS console access
 
-For reliable access to the MinIO console, create a NodePort service:
+For reliable access to the RustFS console, create a NodePort service:
 
 [source,bash]
 ----
-kubectl apply -f minio-nodeport.yaml --namespace iceberg-lab
+kubectl apply -f rustfs-nodeport.yaml --namespace iceberg-lab
 ----
 
-The NodePort service exposes MinIO console on port 32090 of all cluster nodes. In a kind cluster, you can access it directly at: http://localhost:32090
+The NodePort service exposes the RustFS console on port 32090 of all cluster nodes. In a kind cluster, you can access it directly at: http://localhost:32090/rustfs/console/
 
-NOTE: This approach avoids the known port-forwarding issues with MinIO console. The MinIO Console UI requires websockets which don't work reliably through `kubectl port-forward` tunnels. NodePort provides direct access without websocket connectivity issues.
+NOTE: NodePort gives the console a stable address that does not depend on a `kubectl port-forward` tunnel staying up.
 
 ==== Set up port forwarding for other services
 
@@ -290,12 +256,12 @@ echo "hello world" | internal-rpk topic produce key_value --format='%k %v\n'
 
 . Open Redpanda Console at http://localhost:8080/topics to see that the topics exist in Redpanda.
 
-. Open MinIO at http://localhost:32090 to view your data stored in the S3-compatible object store.
+. Open the RustFS console at http://localhost:32090/rustfs/console/ to view your data stored in the S3-compatible object store.
 +
 Login credentials:
 +
-- Username: minio
-- Password: minio123
+- Account: rustfs
+- Key: rustfs123
 
 . Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying the Iceberg table created from your Redpanda topic.
 
@@ -312,11 +278,11 @@ pkill -f "kubectl port-forward"
 +
 You can also use kbd:[Ctrl+C] if the port forwarding is running in the foreground.
 
-. Delete the MinIO NodePort service:
+. Delete the RustFS NodePort service:
 +
 [,bash]
 ----
-kubectl delete service minio-nodeport -n iceberg-lab
+kubectl delete service rustfs-nodeport -n iceberg-lab
 ----
 
 . Delete the kind cluster (this removes everything):
@@ -333,9 +299,6 @@ Or, if you want to keep the cluster but remove just the lab resources:
 # Delete the namespace (removes all lab resources)
 kubectl delete namespace iceberg-lab
 
-# Delete the MinIO operator
-kubectl delete -k "github.com/minio/operator?ref=v5.0.18"
-
 # Delete cert-manager
 helm uninstall cert-manager --namespace cert-manager
 kubectl delete namespace cert-manager
@@ -351,14 +314,16 @@ If Redpanda logs show `bucket not found` errors after setup:
 +
 [source,bash]
 ----
-kubectl exec -n iceberg-lab iceberg-minio-pool-0-0 -c minio -- mc ls local/
+kubectl run s3-ls --rm -i --restart=Never -n iceberg-lab --image=amazon/aws-cli:2.37.1 \
+  --env AWS_ACCESS_KEY_ID=rustfs --env AWS_SECRET_ACCESS_KEY=rustfs123 --env AWS_REGION=local \
+  -- --endpoint-url http://rustfs.iceberg-lab.svc.cluster.local:9000 s3 ls
 ----
 
-. Check that Redpanda can reach MinIO:
+. Check that Redpanda can reach RustFS:
 +
 [source,bash]
 ----
-kubectl exec -n iceberg-lab redpanda-0 -c redpanda -- curl -I http://iceberg-minio-hl.iceberg-lab.svc.cluster.local:9000/redpanda
+kubectl exec -n iceberg-lab redpanda-0 -c redpanda -- curl -I http://rustfs.iceberg-lab.svc.cluster.local:9000/redpanda
 ----
 
 === Iceberg REST catalog 500 errors
@@ -379,7 +344,7 @@ kubectl logs -n iceberg-lab deployment/iceberg-rest | grep -i "unknownhost\|reso
 kubectl logs -n iceberg-lab deployment/iceberg-rest -c dns-resolver
 ----
 
-. The init container automatically resolves MinIO's IP and configures DNS mappings. If MinIO pods restart and get new IPs, restart the Iceberg REST catalog:
+. The init container automatically resolves the RustFS IP and configures DNS mappings. If the RustFS pod restarts and gets a new IP, restart the Iceberg REST catalog:
 +
 [source,bash]
 ----
@@ -389,6 +354,5 @@ kubectl rollout status deployment/iceberg-rest -n iceberg-lab
 
 == Suggested reading
 
-- https://min.io/docs/minio/kubernetes/upstream/operations/installation.html[MinIO Kubernetes Operator installation]
-- https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant-helm.html#deploy-tenant-helm[Deploy MinIO tenant with Helm]
+- https://docs.rustfs.com/[RustFS documentation]
 - xref:streaming:manage:iceberg/about-iceberg-topics.adoc[Iceberg Topics in Redpanda]

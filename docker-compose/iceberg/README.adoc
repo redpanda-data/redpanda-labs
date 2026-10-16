@@ -19,7 +19,7 @@ Licensed to the Apache Software Foundation (ASF) under one
 = Redpanda Iceberg Docker Compose Example
 :env-docker: true
 :page-categories: Iceberg, Tiered Storage, Management, High Availability, Data Replication, Integration
-:description: Pair Redpanda with MinIO for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
+:description: Pair Redpanda with RustFS for Tiered Storage and write data in the Iceberg format to enable seamless analytics workflows on data in Redpanda topics.
 :page-layout: lab
 // Set up attributes to hold the latest version of Redpanda and Redpanda Console.
 // For GitHub, hard-code the latest version to these values:
@@ -33,12 +33,12 @@ ifdef::env-site[]
 // All pages already have access to {latest-console-version} on the docs site.
 endif::[]
 
-This lab provides a Docker Compose environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like MinIO, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
+This lab provides a Docker Compose environment to help you quickly get started with Redpanda and its integration with Apache Iceberg. It showcases how Redpanda, when paired with a Tiered Storage solution like RustFS, can write data in the Iceberg format, enabling seamless analytics workflows. The lab also includes a Spark environment configured for querying the Iceberg tables using SQL within a Jupyter Notebook interface.
 
 In this setup, you will:
 
 - Produce data to Redpanda topics that are Iceberg-enabled.
-- Observe how Redpanda writes this data in Iceberg format to MinIO as the Tiered Storage backend.
+- Observe how Redpanda writes this data in Iceberg format to RustFS as the Tiered Storage backend.
 - Use Spark to query the Iceberg tables, demonstrating a complete pipeline from data production to querying.
 
 This environment is ideal for experimenting with Redpanda's Iceberg and Tiered Storage capabilities, enabling you to test end-to-end workflows for analytics and data lake architectures.
@@ -87,13 +87,13 @@ For example:
 export REDPANDA_CONSOLE_VERSION=v{latest-console-version}
 ----
 
-. Start the Docker Compose environment, which includes Redpanda, MinIO, Spark, and Jupyter Notebook:
+. Start the Docker Compose environment, which includes Redpanda, RustFS, Spark, and Jupyter Notebook:
 +
 ```bash
-docker compose build && docker compose up
+docker compose up -d
 ```
 +
-The build process may take a few minutes to complete, as it builds the Spark image with the necessary dependencies for Iceberg.
+The first Spark session you start downloads the Iceberg libraries, so your first query can take a minute.
 
 . Create and switch to a new `rpk` profile that connects to your Redpanda broker:
 +
@@ -116,12 +116,12 @@ echo "hello world" | rpk topic produce key_value --format='%k %v\n'
 
 . Open Redpanda Console at http://localhost:8081/topics to see that the topics exist in Redpanda.
 
-. Open MinIO at http://localhost:9001/browser to view your data stored in the S3-compatible object store.
+. Open the https://rustfs.com/[RustFS^] console at http://localhost:9001/rustfs/console/ to view your data stored in the S3-compatible object store.
 +
 Login credentials:
 +
-- Username: `minio`
-- Password: `minio123`
+- Account: `rustfs`
+- Key: `rustfs123`
 
 . Open the Jupyter Notebook server at http://localhost:8888. The notebook guides you through querying Iceberg tables created from Redpanda topics. Complete the next two steps first before running the code in the notebook.
 
