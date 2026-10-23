@@ -19,45 +19,59 @@ spec:
       volumes:
       - name: hosts-volume
         emptyDir: {}
+      # spark-defaults.conf and the notebook, from the spark-files ConfigMap
+      - name: spark-files
+        configMap:
+          name: spark-files
+      # Writable copy of the notebook, so Jupyter can save it
+      - name: notebooks
+        emptyDir: {}
 
-      # Init container resolves MinIO IP and configures DNS
+      # Init container resolves RustFS IP and configures DNS
       initContainers:
       - name: dns-resolver
         image: busybox:1.35
         command: ['sh', '-c']
         args:
         - |
-          echo "Resolving MinIO service IP..."
+          echo "Resolving RustFS service IP..."
 
-          # Get MinIO service IP (try ClusterIP first, then Pod IP)
-          MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
+          # Get RustFS service IP (try ClusterIP first, then Pod IP)
+          S3_IP=$(nslookup rustfs.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
 
-          if [ -z "$MINIO_IP" ]; then
+          if [ -z "$S3_IP" ]; then
             echo "ClusterIP not found, trying pod IP..."
             # For headless services, get pod IP directly
-            MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep -A 1 'Name:' | grep 'Address:' | head -1 | awk '{print $2}')
+            S3_IP=$(nslookup rustfs.iceberg-lab.svc.cluster.local | grep -A 1 'Name:' | grep 'Address:' | head -1 | awk '{print $2}')
           fi
 
-          if [ -z "$MINIO_IP" ]; then
-            echo "ERROR: Could not resolve MinIO IP"
+          if [ -z "$S3_IP" ]; then
+            echo "ERROR: Could not resolve RustFS IP"
             exit 1
           fi
 
-          echo "MinIO IP resolved: $MINIO_IP"
+          echo "RustFS IP resolved: $S3_IP"
 
           # Copy original /etc/hosts
           cp /etc/hosts /shared/hosts
 
           # Add bucket-style hostname mappings
-          echo "$MINIO_IP redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
-          echo "$MINIO_IP lab.redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
-          echo "$MINIO_IP redpanda.minio" >> /shared/hosts
+          echo "$S3_IP redpanda.rustfs.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$S3_IP lab.redpanda.rustfs.iceberg-lab.svc.cluster.local" >> /shared/hosts
+          echo "$S3_IP redpanda.rustfs" >> /shared/hosts
 
           echo "DNS mappings configured:"
           cat /shared/hosts | tail -3
+
+          cp /spark-files/query-redpanda-table.ipynb /notebooks/
+          chmod 666 /notebooks/query-redpanda-table.ipynb
         volumeMounts:
         - name: hosts-volume
           mountPath: /shared
+        - name: spark-files
+          mountPath: /spark-files
+        - name: notebooks
+          mountPath: /notebooks
 
       # Schedule on dedicated Spark worker node for performance isolation
       # Prevents interference from other workloads
@@ -73,17 +87,23 @@ spec:
 
       containers:
       - name: spark
-        image: spark-iceberg-jupyter:latest
-        imagePullPolicy: Never
+        # Jupyter with PySpark, from the Jupyter Docker Stacks. The Iceberg
+        # jars are fetched from Maven when the first Spark session starts.
+        image: quay.io/jupyter/pyspark-notebook:spark-4.1.2
+        command: ["start-notebook.py", "--IdentityProvider.token=", "--ServerApp.root_dir=/home/jovyan/notebooks"]
         ports:
         - containerPort: 8888
-        - containerPort: 10000
 
         # Use the hosts file configured by init container
         volumeMounts:
         - name: hosts-volume
           mountPath: /etc/hosts
           subPath: hosts
+        - name: spark-files
+          mountPath: /usr/local/spark/conf/spark-defaults.conf
+          subPath: spark-defaults.conf
+        - name: notebooks
+          mountPath: /home/jovyan/notebooks
 
         env:
         - name: AWS_ACCESS_KEY_ID
@@ -101,14 +121,14 @@ spec:
 
         livenessProbe:
           httpGet:
-            path: /tree
+            path: /api
             port: 8888
           initialDelaySeconds: 60
           periodSeconds: 30
 
         readinessProbe:
           httpGet:
-            path: /tree
+            path: /api
             port: 8888
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -137,8 +157,4 @@ spec:
     targetPort: 8888
     protocol: TCP
     name: jupyter
-  - port: 10000
-    targetPort: 10000
-    protocol: TCP
-    name: thrift
   type: ClusterIP
