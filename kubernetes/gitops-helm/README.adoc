@@ -19,7 +19,7 @@ You must have the following:
 
 - https://github.com/signup[A GitHub account].
 
-- https://fluxcd.io/flux/installation/#install-the-flux-cli[The Flux CLI]
+- At least version 2.3.0 of https://fluxcd.io/flux/installation/#install-the-flux-cli[the Flux CLI]
 
 - An understanding of the https://fluxcd.io/flux/concepts/[core concepts of Flux].
 
