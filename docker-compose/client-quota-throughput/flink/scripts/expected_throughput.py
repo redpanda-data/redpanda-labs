@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Predict real observed throughput for a given Redpanda client quota.
 
-Model (derived from Redpanda's broker source - see the lab README for the
-full derivation): the quota is a token bucket with capacity == rate == R
+This model is derived from Redpanda's broker source. See the lab README for the
+full derivation. The quota is a token bucket with capacity == rate == R
 (the configured quota, bytes/sec). A full request up to S bytes (the
 "slip-through size" - bounded by the client's own fetch/batch settings) can
 pass completely before any delay is computed. The resulting corrective delay
@@ -10,10 +10,10 @@ is capped at D_cap (max_kafka_throttle_delay_ms). This produces three
 regimes, with a sharp knee at R* = S / D_cap:
 
   - unconstrained (R very high): actual throughput is capped by the client's
-    own request cadence, not the quota.
-  - nominal (R above the knee): actual throughput tracks R, as expected.
+    own request cadence rather than the quota.
+  - nominal (R above the knee): actual throughput is generally R.
   - floor (R below the knee): actual throughput flattens out at S / D_cap
-    and does NOT keep dropping as you lower R further.
+    and doesn't keep dropping as you lower R further.
 """
 import argparse
 
