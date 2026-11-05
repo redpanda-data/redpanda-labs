@@ -16,7 +16,7 @@ data:
   cloud_storage_region: "local"
 
   # RustFS endpoint using Kubernetes service DNS
-  # Using headless service for direct pod communication
+  # The rustfs ClusterIP Service in front of the RustFS pod
   cloud_storage_api_endpoint: "rustfs.iceberg-lab.svc.cluster.local"
   cloud_storage_api_endpoint_port: "9000"
 
@@ -41,9 +41,9 @@ data:
   # Allows querying older data that has been tiered
   cloud_storage_enable_remote_read: "true"
 
-  # Use path-style URLs for S3 operations (rustfs.yaml sets no RUSTFS_SERVER_DOMAINS)
+  # Use path-style URLs for S3 operations
   # Path-style: http://endpoint/bucket/key
-  # Virtual-hosted-style: http://bucket.endpoint/key (RustFS serves it only with RUSTFS_SERVER_DOMAINS set)
+  # Virtual-hosted-style: http://bucket.endpoint/key (RustFS serves both, because rustfs.yaml sets RUSTFS_SERVER_DOMAINS)
   cloud_storage_url_style: "path"
 
   # =============================================================================

@@ -74,8 +74,8 @@ services:
     container_name: rustfs
     image: rustfs/rustfs:1.0.0
     ports:
-      - 9000:9000
-      - 9001:9001
+      - 127.0.0.1:9000:9000
+      - 127.0.0.1:9001:9001
     environment:
       RUSTFS_ACCESS_KEY: rustfs
       RUSTFS_SECRET_KEY: rustfs123
@@ -138,7 +138,7 @@ services:
     depends_on:
       - redpanda-0
   catalog:
-    image: tabulario/iceberg-rest
+    image: tabulario/iceberg-rest:1.6.0
     container_name: iceberg-rest
     networks:
       - redpanda_network
@@ -158,7 +158,7 @@ services:
   # spark/spark-defaults.conf.
   spark-iceberg:
     container_name: spark-iceberg
-    image: quay.io/jupyter/pyspark-notebook:spark-4.1.2
+    image: quay.io/jupyter/pyspark-notebook:spark-4.1.2@sha256:edec05f88e1ef33b2b13fb7a28b31a9aa6c0029ac07097f62fd95a726fd04c59
     command: start-notebook.py --IdentityProvider.token='' --ServerApp.root_dir=/home/jovyan/notebooks
     networks:
       - redpanda_network
@@ -173,5 +173,5 @@ services:
       - ./spark/spark-defaults.conf:/usr/local/spark/conf/spark-defaults.conf:ro
       - ./spark/notebooks:/home/jovyan/notebooks
     ports:
-      - 8888:8888
-      - 4040:4040
+      - 127.0.0.1:8888:8888
+      - 127.0.0.1:4040:4040

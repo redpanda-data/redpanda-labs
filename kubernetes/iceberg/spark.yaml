@@ -89,7 +89,7 @@ spec:
       - name: spark
         # Jupyter with PySpark, from the Jupyter Docker Stacks. The Iceberg
         # jars are fetched from Maven when the first Spark session starts.
-        image: quay.io/jupyter/pyspark-notebook:spark-4.1.2
+        image: quay.io/jupyter/pyspark-notebook:spark-4.1.2@sha256:edec05f88e1ef33b2b13fb7a28b31a9aa6c0029ac07097f62fd95a726fd04c59
         command: ["start-notebook.py", "--IdentityProvider.token=", "--ServerApp.root_dir=/home/jovyan/notebooks"]
         ports:
         - containerPort: 8888

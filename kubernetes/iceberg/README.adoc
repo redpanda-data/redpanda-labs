@@ -86,7 +86,7 @@ kubectl rollout status deployment/rustfs --namespace iceberg-lab --timeout=300s
 
 === Set up the RustFS bucket and permissions
 
-This step creates a job that sets up the bucket and permissions required for Redpanda to access the object store.
+This step creates a job that creates the `redpanda` bucket and makes it readable without credentials. Redpanda, the Iceberg REST catalog, and Spark use the lab's credentials.
 
 [source,bash]
 ----
@@ -344,7 +344,7 @@ kubectl logs -n iceberg-lab deployment/iceberg-rest | grep -i "unknownhost\|reso
 kubectl logs -n iceberg-lab deployment/iceberg-rest -c dns-resolver
 ----
 
-. The init container automatically resolves the RustFS IP and configures DNS mappings. If the RustFS pod restarts and gets a new IP, restart the Iceberg REST catalog:
+. The init container maps the bucket-style hostnames to the ClusterIP of the `rustfs` Service, which stays the same when the RustFS pod restarts. If you delete and re-create the `rustfs` Service, restart the Iceberg REST catalog so that the init container picks up the new IP:
 +
 [source,bash]
 ----

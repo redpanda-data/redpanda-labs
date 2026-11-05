@@ -64,6 +64,12 @@ spec:
               value: "true"
             - name: RUSTFS_REGION
               value: local
+            # Lets clients address the bucket virtual-host style, as
+            # redpanda.rustfs.iceberg-lab.svc.cluster.local. The Iceberg REST
+            # catalog does. Without it, RustFS reads the first path segment as
+            # the bucket and writes table metadata to the wrong keys.
+            - name: RUSTFS_SERVER_DOMAINS
+              value: rustfs.iceberg-lab.svc.cluster.local
           volumeMounts:
             - name: data
               mountPath: /data

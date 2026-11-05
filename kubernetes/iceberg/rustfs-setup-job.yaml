@@ -37,7 +37,8 @@ spec:
               echo "RustFS is ready, creating bucket..."
               aws --endpoint-url "$S3" s3api head-bucket --bucket redpanda 2>/dev/null \
                 || aws --endpoint-url "$S3" s3 mb s3://redpanda
-              # Public read and write, as the lab's earlier object store setup granted.
+              # Anonymous read-only access, as in the Docker Compose lab. Every
+              # client that writes uses the lab's credentials.
               aws --endpoint-url "$S3" s3api put-bucket-policy --bucket redpanda --policy \
-                '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:*"],"Resource":["arn:aws:s3:::redpanda","arn:aws:s3:::redpanda/*"]}]}'
+                '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject","s3:ListBucket","s3:GetBucketLocation"],"Resource":["arn:aws:s3:::redpanda","arn:aws:s3:::redpanda/*"]}]}'
               echo "Bucket setup completed successfully!"
