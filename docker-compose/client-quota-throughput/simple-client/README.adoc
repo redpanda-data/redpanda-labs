@@ -1,0 +1,139 @@
+= Client quota throughput: simple client
+:page-layout: lab
+:env-docker: true
+:page-categories: Management, Monitoring
+:description: See how a configured consumer_byte_rate quota translates into real observed throughput, with a plain Kafka client.
+
+The number you configure in a `consumer_byte_rate`/`producer_byte_rate` quota is not the number you'll observe. Real throughput overshoots the nominal quota, and below a certain quota value, it stops dropping further no matter how much you lower it. This lab lets you see that directly, with a plain Kafka client, and gives you a formula to predict it ahead of time.
+
+See the xref:../README.adoc[parent README] for the full explanation of why this happens.
+
+== Prerequisites
+
+* Docker and Docker Compose
+* Python 3 (only if you want to run `expected_throughput.py` from your host instead of inside the `python-client` container)
+
+== Limitations
+
+* This lab runs Redpanda in `--mode dev-container` with a single broker (`--smp 1`) - it's for learning the mechanism, not for measuring production throughput ceilings.
+* Quotas are enforced per broker. This lab is single-broker specifically so the configured quota and the observed per-connection rate are directly comparable without dividing across brokers.
+* The formula is a rule of thumb derived from Redpanda's documented token-bucket enforcement, calibrated for *this lab's specific setup* (3 partitions, default `confluent-kafka`/librdkafka fetch settings, ~1.7KB records). Real overshoot also depends on your own client's fetch/batch settings, record size, and partition count - the "Try different values" section below shows you how to recalibrate for your own numbers rather than trusting this lab's constant blindly.
+* Requires Redpanda v26.2.1 or later (for `kafka_per_entity_quota_metrics` and `rpk cluster loggers set`, used in the "Go deeper" section).
+
+== Run the lab
+
+. Start the stack:
++
+[source,bash]
+----
+cp .env.example .env
+docker compose up -d
+----
+
+. Create the topic and seed a backlog big enough to sustain the test window:
++
+[source,bash]
+----
+docker compose exec redpanda-0 rpk topic create quota-demo -p 3
+docker compose exec python-client python3 /scripts/client.py produce \
+  --topic quota-demo --num-records 200000 --record-size-bytes 1700 \
+  --client-id quota-demo-client
+----
+
+. Apply a quota well below the knee, to see the floor effect TI originally ran into:
++
+[source,bash]
+----
+docker compose exec redpanda-0 rpk cluster quotas alter \
+  --add consumer_byte_rate=10000 --name client-id=quota-demo-client
+----
+
+. Predict what you should actually observe, using this lab's calibrated constant (measured for this exact 3-partition/default-fetch-settings/1.7KB-record setup - see "Try different values" to recalibrate for your own):
++
+[source,bash]
+----
+python3 scripts/expected_throughput.py --quota-bytes-per-sec 10000 \
+  --record-size-bytes 1700 --slip-through-bytes 10985205
+----
++
+```
+Slip-through size (S): 10,985,205 bytes  [calibrated]
+Knee (R*  =  S / throttle_delay_cap): 366,174 bytes/sec
+Regime: floor
+Predicted actual throughput: 366,174 bytes/sec (215.4 records/sec at 1,700B records)
+
+You configured R=10,000 B/s, well below the knee. Lowering R further will NOT reduce
+throughput below ~366,174 B/s - to go lower, shrink the client's own fetch.max.bytes /
+max.partition.fetch.bytes, or lower --throttle-delay-cap-sec (max_kafka_throttle_delay_ms)
+instead.
+```
+
+. Watch the real throughput live, in another terminal, while the next step runs:
++
+[source,bash]
+----
+watch -n1 'docker compose exec redpanda-0 rpk cluster connections list \
+  --client-id=quota-demo-client \
+  --order-by="recent_request_statistics.produce_bytes desc"'
+----
+
+. Consume, and compare the self-reported rate to the prediction above:
++
+[source,bash]
+----
+docker compose exec python-client python3 /scripts/client.py consume \
+  --topic quota-demo --group-id quota-demo-floor --duration-sec 60 \
+  --client-id quota-demo-client
+----
++
+Measured on this exact setup: `bytes_per_sec=366,172 records_per_sec=215.4` - matching the
+prediction, and roughly *37x* the nominal 10,000 B/s quota, not a small rounding error.
+
+== Try different values
+
+Quota changes are live - no restart needed. Re-seed a fresh backlog of the same size before
+each new trial (otherwise you're measuring against whatever's left of the old one, not a
+fair comparison), then repeat the apply/predict/observe steps with a new value:
+
+[source,bash]
+----
+docker compose exec python-client python3 /scripts/client.py produce \
+  --topic quota-demo --num-records 200000 --record-size-bytes 1700 --client-id quota-demo-client
+docker compose exec redpanda-0 rpk cluster quotas alter \
+  --add consumer_byte_rate=2000000 --name client-id=quota-demo-client
+----
+
+At 2,000,000 B/s (well above the knee), measured throughput on this setup came in at
+`2,223,809 B/s` - close to the configured value, confirming the "nominal" regime where the
+quota works about as you'd expect.
+
+To recalibrate `S` for your *own* client/record-size/partition count instead of reusing this
+lab's constant: run the floor-regime steps above with your own settings, then
+`S = measured_bytes_per_sec x throttle_delay_cap_sec` (default cap is 30s).
+
+== Go deeper
+
+To see the per-client-id metrics directly, rather than the live connection view:
+
+[source,bash]
+----
+docker compose exec redpanda-0 rpk cluster config set kafka_per_entity_quota_metrics true
+docker compose exec python-client python3 -c "
+import urllib.request
+data = urllib.request.urlopen('http://redpanda-0:9644/public_metrics').read().decode()
+print('\n'.join(l for l in data.splitlines() if 'quota_client_id=\"quota-demo-client\"' in l))
+"
+----
+
+These series (`redpanda_kafka_quotas_client_quota_throughput_by_entity`,
+`..._throttle_time_ms_by_entity`) only appear *after* the entity has actually been throttled
+at least once - if you don't see them, the quota you configured never matched your client's
+traffic (check the client-id matches exactly, and see the
+xref:../flink/README.adoc[Flink variant] for what that mismatch looks like in practice).
+
+== Clean up
+
+[source,bash]
+----
+docker compose down -v
+----
