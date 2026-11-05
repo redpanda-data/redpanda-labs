@@ -6,7 +6,7 @@
 
 The number you configure in a `consumer_byte_rate`/`producer_byte_rate` quota is not the number you'll observe. Real throughput overshoots the nominal quota, and below a certain quota value, it stops dropping further no matter how much you lower it. This lab lets you see that directly, with a plain Kafka client, and gives you a formula to predict it ahead of time.
 
-See the xref:../README.adoc[parent README] for the full explanation of why this happens.
+See the xref:client-quota-throughput.adoc[parent README] for the full explanation of why this happens.
 
 == Prerequisites
 
@@ -216,7 +216,7 @@ These series (`redpanda_kafka_quotas_client_quota_throughput_by_entity`,
 `..._throttle_time_ms_by_entity`) only appear *after* the entity has actually been throttled
 at least once - if you don't see them, the quota you configured never matched your client's
 traffic (check the client-id matches exactly, and see the
-xref:../flink/README.adoc[Flink variant] for what that mismatch looks like in practice).
+xref:client-quota-throughput-flink.adoc[Flink variant] for what that mismatch looks like in practice).
 
 == Clean up
 

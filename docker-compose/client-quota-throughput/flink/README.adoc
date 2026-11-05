@@ -4,9 +4,9 @@
 :page-categories: Management, Monitoring
 :description: See how a configured consumer_byte_rate quota translates into real observed throughput with Apache Flink, and why the usual consumer-group tooling can't verify it.
 
-Same mechanism as the xref:../simple-client/README.adoc[simple-client] variant, but with Flink.
+Same mechanism as the xref:client-quota-throughput-simple-client.adoc[simple-client] variant, but with Flink.
 
-See the xref:../README.adoc[parent README] for the general formula and mechanism.
+See the xref:client-quota-throughput.adoc[parent README] for the general formula and mechanism.
 
 == Prerequisites
 
