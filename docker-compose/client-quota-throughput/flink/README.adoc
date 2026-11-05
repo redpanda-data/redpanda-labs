@@ -4,7 +4,7 @@
 :page-categories: Management, Monitoring
 :description: See how a configured consumer_byte_rate quota translates into real observed throughput with Apache Flink, and why the usual consumer-group tooling can't verify it.
 
-Same mechanism as the xref:../simple-client/README.adoc[simple-client] variant, but with Flink - which has an extra wrinkle worth knowing about before you try to debug a quota that "isn't working."
+Same mechanism as the xref:../simple-client/README.adoc[simple-client] variant, but with Flink.
 
 See the xref:../README.adoc[parent README] for the general formula and mechanism.
 
@@ -15,10 +15,9 @@ See the xref:../README.adoc[parent README] for the general formula and mechanism
 
 == Limitations
 
-* **Flink's `KafkaSource` never joins a classic Kafka consumer group.** It does its own internal partition assignment (the FLIP-27 split-reader architecture) and never sends `JoinGroup`/`SyncGroup`. `rpk group describe` and Console's consumer-group view will report the group as `Dead`/`Empty` with 0 members *even while Flink is actively consuming*. This is expected, not a bug - use `rpk cluster connections list` instead, which works off live connections, not group membership.
-* **A plain `properties.client.id` is never honored by `KafkaSource`**, in any connector version (confirmed by reading the `flink-connector-kafka` source directly - `KafkaPartitionSplitReader` unconditionally builds `client.id` from `client.id.prefix + "-" + subtaskId`, and `client.id.prefix` itself silently defaults to `group.id` if you never set it). This lab sets `properties.client.id.prefix` explicitly rather than relying on that fallback.
-* A `client-id-prefix` quota is **one shared bucket across every subtask matching that prefix**, not one bucket per subtask. That's actually the right behavior here - it's robust to Flink's parallelism changing or a job restarting with a different subtask-to-partition mapping, which a set of pre-created per-subtask exact-match entities would not be.
-* This lab verified one approach (`client.id.prefix` + a prefix-match quota) rather than shipping a multi-way comparison - see the parent project history if you want the reasoning for why the alternatives (plain `client.id`, per-subtask exact-match entities) were ruled out.
+* **Flink's `KafkaSource` never joins a classic Kafka consumer group.** It does its own internal partition assignment and never sends `JoinGroup`/`SyncGroup`. `rpk group describe` and Console's consumer-group view will report the group as `Dead`/`Empty` with 0 members even while Flink is actively consuming. This is expected and not a bug. Instead use `rpk cluster connections list` which works off live connections rather than group membership.
+* **A plain `properties.client.id` is never honored by `KafkaSource`**, in any connector version. `KafkaPartitionSplitReader` builds `client.id` from `client.id.prefix + "-" + subtaskId`, and `client.id.prefix` itself silently defaults to `group.id` if you never set it. This lab sets `properties.client.id.prefix` explicitly rather than relying on that fallback.
+* A `client-id-prefix` quota is **one shared bucket across every subtask matching that prefix**, not one bucket per subtask.
 
 == Run the lab
 
@@ -39,7 +38,7 @@ docker compose exec python-client python3 /scripts/client.py produce \
   --topic quota-demo --num-records 1000000 --record-size-bytes 1700 --client-id seeder
 ----
 
-. Apply the quota *before* submitting the job, as a prefix match on the same prefix the SQL job uses:
+. Apply the quota before submitting the job, as a prefix match on the same prefix the SQL job uses:
 +
 [source,bash]
 ----
@@ -47,7 +46,7 @@ docker compose exec redpanda-0 rpk cluster quotas alter \
   --add consumer_byte_rate=10000 --name client-id-prefix=flink-quota-demo
 ----
 
-. Submit the job (runs with `parallelism.default = 3`, matching the topic's 3 partitions - one subtask per partition):
+. Submit the job (runs with `parallelism.default = 3`, a subtask for each of the topic's 3 partitions):
 +
 [source,bash]
 ----
@@ -69,14 +68,13 @@ You should see three distinct, live connections - `flink-quota-demo-0`, `-1`, `-
 per subtask, each with real `FETCH-TPUT/SEC`.
 
 Measured on this exact setup (3 subtasks, default fetch settings, 1.7KB records), a
-10,000 B/s prefix quota produced a stable, nearly identical throttled rate across all three
-subtasks - around *60-90 KB/s each*, roughly *200,000-225,000 B/s aggregate* across two
-trials - 20-22x the nominal value, similar in magnitude to the simple-client variant's
-overshoot, not some Flink-specific blowup.
+10,000 B/s prefix quota produced a stable throttled rate across all three
+subtasks of around 60-90 KB/s each, which is roughly 200,000-225,000 B/s aggregate
+- 20-22x the nominal value.
 
 == Try different values
 
-Change the quota live, no restart needed - it applies to the same shared bucket:
+Change the quota, it applies to the same shared bucket:
 
 [source,bash]
 ----
@@ -85,8 +83,7 @@ docker compose exec redpanda-0 rpk cluster quotas alter \
 ----
 
 At 2,000,000 B/s (well above the floor-regime knee), aggregate throughput climbed toward the
-configured value as the backlog caught up - confirming the nominal regime behaves as expected
-here too, same as the simple-client variant.
+configured value as the backlog caught up. This is the expected behavior, same as the simple-client variant.
 
 Predict with the lab's calibrated constant for this setup:
 
