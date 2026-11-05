@@ -111,6 +111,93 @@ To recalibrate `S` for your *own* client/record-size/partition count instead of 
 lab's constant: run the floor-regime steps above with your own settings, then
 `S = measured_bytes_per_sec x throttle_delay_cap_sec` (default cap is 30s).
 
+== Calibration results
+
+A light calibration sweep (`scripts/calibration_sweep.py`, results in `calibration.csv`) across a
+range of quota values, two fetch-size configurations, and three `max_kafka_throttle_delay_ms`
+settings confirms the model's shape, not just the one worked example above:
+
+[cols="1,1,1,1"]
+|===
+|Config |Quota (R) |Actual |Overshoot
+
+|default fetch settings
+|5,000 B/s
+|529,637 B/s
+|106x
+
+|default fetch settings
+|20,000 B/s
+|508,640 B/s
+|25x
+
+|default fetch settings
+|80,000 B/s
+|465,122 B/s
+|5.8x
+
+|default fetch settings
+|300,000 B/s
+|496,249 B/s
+|1.7x (near the knee)
+
+|default fetch settings
+|1,000,000 B/s
+|1,132,676 B/s
+|1.1x (nominal)
+
+|shrunk fetch settings footnote:[`fetch.max.bytes=1048576`, `max.partition.fetch.bytes=65536` - both 16x smaller than the defaults.]
+|5,000 B/s
+|78,632 B/s
+|16x
+
+|shrunk fetch settings
+|20,000 B/s
+|86,605 B/s
+|4.3x
+
+|shrunk fetch settings
+|80,000 B/s
+|103,257 B/s
+|1.3x
+
+|shrunk fetch settings
+|300,000 B/s
+|322,918 B/s
+|1.1x (nominal)
+
+|shrunk fetch settings
+|1,000,000 B/s
+|1,014,949 B/s
+|1.0x (nominal)
+|===
+
+Two things this confirms directly, not just in theory:
+
+* **The floor is flat, not proportional to R.** At default fetch settings, R=5,000/20,000/80,000 all land in roughly the same 465,000-530,000 B/s band - lowering the quota by 16x (80,000 -> 5,000) barely moved the actual rate. Only once R climbs past the knee (between 300,000 and 1,000,000 here) does `actual ~= R` kick in.
+* **Shrinking the client's own fetch settings is a real, working lever.** The same quota values against shrunk fetch settings land in a much lower ~80,000-100,000 B/s floor band - about 5-6x lower than the default-settings floor. If you need a tighter real-world cap than the quota alone gives you, this is the knob that actually moves it.
+
+`max_kafka_throttle_delay_ms` confirmation (fixed at R=20,000, default fetch settings):
+
+[cols="1,1,1"]
+|===
+|D_cap |Actual |Implied S (`actual x D_cap`)
+
+|10s
+|1,272,615 B/s
+|~12.7 MB
+
+|30s (default)
+|508,640 B/s
+|~15.3 MB
+
+|60s
+|178,915 B/s
+|~10.7 MB
+|===
+
+The floor clearly moves in the predicted direction as `D_cap` changes (higher cap -> lower floor), and the implied `S` stays in the same general 10-15 MB range across all three rather than drifting with the cap - consistent with the model, though not perfectly constant. That's expected for a light, single-trial-per-point calibration - treat the exact numbers as order-of-magnitude guidance, not a precise SLA. A full statistically-rigorous fit (more trials per cell, more record sizes and partition counts) would tighten this further; see `calibration.csv` for the raw data if you want to extend it.
+
 == Go deeper
 
 To see the per-client-id metrics directly, rather than the live connection view:
