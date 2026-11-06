@@ -1,0 +1,154 @@
+# ── TEMPLATE ─────────────────────────────────────────────────────────────
+# Copy this file to .github/workflows/docs-review.yml in each in-scope repo.
+# Which repos are in scope, and which PRs are exempt, is set in
+# docs-team-standards' .github/docs-review-config.json (scope), not here:
+#
+#   Content: docs (Self-hosted, Console), cloud-docs (Cloud, Redpanda SQL),
+#     rp-connect-docs, api-docs
+#   Toolchain: docs-ui, docs-extensions-and-macros, docs-site, docs-template
+#   (docs-team-standards itself has its own caller using the local path.)
+#   In scope but no caller yet: redpanda-labs, redpanda-solutions (their
+#     callers follow the Secrets Manager App credential,
+#     docs-extensions-and-macros#486 and its re-pin; devprod-infra#941).
+#   Exempt, so no caller: adp-docs (ADP docs). The reference
+#     and rpk automations' PRs ("auto-docs:" titles) are exempt in every repo.
+#
+# Not in the rollout: oxla-docs (not a repo the docs team owns — the SQL
+# docs ship from cloud-docs).
+#
+# The reusable workflow is hosted in docs-extensions-and-macros (public);
+# the skills it runs stay in docs-team-standards and are checked out at a
+# pinned SHA at runtime — the same host/skills split as the doc-strings
+# review. PIN THE REF: neither host publishes git tags (`git ls-remote
+# --tags` is empty), so @v1 is unresolvable and @main means review
+# behaviour across the docs repos changes the moment anyone merges. Pin a
+# commit SHA per caller; bump deliberately.
+#
+# Per-repo edits beyond the SHA: none today. bot_pr_policy and the
+# skip_*_patterns inputs stay available for a repo that needs them; see the
+# PER-REPO block in `with:` below.
+# docs-extensions-and-macros hosts the reusable workflow; its own caller can
+# use the same pinned `uses:` line as every other repo.
+# Optional per-repo variables:
+#   PREVIEW_PATH_PREFIX  URL prefix for Netlify preview links when the
+#                        Antora coordinates alone don't produce it
+#                        (e.g. "streaming" for redpanda-data/docs).
+# Org-level prerequisites (once): DOC_TEAM_LOGINS (the docs team, whose
+# reviews set the re-review baseline) + CLAUDE_CLI_VERSION variables;
+# "Allow GitHub Actions to create and approve pull requests" on (where
+# automatic approval is on, the pipeline approves PRs that pass; see
+# `approval` in the config); the docs-pr-review agent credential granted to this repo
+# (devprod-infra #826, merged 2026-09-18 — the reusable workflow's default,
+# so do not pass adp_client_secret_id); RP_AWS_CRED_* org variables/secret
+# already exist org-wide.
+# See .github/DOCS_REVIEW_ROLLOUT.md in docs-team-standards.
+# ─────────────────────────────────────────────────────────────────────────
+
+name: docs-review
+
+on:
+  pull_request:
+    # opened: a PR opened directly as ready-for-review (draft opens are
+    # skipped by the job `if` and again by the gate). ready_for_review: the
+    # author's "review now" button — keep a PR in draft while iterating and
+    # nothing runs. synchronize: each push, re-reviewed incrementally (only
+    # the commits since the last doc review). labeled: in a repo set to
+    # review on request (review_trigger in docs-team-standards'
+    # .github/docs-review-config.json — cloud-docs), adding the request label
+    # is what starts a review, and pushes start nothing while it is off. Keep it in every
+    # caller so switching a repo's mode is a config change only. reopened:
+    # a ready PR that is reopened is reviewed without waiting for a push
+    # (the gate skips a head that already has a completed review).
+    types: [opened, ready_for_review, synchronize, labeled, reopened]
+  pull_request_review:
+    # A submitted review moves the re-review baseline. Once ready_for_approval
+    # is on in the config (off today), one from the docs team that says the PR
+    # is ready for approval also lets the pipeline approve.
+    types: [submitted]
+  repository_dispatch:
+    types: [slack-review-request]        # entry point for the Slack scan
+
+# Serialize all runs for a given PR. cancel-in-progress: false — a racing
+# event waits instead of cancelling a review mid-flight, then exits via the
+# exactly-once check. GitHub keeps only one waiting run per group: a newer
+# event replaces it. The gate reads the live PR, so the replacing run does
+# the same work (in an on-request repo the label, not the event, is the
+# request). REQUIRED, not optional: this group is the
+# primary exactly-once guard (the gate's status claim is only the backstop).
+concurrency:
+  group: docs-review-${{ github.event.pull_request.number || github.event.client_payload.pr }}
+  cancel-in-progress: false
+
+# A called workflow can never elevate the caller's token, so the caller
+# must grant everything the pipeline needs. A repo whose default token is
+# read-only fails the job outright rather than degrading — these are not
+# optional.
+permissions:
+  contents: read
+  pull-requests: write     # the review report, and the approval review
+  issues: write            # labels (issues API on PRs)
+  statuses: write          # the informational docs-review commit status
+  checks: write
+  id-token: write          # required for the OIDC gateway path
+
+jobs:
+  review:
+    # A cheap early exit for the common case only. It is NOT the fork
+    # boundary: on repository_dispatch (the Slack scan's entry point) the
+    # event carries no pull_request, so the left side of the || is true and
+    # head.repo is never evaluated. The gate derives draft and fork status
+    # from the PR object itself, which is the check that actually holds for
+    # every event path (decision 8: fork PRs fall through to human review,
+    # because running Claude over untrusted head content is a
+    # prompt-injection and credential-exfil risk).
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event_name == 'repository_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    # PIN-ME(rollout): replace <SHA> with the commit of the hosting PR in
+    # docs-extensions-and-macros. Never @main, never @v1 (no tags exist).
+    uses: redpanda-data/docs-extensions-and-macros/.github/workflows/docs-pr-review-reusable.yml@699458d7629ffe5887e119a555bffb9c59aac44c # TEST PIN: d-e-m#495 head; swap for #495's merge SHA before merging
+    with:
+      pr_number: ${{ github.event.pull_request.number || github.event.client_payload.pr }}
+      # PIN-ME(rollout): the docs-team-standards commit whose skills review
+      # this repo. REQUIRED — the reusable workflow has no usable default and
+      # holds every PR pending until a full 40-hex SHA is passed. Bump it
+      # deliberately; it is the rollback unit for review behaviour.
+      plugin_ref: 6d0553e668aabe1f6bf2c7807aaca320607d492a # docs-team-standards main, includes #2998 + #3031
+
+      # ── PER-REPO ─────────────────────────────────────────────────────
+      # Nothing by default. Scope, exemptions and approval are in
+      # docs-team-standards' .github/docs-review-config.json. Available when
+      # a repo needs more:
+      #
+      # bot_pr_policy: review       # review bot-authored PRs that are not
+      #                             # exempt (the auto-docs PRs always are)
+      # skip_branch_patterns: |     # shell globs on the head branch
+      #   some-sync-branch-*
+      # skip_title_patterns: |      # extended regexes on the title
+      #   ^some prefix
+      # Mirror a skip pattern in docs-team-standards' sme-nag.yml, or the
+      # nag pings PRs this pipeline never reviews.
+      # ─────────────────────────────────────────────────────────────────
+
+      aws_region: ${{ vars.RP_AWS_CRED_REGION }}
+      aws_role_name_prefix: ${{ vars.RP_AWS_CRED_BASE_ROLE_NAME }}
+      use_adp_gateway: true
+      # adp_client_secret_id is deliberately NOT passed: the reusable
+      # workflow's default is the docs-pr-review agent's own credential
+      # (devprod-infra#826), which puts this review's spend on its own line
+      # on the ADP cost page. Do not override it with another agent's secret.
+      # docs-team-standards (skills + scripts) is PRIVATE; github.token cannot
+      # clone it from this repo. The pipeline mints a per-run Contents:read
+      # token from the redpanda-docs-automation App instead. Each job reads
+      # the App credential from Secrets Manager first
+      # (sdlc/prod/github/docs_automation_app, devprod-infra#938), so this
+      # repo's OIDC role needs that grant. The docs_app_id input below and
+      # the docs_app_private_key secret are the fallback for a repo without
+      # it. They resolve only where the org credentials are visible, so in
+      # redpanda-labs and redpanda-solutions they are empty and the grant is
+      # required. Drop them once the org variable and secret are deleted.
+      # With neither, every Claude job fails at checkout.
+      docs_app_id: ${{ vars.DOCS_APP_ID }}
+    secrets:
+      aws_cred_account_id: ${{ secrets.RP_AWS_CRED_ACCOUNT_ID }}
+      docs_app_private_key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
