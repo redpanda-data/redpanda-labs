@@ -106,7 +106,7 @@ jobs:
       (github.event_name == 'repository_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     # PIN-ME(rollout): replace <SHA> with the commit of the hosting PR in
     # docs-extensions-and-macros. Never @main, never @v1 (no tags exist).
-    uses: redpanda-data/docs-extensions-and-macros/.github/workflows/docs-pr-review-reusable.yml@699458d7629ffe5887e119a555bffb9c59aac44c # TEST PIN: d-e-m#495 head; swap for #495's merge SHA before merging
+    uses: redpanda-data/docs-extensions-and-macros/.github/workflows/docs-pr-review-reusable.yml@56964c265add4efda545d013772ffde217e8da78 # d-e-m#495 merge
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.client_payload.pr }}
       # PIN-ME(rollout): the docs-team-standards commit whose skills review
