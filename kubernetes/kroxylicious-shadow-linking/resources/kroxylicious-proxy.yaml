@@ -1,0 +1,77 @@
+# Kroxylicious resources for this demo: a proxy virtual cluster that sits in front of the source
+# Redpanda cluster and presents every topic under a "p_" prefix (via the custom "topic-prefixer"
+# filter in kroxylicious/topic-prefixer/ - see its README/javadoc for why a custom filter is needed
+# rather than the built-in MultiTenant filter).
+#
+# The ShadowLink (resources/shadow-link.yaml) is configured to read from this virtual cluster's
+# in-cluster bootstrap address instead of talking to the source cluster directly, so the shadow
+# cluster ends up holding "p_"-prefixed topics as proof that shadowing worked *through* the proxy.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kroxylicious
+---
+apiVersion: kroxylicious.io/v1alpha1
+kind: KafkaProxy
+metadata:
+  name: kroxy
+  namespace: kroxylicious
+spec: {}
+---
+apiVersion: kroxylicious.io/v1alpha1
+kind: KafkaProxyIngress
+metadata:
+  name: cluster-ip
+  namespace: kroxylicious
+spec:
+  proxyRef:
+    name: kroxy
+  clusterIP:
+    protocol: TCP
+---
+apiVersion: kroxylicious.io/v1alpha1
+kind: KafkaService
+metadata:
+  name: source
+  namespace: kroxylicious
+spec:
+  # The source Redpanda cluster's in-cluster Kafka listener (see resources/source-cluster.yaml).
+  bootstrapServers: redpanda.source.svc.cluster.local:9093
+  nodeIdRanges:
+    # The source cluster is a single-node (statefulset.replicas: 1) cluster, so its only broker is
+    # node id 0.
+    - start: 0
+      end: 0
+---
+apiVersion: kroxylicious.io/v1alpha1
+kind: KafkaProtocolFilter
+metadata:
+  name: topic-prefixer
+  namespace: kroxylicious
+spec:
+  type: demo.topicprefixer.TopicPrefixer
+  configTemplate:
+    # Topics and consumer groups are renamed independently - each can use either a fixed prefix
+    # (as here) or an explicit before/after "mapping" instead. See
+    # kroxylicious/topic-prefixer/README.adoc and consumer-group-renaming.adoc.
+    topics:
+      prefix: "p_"
+    groups:
+      prefix: "p_"
+---
+apiVersion: kroxylicious.io/v1alpha1
+kind: VirtualKafkaCluster
+metadata:
+  name: source-proxy
+  namespace: kroxylicious
+spec:
+  proxyRef:
+    name: kroxy
+  targetKafkaServiceRef:
+    name: source
+  filterRefs:
+    - name: topic-prefixer
+  ingresses:
+    - ingressRef:
+        name: cluster-ip

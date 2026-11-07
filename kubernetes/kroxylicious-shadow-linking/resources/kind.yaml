@@ -1,0 +1,12 @@
+# Four workers so the two single-node Redpanda clusters, the two operators and the Kroxylicious
+# proxy pod all have somewhere to land. The cluster name is also read by setup.sh (see ../config)
+# when it loads the locally built proxy image into the cluster.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: redpanda-kroxy
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker
+  - role: worker

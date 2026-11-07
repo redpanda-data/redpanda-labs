@@ -1,0 +1,69 @@
+= Renaming consumer group commits through Kroxylicious
+:description: Notes on whether a Kroxylicious filter can rename the consumer group, and the topics referenced by its offset commits, as well as the topics in the data plane.
+
+*Question:* can Kroxylicious rename the topics referenced by consumer group offset commits, the same way it renames topics in the data plane, and can it also rename the consumer group itself?
+
+*Answer: yes to both*, using exactly the same technique already used for topics in `TopicPrefixerFilter`. Kroxylicious's filter API exposes every relevant field on every relevant request as a plain, mutable string, so a demo-quality prefixer generalizes to consumer groups with no new mechanism, just more requests. Both are implemented in link:./README.adoc[this filter] and validated end to end against a live shadow link.
+
+== Why this needed checking at all
+
+A topic-only version of this filter already produced a _correct_ demo: shadow linking replicated consumer group offsets from source to shadow with the right topic, the right offset, and the right lag, even though the filter never touched a single consumer group request. That was surprising enough to be worth explaining before answering "can we go further". If shadow linking already gets this right without help, does renaming groups risk breaking something that currently works by accident?
+
+Wire-level tracing, using Kroxylicious's `ProtocolLogger` filter attached temporarily, answered this empirically rather than by guesswork:
+
+* Consumer group shadowing reads *through the proxy*, using `ListGroups`, `FindCoordinator`, and `OffsetFetch`. All of it is plain Kafka protocol, with no Admin API involved.
+* With the topic-only filter, none of these were touched, so `OffsetFetch` was observed carrying the *real, unprefixed* topic name (`cgtest`, not `p_cgtest`) back to the shadow link.
+* Despite that, the shadow cluster ended up with the offset committed against the correctly _shadowed_ topic (`p_cgtest`), with accurate lag. Shadow linking must be correlating source and shadow topics by topic ID internally, since topic IDs survive the rename and names do not, rather than trusting the name string it read. The mismatch was therefore cosmetic, not functional.
+
+That finding set the bar for this change: it had to be more than "technically possible", it had to not regress a path that already worked despite the filter's ignorance of it.
+
+== What's implemented
+
+`TopicPrefixerFilter` also implements the following. Topic renaming and group renaming are independently configurable, a `NameRenamer` per target, each either a prefix or an explicit mapping. See link:./README.adoc#configuration[Configuration]. Whichever renaming strategy is chosen for groups is applied through exactly the requests below.
+
+|===
+| Request | What's renamed
+
+| `FindCoordinator`
+| The group ID being looked up, and *only* when `keyType == GROUP`. Transaction ID lookups are left completely untouched. See <<scope, Scope and known gaps>>.
+
+| `ListGroups`
+| Every group ID in the response. There is no filtering: unlike `MultiTenant`, nothing is hidden.
+
+| `DescribeGroups`, `ConsumerGroupDescribe`
+| The group IDs.
+
+| `JoinGroup`, `SyncGroup`, `Heartbeat`, `LeaveGroup`
+| The group ID, on the request only. These requests don't echo it back.
+
+| `OffsetFetch`, `OffsetCommit`, `OffsetDelete`
+| The group ID *and* the topic names inside the commit, using the same add and strip logic as `Metadata`, `Fetch`, `ListOffsets`, and `DescribeConfigs`. A topic therefore always gets the same name, whether you look at it through the data plane or through a consumer group's committed offsets.
+|===
+
+`OffsetFetch` in particular has two request and response shapes depending on API version: a deprecated singular `groupId` and `topics` pair, and a newer `groups` list, each with their own `topics`. Both are rewritten, mirroring how Kroxylicious's own `MultiTenantFilter` handles the same duality.
+
+=== The one non-obvious implementation detail: FindCoordinator
+
+`FindCoordinator` is used for both consumer group coordinators and transaction coordinators, `keyType` 0 versus 1, but its _response_ doesn't restate which kind a given entry is. Only the request says. Renaming the response unconditionally would incorrectly rename a transactional ID that was never renamed on the way in, since this filter doesn't implement the transactional producer lifecycle at all.
+
+The fix is a small in-flight correlation ID set, populated in `onFindCoordinatorRequest` only for `keyType == GROUP`, and consulted and cleared in `onFindCoordinatorResponse`. This is safe as unsynchronized mutable state because a filter instance is scoped to one connection and processes that connection's messages sequentially, the same assumption `MultiTenantFilter` makes with its own lazily cached tenant prefix field. It is covered by `findCoordinatorRoundTripRenamesGroupLookup` and `findCoordinatorLeavesTransactionLookupUntouched` in the test suite.
+
+== Empirical validation
+
+The proxy image was rebuilt, reloaded into kind, and the full source-to-shadow flow re-run on a live cluster, not just in unit tests:
+
+* A consumer group created directly on the source cluster, bypassing the proxy, which is how the lab creates every topic and group, shows up on the shadow cluster as `p_consumer-group-foo`, tracking the correctly shadowed `p_foo` topic, with correct offsets and lag throughout, both before and after the lab's failover step.
+* The topic data plane and Schema Registry replication, with `_schemas` staying unprefixed, were re-checked afterwards and are unaffected. The change is additive: it doesn't touch any of the existing `Metadata`, `Fetch`, `ListOffsets`, or `DescribeConfigs` handling.
+
+[[scope]]
+== Scope and known gaps
+
+The following are deliberately out of scope, consistent with the topic-only filter's own documented gaps:
+
+* *Transactional producers.* `InitProducerId`, `AddOffsetsToTxn`, `AddPartitionsToTxn`, `TxnOffsetCommit`, and `EndTxn` aren't implemented, so a transactional ID is never renamed. `FindCoordinator` deliberately leaves transaction coordinator lookups alone to stay consistent with that.
+* *`DeleteGroups`.* Not implemented. `MultiTenantFilter` itself doesn't implement it either, so this isn't a new gap relative to Kroxylicious's own reference filter.
+* *The KIP-848 consumer group protocol*, meaning `ConsumerGroupHeartbeat`-based joining as opposed to classic `JoinGroup`, `SyncGroup`, `Heartbeat`, and `LeaveGroup`. `MultiTenantFilter` doesn't cover this either. Shadow linking's own client uses the classic protocol, confirmed by the wire trace above, so this doesn't affect the lab, but a client that prefers KIP-848 for its _own_ group membership through this proxy would see its group ID go unrenamed. Unlike `DescribeTopicPartitions`, which this filter suppresses through `ApiVersions` to force clients back onto plain `Metadata`, there is no `ApiVersions` suppression fix available for this one without also implementing the transactional lifecycle above, because `ConsumerGroupHeartbeat` is bundled into the same protocol generation as some transaction features clients may depend on. It is documented as a gap rather than worked around.
+
+== Should group renaming be enabled?
+
+Enable it if you want consumer group IDs visibly renamed end to end, giving the same "does the rename survive the whole round trip" proof that the topic prefix already gives you. Disable it, by configuring an empty prefix for `groups`, if you would rather keep group IDs untouched, for example because `p_`-prefixed group IDs in monitoring and alerting on the shadow cluster are more confusing than helpful for your use case. The finding above still stands either way: shadow linking's topic-ID-based correlation means group offsets replicate correctly regardless of whether this filter renames anything at the consumer group layer.
