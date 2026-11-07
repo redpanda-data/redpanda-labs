@@ -1,0 +1,79 @@
+= Client quota throughput
+:page-layout: lab
+:env-docker: true
+:page-categories: Management, Monitoring
+:description: See how a configured consumer_byte_rate/producer_byte_rate quota translates into real observed throughput, and predict it ahead of time.
+
+Redpanda's byte-rate client quotas (`consumer_byte_rate`, `producer_byte_rate`) never produce exactly the configured value in practice. Real observed throughput can overshoot the nominal quota by one or two orders of magnitude. And below a certain quota value, lowering it further stops helping at all. This is expected behavior given how quotas are enforced, but it causes confusion if you don't know the mechanism - and if you know the formula below, you can predict it ahead of time instead of discovering it the hard way.
+
+== The formula
+
+----
+actual_throughput(R) = S / max(T_min, min(S / R, D_cap))
+----
+
+This comes directly from how Redpanda enforces the quota: a token bucket whose capacity and refill rate both equal the quota you configure, `R` (bytes/sec). Enforcement happens *between* requests, not within one - a full Fetch response or Produce request of size `S` bytes always passes completely before the broker computes a delay for the client's *next* request. That delay is how long it should have taken to send `S` bytes at rate `R` (`S / R`), capped at `D_cap` so throttling never causes a client-side request timeout, and floored at `T_min` so the formula doesn't predict a rate faster than the client can actually request at.
+
+=== What you need, and where to get it
+
+[cols="1,2,2"]
+|===
+|Symbol |Meaning |Where to get it
+
+|`R`
+|The quota you're configuring (or already have configured), in bytes/sec.
+|Whatever you pass to `rpk cluster quotas alter --add consumer_byte_rate=...` / `--add producer_byte_rate=...`.
+
+|`S`
+|The "slip-through size" - the size, in bytes, of one full request your client's own settings allow through before a delay is computed.
+|**Fetch (consuming):** `min(fetch.max.bytes, max.partition.fetch.bytes x partitions)`. **Produce:** the producer's `batch.size`. These are *structural estimates* from your client's config - real behavior can differ. Each variant's README shows how to measure the real value for your own setup.
+
+|`D_cap`
+|`max_kafka_throttle_delay_ms`, in seconds. Default 30s.
+|`rpk cluster config get max_kafka_throttle_delay_ms` on your cluster.
+
+|`T_min`
+|Floor on request cadence from RTT/processing time, independent of the quota.
+|Usually negligible (low milliseconds) unless `R` is very high - leave it at the script's default unless you have a specific reason to change it.
+|===
+
+=== Why there's a sharp knee
+
+Put together, there's a sharp knee at `R* = S / D_cap`:
+
+[cols="1,2,2"]
+|===
+|Regime |Condition |What you'll observe
+
+|Unconstrained
+|`R` at or above the client's own max capability (`S / T_min`)
+|The client's own ceiling - the quota isn't the limit.
+
+|Nominal
+|`R*` <= `R` < client's own ceiling
+|Throughput tracks `R`, about as you'd expect.
+
+|Floor
+|`R` < `R*`
+|Throughput flattens out at `S / D_cap` and stops dropping as you lower `R` further.
+|===
+
+=== Predicting your own setup
+
+Each variant ships `scripts/expected_throughput.py`, which implements the formula above:
+
+[source,bash]
+----
+python3 scripts/expected_throughput.py --quota-bytes-per-sec 10000 --record-size-bytes 1700
+----
+
+Without a calibrated `--slip-through-bytes`, it reports a *structural estimate* of `S` from `--fetch-max-bytes`/`--max-partition-fetch-bytes`/`--partitions` (or `--batch-size-bytes` for `--direction produce`). That's a useful starting point, but each variant's README shows you how to measure the real `S` for your own setup - see each variant's worked example and calibration results for real measured numbers rather than the structural estimate.
+
+== Two variants
+
+* xref:client-quota-throughput-simple-client.adoc[simple-client] - a plain Kafka producer/consumer. Start here.
+* xref:client-quota-throughput-flink.adoc[flink] - the same thing with Apache Flink, which has an extra consideration: its Kafka source never joins a classic consumer group, so `rpk group describe` / consumer-group tooling can't be used to verify behavior.
+
+== Prerequisites, limitations, and running each variant
+
+See each variant's README. The two have different topologies and different things to watch out for (especially `flink/README.adoc`, which covers why group-based verification doesn't work for Flink).
