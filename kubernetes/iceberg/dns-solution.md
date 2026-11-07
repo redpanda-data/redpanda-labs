@@ -1,17 +1,17 @@
-# Kubernetes DNS Solution for Iceberg + MinIO Integration
+# Kubernetes DNS Solution for Iceberg + RustFS Integration
 
 This document explains the solution implemented to handle DNS resolution challenges in the Kubernetes deployment of the Redpanda Iceberg lab.
 
 ## The problem
 
-The Iceberg REST catalog client uses bucket-style S3 URLs when accessing MinIO, generating hostnames like:
-`redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local`
+The Iceberg REST catalog client uses bucket-style S3 URLs when accessing RustFS, generating hostnames like:
+`redpanda.rustfs.iceberg-lab.svc.cluster.local`
 
 These aren't valid Kubernetes DNS names because they contain dots in the subdomain part, causing `UnknownHostException` errors.
 
 ## The solution
 
-To address this DNS issue, we introduce an init container that dynamically resolves the MinIO service IP and injects a custom DNS mapping into the pod's `/etc/hosts` file. This ensures that the Iceberg REST catalog client can access MinIO using the expected bucket-style S3 URLs, even though they are not valid Kubernetes DNS names. The init container runs before the main application starts, guaranteeing that the necessary hostname mapping is present for seamless connectivity.
+To address this DNS issue, we introduce an init container that dynamically resolves the RustFS service IP and injects a custom DNS mapping into the pod's `/etc/hosts` file. This ensures that the Iceberg REST catalog client can access RustFS using the expected bucket-style S3 URLs, even though they are not valid Kubernetes DNS names. The init container runs before the main application starts, guaranteeing that the necessary hostname mapping is present for seamless connectivity.
 
 ```yaml
 initContainers:
@@ -20,12 +20,12 @@ initContainers:
   command: ['sh', '-c']
   args:
   - |
-    # Resolve MinIO IP dynamically
-    MINIO_IP=$(nslookup iceberg-minio-hl.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
+    # Resolve RustFS IP dynamically
+    S3_IP=$(nslookup rustfs.iceberg-lab.svc.cluster.local | grep 'Address:' | tail -1 | awk '{print $2}')
 
     # Write DNS mappings to shared /etc/hosts
     cp /etc/hosts /shared/hosts
-    echo "$MINIO_IP redpanda.iceberg-minio-hl.iceberg-lab.svc.cluster.local" >> /shared/hosts
+    echo "$S3_IP redpanda.rustfs.iceberg-lab.svc.cluster.local" >> /shared/hosts
   volumeMounts:
   - name: hosts-volume
     mountPath: /shared
