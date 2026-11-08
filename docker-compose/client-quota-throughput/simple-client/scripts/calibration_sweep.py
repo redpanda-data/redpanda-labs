@@ -59,7 +59,8 @@ def trial(row: dict, quota_r: float, consume_extra: list[str] = None) -> dict:
         cmd += consume_extra
     out = run(cmd)
     bps, rps = parse_output(out)
-    row.update({"client_id": client_id, "quota_bytes_per_sec": quota_r, "bytes_per_sec": bps, "records_per_sec": rps})
+    row.update({"client_id": client_id, "quota_bytes_per_sec": quota_r, "bytes_per_sec": bps, "records_per_sec": rps,
+                "overshoot_x": round(bps / quota_r, 1) if quota_r else 0.0})
     print(row)
     return row
 
@@ -102,7 +103,8 @@ def main() -> None:
 
     with open("calibration.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["track", "label", "trial", "duration", "client_id",
-                                                 "quota_bytes_per_sec", "bytes_per_sec", "records_per_sec"])
+                                                 "quota_bytes_per_sec", "bytes_per_sec", "records_per_sec",
+                                                 "overshoot_x"])
         writer.writeheader()
         for row in rows:
             writer.writerow(row)

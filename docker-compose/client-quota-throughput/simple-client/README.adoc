@@ -6,7 +6,12 @@
 
 The number you configure in a `consumer_byte_rate`/`producer_byte_rate` quota is not the number you'll observe. Real throughput overshoots the nominal quota, and below a certain quota value, it stops dropping further no matter how much you lower it. This lab lets you see that directly, with a plain Kafka client, and gives you a formula to predict it ahead of time.
 
-See the xref:client-quota-throughput.adoc[parent README] for the full explanation of why this happens.
+ifdef::env-github[]
+See the link:../README.adoc[Client quota throughput overview] for the full explanation of why this happens.
+endif::[]
+ifndef::env-github[]
+See the xref:labs:docker-compose:client-quota-throughput.adoc[Client quota throughput overview] for the full explanation of why this happens.
+endif::[]
 
 == Prerequisites
 
@@ -18,7 +23,7 @@ See the xref:client-quota-throughput.adoc[parent README] for the full explanatio
 * This lab runs Redpanda in `--mode dev-container` with a single broker (`--smp 1`) - it's for learning the mechanism, not for measuring production throughput ceilings.
 * Quotas are enforced per broker. This lab is single-broker specifically so the configured quota and the observed per-connection rate are directly comparable without dividing across brokers.
 * The formula is a rule of thumb derived from Redpanda's documented token-bucket enforcement, calibrated for *this lab's specific setup* (3 partitions, default `confluent-kafka`/librdkafka fetch settings, ~1.7KB records). Real overshoot also depends on your own client's fetch/batch settings, record size, and partition count - the "Try different values" section below shows you how to recalibrate for your own numbers rather than trusting this lab's constant blindly.
-* Requires Redpanda v26.2.1 or later (for `kafka_per_entity_quota_metrics` and `rpk cluster loggers set`, used in the "Go deeper" section).
+* Requires Redpanda v26.2.1 or later (for `kafka_per_entity_quota_metrics`, used in the "Go deeper" section).
 
 == Run the lab
 
@@ -40,7 +45,7 @@ docker compose exec python-client python3 /scripts/client.py produce \
   --client-id quota-demo-client
 ----
 
-. Apply a quota well below the knee, to see the floor effect TI originally ran into:
+. Apply a quota well below the knee, to see the floor effect:
 +
 [source,bash]
 ----
@@ -72,9 +77,9 @@ instead.
 +
 [source,bash]
 ----
-watch -n1 'docker compose exec redpanda-0 rpk cluster connections list \
+watch -n1 'docker compose exec -T redpanda-0 rpk cluster connections list \
   --client-id=quota-demo-client \
-  --order-by="recent_request_statistics.produce_bytes desc"'
+  --order-by="recent_request_statistics.fetch_bytes desc"'
 ----
 
 . Consume, and compare the self-reported rate to the prediction above:
@@ -146,7 +151,7 @@ settings confirms the model's shape, not just the one worked example above:
 |1,132,676 B/s
 |1.1x (nominal)
 
-|shrunk fetch settings footnote:[`fetch.max.bytes=1048576`, `max.partition.fetch.bytes=65536` - both 16x smaller than the defaults.]
+|shrunk fetch settings footnote:[`fetch.max.bytes=1048576` (50x below the default) and `max.partition.fetch.bytes=65536` (16x below the default).]
 |5,000 B/s
 |78,632 B/s
 |16x
@@ -215,8 +220,14 @@ print('\n'.join(l for l in data.splitlines() if 'quota_client_id=\"quota-demo-cl
 These series (`redpanda_kafka_quotas_client_quota_throughput_by_entity`,
 `..._throttle_time_ms_by_entity`) only appear *after* the entity has actually been throttled
 at least once - if you don't see them, the quota you configured never matched your client's
-traffic (check the client-id matches exactly, and see the
-xref:client-quota-throughput-flink.adoc[Flink variant] for what that mismatch looks like in practice).
+traffic (check the client-id matches exactly).
+
+ifdef::env-github[]
+See the link:../flink/README.adoc[Apache Flink] variant for what that kind of mismatch looks like in practice.
+endif::[]
+ifndef::env-github[]
+See the xref:labs:docker-compose:client-quota-throughput-flink.adoc[Apache Flink] variant for what that kind of mismatch looks like in practice.
+endif::[]
 
 == Clean up
 

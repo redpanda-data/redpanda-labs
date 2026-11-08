@@ -4,9 +4,16 @@
 :page-categories: Management, Monitoring
 :description: See how a configured consumer_byte_rate quota translates into real observed throughput with Apache Flink, and why the usual consumer-group tooling can't verify it.
 
-Same mechanism as the xref:client-quota-throughput-simple-client.adoc[simple-client] variant, but with Flink.
+ifdef::env-github[]
+Same mechanism as the link:../simple-client/README.adoc[Simple client] variant, but with Flink.
 
-See the xref:client-quota-throughput.adoc[parent README] for the general formula and mechanism.
+See the link:../README.adoc[Client quota throughput overview] for the general formula and mechanism.
+endif::[]
+ifndef::env-github[]
+Same mechanism as the xref:labs:docker-compose:client-quota-throughput-simple-client.adoc[Simple client] variant, but with Flink.
+
+See the xref:labs:docker-compose:client-quota-throughput.adoc[Client quota throughput overview] for the general formula and mechanism.
+endif::[]
 
 == Prerequisites
 
@@ -16,7 +23,7 @@ See the xref:client-quota-throughput.adoc[parent README] for the general formula
 == Limitations
 
 * **Flink's `KafkaSource` never joins a classic Kafka consumer group.** It does its own internal partition assignment and never sends `JoinGroup`/`SyncGroup`. `rpk group describe` and Console's consumer-group view will report the group as `Dead`/`Empty` with 0 members even while Flink is actively consuming. This is expected and not a bug. Instead use `rpk cluster connections list` which works off live connections rather than group membership.
-* **A plain `properties.client.id` is never honored by `KafkaSource`**, in any connector version. `KafkaPartitionSplitReader` builds `client.id` from `client.id.prefix + "-" + subtaskId`, and `client.id.prefix` itself silently defaults to `group.id` if you never set it. This lab sets `properties.client.id.prefix` explicitly rather than relying on that fallback.
+* **A plain `properties.client.id` is never honored by `KafkaSource`** in the connector versions checked for this lab (`flink-connector-kafka` v3.1.0, v3.4.0, `main`, and the v3.2.0-1.19 pinned here). `KafkaPartitionSplitReader` builds `client.id` from `client.id.prefix + "-" + subtaskId`, and `client.id.prefix` itself silently defaults to `group.id` if you never set it. This lab sets `properties.client.id.prefix` explicitly rather than relying on that fallback.
 * A `client-id-prefix` quota is **one shared bucket across every subtask matching that prefix**, not one bucket per subtask.
 
 == Run the lab
@@ -68,9 +75,9 @@ You should see three distinct, live connections - `flink-quota-demo-0`, `-1`, `-
 per subtask, each with real `FETCH-TPUT/SEC`.
 
 Measured on this exact setup (3 subtasks, default fetch settings, 1.7KB records), a
-10,000 B/s prefix quota produced a stable throttled rate across all three
-subtasks of around 60-90 KB/s each, which is roughly 200,000-225,000 B/s aggregate
-- 20-22x the nominal value.
+10,000 B/s prefix quota produced a stable throttled rate across all three subtasks of
+around 68-75 KB/s each, roughly 200,000-225,000 B/s aggregate across two trials -
+20-22x the nominal value.
 
 == Try different values
 
@@ -89,7 +96,7 @@ Predict with the lab's calibrated constant for this setup:
 
 [source,bash]
 ----
-python3 scripts/expected_throughput.py --quota-bytes-per-sec 10000 --record-size-bytes 1700 \
+python3 scripts/expected_throughput.py --quota-bytes-per-sec 2000000 --record-size-bytes 1700 \
   --slip-through-bytes 6440490
 ----
 

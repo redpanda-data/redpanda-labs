@@ -71,8 +71,14 @@ Without a calibrated `--slip-through-bytes`, it reports a *structural estimate* 
 
 == Two variants
 
-* xref:client-quota-throughput-simple-client.adoc[simple-client] - a plain Kafka producer/consumer. Start here.
-* xref:client-quota-throughput-flink.adoc[flink] - the same thing with Apache Flink, which has an extra consideration: its Kafka source never joins a classic consumer group, so `rpk group describe` / consumer-group tooling can't be used to verify behavior.
+ifdef::env-github[]
+* link:simple-client/README.adoc[Simple client] - a plain Kafka producer/consumer. Start here.
+* link:flink/README.adoc[Apache Flink] - the same thing with Apache Flink, which has an extra consideration: its Kafka source never joins a classic consumer group, so `rpk group describe` / consumer-group tooling can't be used to verify behavior.
+endif::[]
+ifndef::env-github[]
+* xref:labs:docker-compose:client-quota-throughput-simple-client.adoc[Simple client] - a plain Kafka producer/consumer. Start here.
+* xref:labs:docker-compose:client-quota-throughput-flink.adoc[Apache Flink] - the same thing with Apache Flink, which has an extra consideration: its Kafka source never joins a classic consumer group, so `rpk group describe` / consumer-group tooling can't be used to verify behavior.
+endif::[]
 
 == Prerequisites, limitations, and running each variant
 
