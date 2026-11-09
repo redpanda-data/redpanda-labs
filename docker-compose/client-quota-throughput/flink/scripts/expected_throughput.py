@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Predict real observed throughput for a given Redpanda client quota.
+"""Predict actual observed throughput (A) for a given Redpanda client quota (R).
 
 This model is derived from Redpanda's broker source. See the lab README for the
 full derivation. The quota is a token bucket with capacity == rate == R
 (the configured quota, bytes/sec). A full request up to S bytes (the
-"slip-through size" - bounded by the client's own fetch/batch settings) can
+"slip-through size", bounded by the client's own fetch/batch settings) can
 pass completely before any delay is computed. The resulting corrective delay
 is capped at D_cap (max_kafka_throttle_delay_ms). This produces three
-regimes, with a sharp knee at R* = S / D_cap:
+regimes, with a sharp breakpoint at R* = S / D_cap:
 
-  - unconstrained (R very high): actual throughput is capped by the client's
-    own request cadence rather than the quota.
-  - nominal (R above the knee): actual throughput is generally R.
-  - floor (R below the knee): actual throughput flattens out at S / D_cap
-    and doesn't keep dropping as you lower R further.
+  - unconstrained (R very high): A is capped by the client's own request
+    cadence rather than the quota.
+  - nominal (R above the breakpoint): A is generally R.
+  - floor (R below the breakpoint): A flattens out at S / D_cap and doesn't
+    keep dropping as you lower R further.
 """
 import argparse
 
@@ -33,10 +33,10 @@ def predict(quota_bytes_per_sec: float, slip_through_bytes: int, throttle_delay_
     actual_bytes_per_sec = slip_through_bytes / delay
 
     unconstrained_breakpoint = slip_through_bytes / min_request_interval_sec
-    knee_breakpoint = slip_through_bytes / throttle_delay_cap_sec
+    breakpoint_bytes_per_sec = slip_through_bytes / throttle_delay_cap_sec
     if quota_bytes_per_sec >= unconstrained_breakpoint:
         regime = "unconstrained"
-    elif quota_bytes_per_sec >= knee_breakpoint:
+    elif quota_bytes_per_sec >= breakpoint_bytes_per_sec:
         regime = "nominal"
     else:
         regime = "floor"
@@ -44,7 +44,7 @@ def predict(quota_bytes_per_sec: float, slip_through_bytes: int, throttle_delay_
     return {
         "actual_bytes_per_sec": actual_bytes_per_sec,
         "regime": regime,
-        "knee_bytes_per_sec": knee_breakpoint,
+        "breakpoint_bytes_per_sec": breakpoint_bytes_per_sec,
     }
 
 
@@ -68,15 +68,17 @@ def main() -> None:
     slip_through_bytes, calibrated = effective_slip_through_bytes(args)
     result = predict(args.quota_bytes_per_sec, slip_through_bytes, args.throttle_delay_cap_sec, args.min_request_interval_sec)
 
-    source = "calibrated" if calibrated else "structural estimate, NOT yet calibrated - see the lab's calibration data"
+    source = "calibrated" if calibrated else "structural estimate, not yet calibrated"
     print(f"Slip-through size (S): {slip_through_bytes:,.0f} bytes  [{source}]")
-    print(f"Knee (R*  =  S / throttle_delay_cap): {result['knee_bytes_per_sec']:,.0f} bytes/sec")
+    if not calibrated:
+        print("See the lab's calibration data for a real measured value.")
+    print(f"Breakpoint (R*  =  S / throttle_delay_cap): {result['breakpoint_bytes_per_sec']:,.0f} bytes/sec")
     print(f"Regime: {result['regime']}")
-    print(f"Predicted actual throughput: {result['actual_bytes_per_sec']:,.0f} bytes/sec "
+    print(f"Predicted actual throughput (A): {result['actual_bytes_per_sec']:,.0f} bytes/sec "
           f"({result['actual_bytes_per_sec'] / args.record_size_bytes:,.1f} records/sec at {args.record_size_bytes:,.0f}B records)")
     if result["regime"] == "floor":
-        print(f"\nYou configured R={args.quota_bytes_per_sec:,.0f} B/s, well below the knee. Lowering R further will "
-              f"NOT reduce throughput below ~{result['actual_bytes_per_sec']:,.0f} B/s - to go lower, shrink the "
+        print(f"\nYou configured R={args.quota_bytes_per_sec:,.0f} B/s, well below the breakpoint. Lowering R further will "
+              f"NOT reduce throughput below ~{result['actual_bytes_per_sec']:,.0f} B/s. To go lower, shrink the "
               f"client's own {'fetch.max.bytes / max.partition.fetch.bytes' if args.direction == 'fetch' else 'batch.size'}, "
               f"or lower --throttle-delay-cap-sec (max_kafka_throttle_delay_ms) instead.")
 

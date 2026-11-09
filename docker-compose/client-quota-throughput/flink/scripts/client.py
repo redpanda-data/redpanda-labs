@@ -5,8 +5,8 @@ Usage:
   client.py produce --topic T --num-records N [--record-size-bytes N]
   client.py consume --topic T --group-id G --duration-sec N [--client-id ID]
 
-TLS/SASL (unset by default - set these env vars to match an authenticated
-cluster, e.g. SASL_SSL/SCRAM-SHA-512):
+TLS/SASL is unset by default. Set these env vars to match an authenticated
+cluster, e.g. SASL_SSL/SCRAM-SHA-512:
   KAFKA_BROKERS (default localhost:9092)
   KAFKA_SECURITY_PROTOCOL, KAFKA_SASL_MECHANISM, KAFKA_SASL_USERNAME,
   KAFKA_SASL_PASSWORD, KAFKA_SSL_CA_LOCATION, KAFKA_SSL_CHECK_HOSTNAME
@@ -97,7 +97,7 @@ def consume(topic: str, group_id: str, duration_sec: float, client_id: str | Non
     c.close()
 
     # Active window (first message to last message), not the full wall-clock
-    # duration - an unthrottled consumer can drain its backlog and go idle
+    # duration. An unthrottled consumer can drain its backlog and go idle
     # well before duration_sec elapses, which would otherwise understate the
     # real rate.
     active_window = (last_t - first_t) if (first_t and last_t and last_t > first_t) else None

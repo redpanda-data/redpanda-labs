@@ -47,7 +47,7 @@ def parse_output(out: str) -> tuple[float, float]:
 
 def trial(row: dict, quota_r: float, consume_extra: list[str] = None) -> dict:
     client_id = f"calib-{row['track']}-{row['label']}-{int(quota_r)}-t{row['trial']}-{random.randint(0, 999999)}"
-    reset_topic()  # every trial starts from an identical, clean backlog - no cross-trial accumulation
+    reset_topic()  # every trial starts from an identical, clean backlog, avoiding cross-trial accumulation
     seed()
     run(["docker", "compose", "exec", "-T", "redpanda-0", "rpk", "cluster", "quotas", "alter",
          "--add", f"consumer_byte_rate={int(quota_r)}", "--add", f"producer_byte_rate={int(quota_r)}",
@@ -67,7 +67,7 @@ def trial(row: dict, quota_r: float, consume_extra: list[str] = None) -> dict:
 
 def reset_topic() -> None:
     # A fresh consumer group reads from earliest-offset, and a brand-new quota
-    # entity's token bucket starts full - so any backlog left over from
+    # entity's token bucket starts full, so any backlog left over from
     # earlier testing can produce one huge, unthrottled initial burst that
     # dominates a short active-window measurement. Start every sweep from a
     # clean topic to avoid that.
@@ -80,7 +80,7 @@ def main() -> None:
     rows: list[dict] = []
 
     # Fetch track: default vs. shrunk fetch-size settings, across R bracketing
-    # both expected knees.
+    # both expected breakpoints.
     fetch_r_values = [5_000, 20_000, 80_000, 300_000, 1_000_000]
     fetch_configs = {
         "default": ["--fetch-max-bytes", "52428800", "--max-partition-fetch-bytes", "1048576"],
