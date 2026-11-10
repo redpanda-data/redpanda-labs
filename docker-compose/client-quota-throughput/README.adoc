@@ -14,7 +14,7 @@ A = S / max(T_min, min(S / R, D_cap))
 
 `R` is the quota you configure. `A` is the actual (observed) throughput you'll get. They're not the same thing, and the gap between them is the whole point of this lab.
 
-This comes directly from how Redpanda enforces the quota. A token bucket whose capacity and refill rate equal the quota you configure, `R` (bytes/sec). Enforcement happens between requests, so a full Fetch response or Produce request of size `S` bytes always passes completely before the broker computes a delay for the client's next request. That delay is how long it should have taken to send `S` bytes at rate `R` (`S / R`), capped at `D_cap` so throttling never causes a client-side request timeout, and floored at `T_min` so the formula doesn't predict a rate faster than the client can actually request at.
+Redpanda enforces the quota with a token bucket whose capacity and refill rate both equal the quota you configure, `R` (bytes/sec). Enforcement happens between requests, so a full Fetch response or Produce request of size `S` bytes always passes completely before the broker computes a delay for the client's next request. That delay is how long it should have taken to send `S` bytes at rate `R` (`S / R`), capped at `D_cap` so throttling never causes a client-side request timeout, and floored at `T_min` so the formula doesn't predict a rate faster than the client can actually request at.
 
 === What you need
 
@@ -64,6 +64,21 @@ Put together, there's a sharp breakpoint at `R* = S / D_cap`:
 
 Each variant ships `scripts/expected_throughput.py`, which implements the formula above:
 
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into one of the variant directories, for example:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/client-quota-throughput/simple-client
+----
+
+. Run the predictor:
++
 [source,bash]
 ----
 python3 scripts/expected_throughput.py --quota-bytes-per-sec 10000 --record-size-bytes 1700

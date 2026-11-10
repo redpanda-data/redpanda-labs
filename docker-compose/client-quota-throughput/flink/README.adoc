@@ -28,6 +28,19 @@ endif::[]
 
 == Run the lab
 
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/client-quota-throughput/flink/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/client-quota-throughput/flink
+----
+
 . Start the stack (this builds the Flink image with the Kafka SQL connector on first run):
 +
 [source,bash]

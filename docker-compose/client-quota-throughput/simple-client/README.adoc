@@ -27,6 +27,19 @@ endif::[]
 
 == Run the lab
 
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/client-quota-throughput/simple-client/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/client-quota-throughput/simple-client
+----
+
 . Start the stack:
 +
 [source,bash]
