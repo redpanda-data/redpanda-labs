@@ -161,6 +161,5 @@ This is a basic example of a chat room application. You can improve this applica
 For additional resources to help you build stream processing
 applications that can aggregate, join, and filter your data streams, see:
 
-* https://university.redpanda.com/[Redpanda University^]
 * https://redpanda.com/blog[Redpanda Blog^]
 * https://redpanda.com/resources[Resources^]
