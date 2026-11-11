@@ -7,7 +7,7 @@
 #
 # 2. Cloud Storage Integration (S3/RustFS):
 #    - cloud_storage_* settings configure S3-compatible object storage
-#    - path-style URLs, since rustfs.yaml sets no server domain
+#    - path-style URLs (cloud_storage_url_style in configmap.yaml)
 #    - Tiered Storage enables efficient long-term data retention
 #
 # 3. Iceberg Sink Configuration:
