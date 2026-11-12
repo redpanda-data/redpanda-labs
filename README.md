@@ -1,4 +1,4 @@
-[![Slack](https://img.shields.io/badge/Slack-Redpanda%20Community-blue)](https://redpanda.com/slack)
+[![Community](https://img.shields.io/badge/GitHub-Redpanda%20Community-blue)](https://github.com/redpanda-data/community)
 
 ## Redpanda Labs
 

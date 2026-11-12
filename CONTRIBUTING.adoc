@@ -84,4 +84,4 @@ Start reading our code and you'll get the hang of it. We optimize for readabilit
 
 == Community
 
-Discussions about Redpanda Labs take place on this repository's https://github.com/redpanda-data/redpanda-labs/issues[issues] and the link:https://redpanda.com/slack[Redpanda community Slack].
+Discussions about Redpanda Labs take place on this repository's https://github.com/redpanda-data/redpanda-labs/issues[issues] and the link:https://github.com/redpanda-data/community[Redpanda community on GitHub].
