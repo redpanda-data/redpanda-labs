@@ -1,0 +1,121 @@
+= Client quota throughput: Apache Flink
+:page-layout: lab
+:env-docker: true
+:page-categories: Management, Monitoring
+:description: See how a configured consumer_byte_rate quota translates into real observed throughput with Apache Flink, and why the usual consumer-group tooling can't verify it.
+
+ifdef::env-github[]
+Same mechanism as the link:../simple-client/README.adoc[Simple client] variant, but with Flink.
+
+See the link:../README.adoc[Client quota throughput overview] for the general formula and mechanism.
+endif::[]
+ifndef::env-github[]
+Same mechanism as the xref:labs:docker-compose:client-quota-throughput-simple-client.adoc[Simple client] variant, but with Flink.
+
+See the xref:labs:docker-compose:client-quota-throughput.adoc[Client quota throughput overview] for the general formula and mechanism.
+endif::[]
+
+== Prerequisites
+
+* Docker and Docker Compose
+* A few GB of free memory for the Flink JobManager/TaskManager containers on top of Redpanda
+
+== Limitations
+
+* Flink's `KafkaSource` never joins a classic Kafka consumer group. It does its own internal partition assignment and never sends `JoinGroup`/`SyncGroup`. `rpk group describe` and Console's consumer-group view will report the group as `Dead`/`Empty` with 0 members even while Flink is actively consuming. This is expected and not a bug. Instead use `rpk cluster connections list` which works off live connections rather than group membership.
+* A plain `properties.client.id` is never honored by `KafkaSource` in the connector versions checked for this lab (`flink-connector-kafka` v3.1.0, v3.4.0, `main`, and the v3.2.0-1.19 pinned here). `KafkaPartitionSplitReader` builds `client.id` from `client.id.prefix + "-" + subtaskId`, and `client.id.prefix` itself silently defaults to `group.id` if you never set it. This lab sets `properties.client.id.prefix` explicitly rather than relying on that fallback.
+* A `client-id-prefix` quota is one shared bucket across every subtask matching that prefix, not one bucket per subtask.
+
+== Run the lab
+
+. Clone this repository:
++
+```bash
+git clone https://github.com/redpanda-data/redpanda-labs.git
+```
+
+. Change into the `docker-compose/client-quota-throughput/flink/` directory:
++
+[,bash]
+----
+cd redpanda-labs/docker-compose/client-quota-throughput/flink
+----
+
+. Start the stack (this builds the Flink image with the Kafka SQL connector on first run):
++
+[source,bash]
+----
+cp .env.example .env
+docker compose up -d
+----
+
+. Create the topic and seed a backlog:
++
+[source,bash]
+----
+docker compose exec redpanda-0 rpk topic create quota-demo -p 3
+docker compose exec python-client python3 /scripts/client.py produce \
+  --topic quota-demo --num-records 1000000 --record-size-bytes 1700 --client-id seeder
+----
+
+. Apply the quota before submitting the job, as a prefix match on the same prefix the SQL job uses:
++
+[source,bash]
+----
+docker compose exec redpanda-0 rpk cluster quotas alter \
+  --add consumer_byte_rate=10000 --name client-id-prefix=flink-quota-demo
+----
+
+. Submit the job (runs with `parallelism.default = 3`, a subtask for each of the topic's 3 partitions):
++
+[source,bash]
+----
+docker compose run --rm sql-client /opt/flink/bin/sql-client.sh embedded -f /etc/sql/run-client-id-prefix.sql
+----
+
+. Confirm `rpk group describe` is useless here, then use the tool that actually works:
++
+[source,bash]
+----
+docker compose exec redpanda-0 rpk group describe flink-quota-demo
+# STATE: Dead, MEMBERS: 0 (even though the job is actively consuming below)
+
+docker compose exec redpanda-0 rpk cluster connections list \
+  | grep flink-quota-demo
+----
++
+You should see three distinct, live connections, one per subtask (`flink-quota-demo-0`, `-1`,
+`-2`), each with real `FETCH-TPUT/SEC`.
+
+Measured on this exact setup (3 subtasks, default fetch settings, 1.7KB records), a
+10,000 B/s prefix quota produced a stable throttled rate across all three subtasks of
+around 68-75 KB/s each, roughly 200,000-225,000 B/s aggregate across two trials,
+20-22x the nominal value.
+
+== Try different values
+
+Change the quota, it applies to the same shared bucket:
+
+[source,bash]
+----
+docker compose exec redpanda-0 rpk cluster quotas alter \
+  --add consumer_byte_rate=2000000 --name client-id-prefix=flink-quota-demo
+----
+
+At 2,000,000 B/s (well above the floor-regime breakpoint), aggregate throughput climbed toward the
+configured value as the backlog caught up. This is the expected behavior, same as the simple-client variant.
+
+Predict with the lab's calibrated constant for this setup:
+
+[source,bash]
+----
+python3 scripts/expected_throughput.py --quota-bytes-per-sec 2000000 --record-size-bytes 1700 \
+  --slip-through-bytes 6440490
+----
+
+== Clean up
+
+[source,bash]
+----
+docker compose down -v
+----
