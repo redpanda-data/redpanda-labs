@@ -137,15 +137,7 @@ kubectl wait --for=condition=available deployment/spark-iceberg --namespace iceb
 
 === Deploy Redpanda
 
-. Install the Redpanda Operator custom resource definitions (CRDs):
-+
-[,bash]
-----
-kubectl kustomize "https://github.com/redpanda-data/redpanda-operator//operator/config/crd?ref=v2.4.4" \
-    | kubectl apply --server-side -f -
-----
-
-. Deploy the Redpanda Operator:
+. Deploy the Redpanda Operator and its custom resource definitions (CRDs):
 +
 [,bash]
 ----
@@ -162,7 +154,8 @@ helm install cert-manager jetstack/cert-manager \
 helm upgrade --install redpanda-controller redpanda/operator \
   --namespace iceberg-lab \
   --create-namespace \
-  --version v2.4.4
+  --version 26.2.6 \
+  --set crds.enabled=true
 ----
 
 . Ensure that the Deployment is successfully rolled out:
