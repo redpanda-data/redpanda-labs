@@ -1,0 +1,75 @@
+= topic-prefixer
+:description: A custom Kroxylicious filter that presents the topics and consumer groups of a Redpanda cluster under a different name, without renaming anything on the cluster itself.
+
+{description}
+
+It is built for the link:../../README.adoc[Kroxylicious shadow linking lab] and is demo-quality code, not a general-purpose filter.
+
+== Why a custom filter?
+
+Kroxylicious ships a `MultiTenant` filter that adds a name prefix to topics, but it is designed for multi-tenancy: it adds the prefix on the way _into_ the backing cluster and strips it on the way _out_ to any client, so every client of the virtual cluster only ever sees the unprefixed name. The prefix is purely an implementation detail of how the backing cluster stores the data. `MultiTenant` also hides any topic that is not already prefixed, so it would show nothing at all for topics created directly on the source cluster, which is how the lab creates every topic.
+
+This lab wants the opposite. The real topic and the real consumer group on the source cluster keep their real names, but _every_ client of the proxy, including Redpanda's shadow link, sees them renamed. That makes the rename visible end to end, all the way through to the shadow cluster, which is the point of putting Kroxylicious in the path.
+
+`TopicPrefixerFilter` does exactly that: it renames on responses flowing from the backend towards a client, and un-renames on requests flowing the other way. When the rename is a prefix, topics starting with `_`, such as Redpanda's `_schemas` topic and Kafka's own `+__consumer_offsets+`, are left alone, so Schema Registry replication keeps working unmodified.
+
+The filter implements the requests shadow linking needs to discover and replicate topics:
+
+* `Metadata`
+* `DescribeConfigs`. Shadow linking reads a topic's config before creating the shadow-side topic. Miss this one and source topic sync silently gives up on every non-internal topic, because it looks up the config under the prefixed name that `Metadata` just gave it, which does not exist on the real backend.
+* `ListOffsets`
+* `Fetch`
+
+It also implements the requests needed to discover and replicate consumer group offset commits: `FindCoordinator`, `ListGroups`, `DescribeGroups`, `ConsumerGroupDescribe`, `JoinGroup`, `SyncGroup`, `Heartbeat`, `LeaveGroup`, `OffsetFetch`, `OffsetCommit`, and `OffsetDelete`. Both the group ID and any topic names embedded in a commit get the same treatment as the data-plane requests above. See link:./consumer-group-renaming.adoc[consumer-group-renaming.adoc] for why that needed checking empirically rather than just implementing it, and for the gaps it deliberately does not cover.
+
+Extend `TopicPrefixerFilter` further if your own testing finds gaps. Producing through the proxy, for example, would also need `CreateTopicsRequestFilter` and `ProduceRequestFilter`, plus their response counterparts.
+
+[[configuration]]
+== Configuration
+
+Topics and consumer groups are renamed independently, each through its own `RenamingConfig`. A config is either:
+
+* a fixed `prefix`, which is added and stripped, and skipped for names starting with `_`, or
+* an explicit before-and-after `mapping`. Any name not in the table passes through unchanged, so the filter never hides a name, it only ever renames the ones you have told it to.
+
+Exactly one of `prefix` or `mapping` must be given per target.
+
+[,yaml]
+----
+config:
+  topics:
+    prefix: "p_"
+  groups:
+    prefix: "p_"          # can be a different prefix, or use `mapping` instead - independent of topics
+----
+
+[,yaml]
+----
+config:
+  topics:
+    mapping:
+      orders: renamed-orders
+      payments: renamed-payments
+  groups:
+    mapping:
+      billing-service: renamed-billing-service
+----
+
+Strategies can be mixed, for example a prefix for topics and an explicit mapping for groups. An empty `prefix` is a valid way to say "don't rename this one" while still renaming the other.
+
+== How it's built and deployed
+
+The lab's `setup.sh` builds this module into a Kroxylicious proxy image through the multi-stage build in `Dockerfile`: a Maven stage compiles the filter, then the jar is copied onto the `classpath-plugins` directory of `quay.io/kroxylicious/proxy:0.24.0`. That directory is Kroxylicious's (alpha) extension point for adding filters to the classpath without rebuilding the base image.
+
+The image is loaded directly into the kind cluster with `kind load docker-image`, and the Kroxylicious operator is told to use it instead of the stock image through the `KROXYLICIOUS_IMAGE` environment variable on its Deployment. See `resources/kroxylicious-operator.yaml`, which is the upstream operator install manifest with that one addition.
+
+`resources/kroxylicious-proxy.yaml` wires up a `KafkaProtocolFilter` that references this filter by its fully qualified class name, `demo.topicprefixer.TopicPrefixer`, with the config described above, and attaches it to a `VirtualKafkaCluster` that targets the source Redpanda cluster.
+
+== Build and test standalone
+
+[,bash]
+----
+docker run --rm -v "$PWD":/build -w /build maven:3.9-eclipse-temurin-21 mvn package
+----
+
+This runs the unit tests, which use Kroxylicious's `MockFilterContext` test support, and produces `target/topic-prefixer.jar`.
