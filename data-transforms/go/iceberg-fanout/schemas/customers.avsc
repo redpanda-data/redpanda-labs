@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "namespace": "com.redpanda.labs.fanout",
+  "name": "Customer",
+  "fields": [
+    {"name": "customer_id", "type": "string"},
+    {"name": "name", "type": "string"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
