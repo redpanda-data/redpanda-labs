@@ -50,7 +50,7 @@ You must have the following:
 git clone https://github.com/redpanda-data/redpanda-labs.git
 ```
 
-. Change into the `data-transforms/iss_demo/` directory:
+. Change into the `data-transforms/go/iss_demo/` directory:
 +
 [,bash]
 ----
