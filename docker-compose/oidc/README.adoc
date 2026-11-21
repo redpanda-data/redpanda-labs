@@ -61,12 +61,16 @@ By default, OAuth 2.0 allows for opaque tokens, which Redpanda does not support.
 In Azure Entra ID, you must configure the application to issue v2.0 **JWT access tokens**:
 
 . In the App Registration page, go to *Manage* > *Manifest*.
-. Set `accessTokenAcceptedVersion` to `2`:
+. In the `api` attribute, set `requestedAccessTokenVersion` to `2`:
 +
 [,json]
 ----
-"accessTokenAcceptedVersion": 2
+"api": {
+  "requestedAccessTokenVersion": 2
+}
 ----
++
+Keep the other properties in the `api` attribute as they are.
 . Click *Save*.
 
 TIP: Azure Entra ID does not include claims like `email` in access tokens by default. You can add them by going to *Token Configuration* > *+ Add optional claim*, then selecting *email* for *Access token* type.
@@ -133,7 +137,7 @@ curl -X POST "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token" \
 
 === Application registration final checklist
 
-* [x] `accessTokenAcceptedVersion` set to `2`
+* [x] `api.requestedAccessTokenVersion` set to `2`
 * [x] Custom scope `entraid.v2-access-tokens` created
 
 == Run the lab
