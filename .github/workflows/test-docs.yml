@@ -59,6 +59,14 @@ jobs:
         with:
           node-version: '22'
   
+      # rpk's Go transforms build uses tinygo, which accepts Go 1.19 through
+      # 1.25 only. The runner image now ships Go 1.26, so without this every
+      # Go transforms lab fails with "requires go version 1.19 through 1.25".
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
       - name: Install dependencies
         run: npm install
 
