@@ -23,7 +23,7 @@ You must have the following:
 
 - https://platform.openai.com/signup/[OpenAI developer platform account^]
 +
-NOTE: Make sure your account has https://help.openai.com/en/articles/9038407-how-can-i-set-up-billing-for-my-account[available credits].
+NOTE: Make sure your account has https://platform.openai.com/settings/organization/billing/overview[available credits^].
 
 - https://account.mongodb.com/account/register[MongoDB Atlas account^]
 
