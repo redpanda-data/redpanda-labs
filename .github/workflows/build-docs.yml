@@ -9,6 +9,21 @@ on:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
-    - name: Trigger build
-      run: curl -X POST -d {} https://api.netlify.com/build_hooks/65c0cd2e63853f0b159cdbc6
+      # The hook URL is a credential, so it comes from Secrets Manager over
+      # OIDC instead of being written here. -f fails the step on a 4xx or 5xx,
+      # so a deleted hook turns the job red instead of passing silently.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.RP_AWS_CRED_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.RP_AWS_CRED_ACCOUNT_ID }}:role/${{ vars.RP_AWS_CRED_BASE_ROLE_NAME }}${{ github.event.repository.name }}
+      - uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          secret-ids: |
+            ,sdlc/prod/github/docs_netlify_build_hook
+          parse-json-secrets: true
+      - name: Trigger build
+        run: curl -fsS -X POST -d {} "${{ env.DOCS_NETLIFY_BUILD_HOOK }}"
