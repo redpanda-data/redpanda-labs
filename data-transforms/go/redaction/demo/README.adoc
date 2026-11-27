@@ -44,7 +44,7 @@ You must have https://docs.docker.com/compose/install/[Docker and Docker Compose
 git clone https://github.com/redpanda-data/redpanda-labs.git
 ```
 
-. Change into the `data-transforms/redaction/demo/` directory:
+. Change into the `data-transforms/go/redaction/demo/` directory:
 +
 [,bash]
 ----

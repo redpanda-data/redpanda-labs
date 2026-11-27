@@ -76,7 +76,7 @@ in a series of flattened objects as output.
 git clone https://github.com/redpanda-data/redpanda-labs.git
 ```
 
-. Change into the `data-transforms/flatten/` directory:
+. Change into the `data-transforms/go/flatten/` directory:
 +
 [,bash]
 ----

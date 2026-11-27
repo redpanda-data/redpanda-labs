@@ -34,11 +34,11 @@ You must have the following:
 git clone https://github.com/redpanda-data/redpanda-labs.git
 ```
 
-. Change into the `data-transforms/to_avro/` directory:
+. Change into the `data-transforms/go/to_avro/` directory:
 +
 [,bash]
 ----
-cd redpanda-labs/data-transforms/to_avro
+cd redpanda-labs/data-transforms/go/to_avro
 ----
 
 . Set the `REDPANDA_VERSION` environment variable to at least version v23.3.1. Data transforms was introduced in this version. For all available versions, see the https://github.com/redpanda-data/redpanda/releases[GitHub releases].

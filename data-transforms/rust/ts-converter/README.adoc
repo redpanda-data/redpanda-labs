@@ -44,7 +44,7 @@ rustup target add wasm32-wasip1
 git clone https://github.com/redpanda-data/redpanda-labs.git
 ```
 
-. Change into the `data-transforms/ts-converter/` directory:
+. Change into the `data-transforms/rust/ts-converter/` directory:
 +
 [,bash]
 ----
