@@ -81,6 +81,17 @@ jobs:
           # Redpanda uses Linux AIO. Increase limit for the shadow cluster.
           sudo sysctl -w fs.aio-max-nr=1048576
 
+      # rpk transform build compiles Go transforms with TinyGo, which accepts
+      # Go 1.19 through 1.25. ubuntu-latest moved to Go 1.26, so without a
+      # pin every Go transform fails to build ("requires go version 1.19
+      # through 1.25, got go1.26") and the consume steps that wait on its
+      # output time out.
+      - name: Set up Go for TinyGo
+        if: needs.setup.outputs.data-transforms == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
       - name: Test data transforms
         if: needs.setup.outputs.data-transforms == 'true'
         run: |
